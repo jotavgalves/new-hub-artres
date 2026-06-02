@@ -127,6 +127,7 @@ function productLabel(key, fallback = "") {
     "romano": "Romano",
     "kit-romano": "Kit + Romano",
     "kit-painel-cilindros": "Kit Painel + Cilindros",
+    "lateral": "Painel Lateral",
     "produto": cleanLabel(fallback || "Produto")
   };
   return labels[key] || cleanLabel(fallback || "Produto");
