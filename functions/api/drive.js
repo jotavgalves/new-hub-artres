@@ -3,9 +3,10 @@ const DRIVE_API = "https://www.googleapis.com/drive/v3/files";
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 
 const PRODUCT_RULES = [
+  // A categoria vem da pasta do Drive. A normalização abaixo serve só para escolher ícone, regra e preço.
   ["kit-romano", [/kit.*romano/i, /romano.*kit/i, /kit\s*\+\s*romano/i, /kit\s*com\s*romano/i, /kit\s*completo/i, /completo/i]],
-  ["kit-painel-cilindros", [/kit.*painel.*cilind/i, /kit.*cilind/i, /painel.*cilind/i]],
-  ["painel-150", [/150\s*x\s*150/i, /150x150/i, /painel\s*150/i, /\b150\b/i]],
+  ["kit-painel-cilindros", [/kit.*painel.*cilind/i, /kit.*cilind/i, /painel.*cilind/i, /\bkit\b/i]],
+  ["painel-150", [/150\s*x\s*150/i, /159\s*x\s*150/i, /150x150/i, /159x150/i, /painel\s*150/i, /painel\s*159/i, /\b150\b/i, /\b159\b/i]],
   ["50x50", [/50\s*x\s*50/i, /50x50/i, /painel\s*50/i, /bolinha/i, /bolinhas/i, /\b50\b/i]],
   ["cilindros", [/trio.*cilind/i, /cilindros/i, /cilindro/i]],
   ["romano", [/romano/i]]
@@ -22,7 +23,7 @@ export async function onRequestGet(context) {
     const theme = cleanLabel(url.searchParams.get("theme") || "");
     const productFolderName = cleanLabel(url.searchParams.get("product") || "");
     const productKey = normalizeProduct(productFolderName);
-    const productName = productLabel(productKey, productFolderName);
+    const productName = productFolderName || productLabel(productKey, productFolderName);
 
     const children = await listChildren(folderId, apiKey);
     const folders = children
@@ -75,7 +76,7 @@ function folderPayload(file) {
     rawName: file.name,
     isProduct: isProductFolderName(clean),
     product,
-    productName: productLabel(product, clean),
+    productName: clean || productLabel(product, clean),
     modifiedTime: file.modifiedTime || ""
   };
 }
