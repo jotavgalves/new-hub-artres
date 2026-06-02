@@ -2,25 +2,27 @@ const ROOT_FOLDER_ID = "11cU5yMWafopC0JfMHotRxThpkgbQl-RW";
 const DRIVE_API = "https://www.googleapis.com/drive/v3/files";
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 
-const PRODUCT_ALIASES = [
-  ["50x50", ["50", "50x50", "painel 50", "bolinha", "bolinhas"]],
-  ["painel-150", ["150", "150x150", "painel 150"]],
-  ["kit-romano", ["kit com romano", "kit + romano", "kit completo", "completo"]],
-  ["kit-painel-cilindros", ["kit painel", "kit painel e cilindros", "kit cilindros", "painel e cilindros"]],
-  ["cilindros", ["trio de cilindros", "trio cilindros", "cilindros", "cilindro"]],
-  ["romano", ["romano"]]
+const PRODUCT_RULES = [
+  ["kit-romano", [/kit.*romano/i, /romano.*kit/i, /kit\s*\+\s*romano/i, /kit\s*com\s*romano/i, /kit\s*completo/i, /completo/i]],
+  ["kit-painel-cilindros", [/kit.*painel.*cilind/i, /kit.*cilind/i, /painel.*cilind/i]],
+  ["painel-150", [/150\s*x\s*150/i, /150x150/i, /painel\s*150/i, /\b150\b/i]],
+  ["50x50", [/50\s*x\s*50/i, /50x50/i, /painel\s*50/i, /bolinha/i, /bolinhas/i, /\b50\b/i]],
+  ["cilindros", [/trio.*cilind/i, /cilindros/i, /cilindro/i]],
+  ["romano", [/romano/i]]
 ];
 
 export async function onRequestGet(context) {
   try {
     const apiKey = context.env.GOOGLE_API_KEY || context.env.GOOGLE_DRIVE_API_KEY || context.env.DRIVE_API_KEY;
-    if (!apiKey) return json({ ok: false, error: "GOOGLE_API_KEY_NAO_CONFIGURADA", items: [], folders: [] }, 500);
+    if (!apiKey) return json({ ok: false, error: "GOOGLE_API_KEY_NAO_CONFIGURADA", folders: [], items: [] }, 500);
 
     const url = new URL(context.request.url);
     const mode = String(url.searchParams.get("mode") || "themes").toLowerCase();
     const folderId = sanitizeId(url.searchParams.get("folderId")) || ROOT_FOLDER_ID;
     const theme = cleanLabel(url.searchParams.get("theme") || "");
-    const productParam = String(url.searchParams.get("product") || "");
+    const productFolderName = cleanLabel(url.searchParams.get("product") || "");
+    const productKey = normalizeProduct(productFolderName);
+    const productName = productLabel(productKey, productFolderName);
 
     const children = await listChildren(folderId, apiKey);
     const folders = children
@@ -29,20 +31,19 @@ export async function onRequestGet(context) {
       .sort((a, b) => a.name.localeCompare(b.name, "pt-BR", { numeric: true }));
 
     const imageFiles = children.filter((file) => String(file.mimeType || "").startsWith("image/"));
-    const product = normalizeProduct(productParam || folderNameFromChildren(children) || "");
-    const productName = productLabel(product);
-
     const items = imageFiles.map((file) => {
       const code = cleanCode(file.name);
-      const image = `https://drive.google.com/thumbnail?id=${encodeURIComponent(file.id)}&sz=w1000`;
+      const image = `https://drive.google.com/thumbnail?id=${encodeURIComponent(file.id)}&sz=w1200`;
       return {
         id: file.id,
         code,
         sortId: Number(code) || 0,
-        name: displayName(file.name, code),
+        // nome do arquivo não é exibido no front; fica apenas para debug interno se precisar.
+        name: file.name,
         theme: theme || "Sem tema",
-        product,
+        product: productKey,
         productName,
+        productFolderName: productFolderName || productName,
         image,
         thumbnail: image,
         driveUrl: file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`,
@@ -58,30 +59,25 @@ export async function onRequestGet(context) {
       folders,
       items,
       totalFolders: folders.length,
-      totalItems: items.length,
-      note: "Leitura preguiçosa: cada chamada lê apenas uma pasta para evitar limite de subrequests do Cloudflare."
-    }, 200, 60);
+      totalItems: items.length
+    }, 200, mode === "items" ? 45 : 120);
   } catch (error) {
-    return json({ ok: false, error: "FALHA_AO_LER_DRIVE", detail: String(error && error.message || error), items: [], folders: [] }, 500);
+    return json({ ok: false, error: "FALHA_AO_LER_DRIVE", detail: String(error && error.message || error), folders: [], items: [] }, 500);
   }
 }
 
 function folderPayload(file) {
-  const product = normalizeProduct(file.name);
+  const clean = cleanLabel(file.name);
+  const product = normalizeProduct(clean);
   return {
     id: file.id,
-    name: cleanLabel(file.name),
+    name: clean,
     rawName: file.name,
-    isProduct: isProductish(file.name),
+    isProduct: isProductFolderName(clean),
     product,
-    productName: productLabel(product),
+    productName: productLabel(product, clean),
     modifiedTime: file.modifiedTime || ""
   };
-}
-
-function folderNameFromChildren(children) {
-  const folder = children.find((file) => file.mimeType === FOLDER_MIME);
-  return folder ? folder.name : "";
 }
 
 async function listChildren(folderId, apiKey) {
@@ -110,28 +106,29 @@ async function listChildren(folderId, apiKey) {
 }
 
 function normalizeProduct(value) {
-  const normalized = normalizeText(value);
-  for (const [key, aliases] of PRODUCT_ALIASES) {
-    if (aliases.some(alias => normalized.includes(normalizeText(alias)))) return key;
+  const text = normalizeText(value);
+  for (const [key, rules] of PRODUCT_RULES) {
+    if (rules.some((rule) => rule.test(text))) return key;
   }
-  return "50x50";
+  return "produto";
 }
 
-function isProductish(value) {
-  const normalized = normalizeText(value);
-  return PRODUCT_ALIASES.some(([, aliases]) => aliases.some(alias => normalized.includes(normalizeText(alias))));
+function isProductFolderName(value) {
+  const text = normalizeText(value);
+  return PRODUCT_RULES.some(([, rules]) => rules.some((rule) => rule.test(text)));
 }
 
-function productLabel(key) {
+function productLabel(key, fallback = "") {
   const labels = {
     "50x50": "50x50",
     "painel-150": "Painel 150x150",
     "cilindros": "Cilindros",
     "romano": "Romano",
     "kit-romano": "Kit + Romano",
-    "kit-painel-cilindros": "Kit Painel + Cilindros"
+    "kit-painel-cilindros": "Kit Painel + Cilindros",
+    "produto": cleanLabel(fallback || "Produto")
   };
-  return labels[key] || "Produto";
+  return labels[key] || cleanLabel(fallback || "Produto");
 }
 
 function cleanCode(value) {
@@ -142,15 +139,8 @@ function cleanCode(value) {
   return nums ? nums[nums.length - 1] : base.replace(/[^\w-]/g, "").toUpperCase();
 }
 
-function displayName(fileName, code) {
-  const base = String(fileName || "").replace(/\.[^.]+$/, "").trim();
-  if (!base) return `Arte ${code}`;
-  const cleaned = base.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
-  return /^arte\s*\d+$/i.test(cleaned) ? `Arte ${code}` : cleaned;
-}
-
 function cleanLabel(value) {
-  return String(value || "Sem tema")
+  return String(value || "")
     .replace(/[_-]+/g, " ")
     .replace(/\s+/g, " ")
     .trim()
