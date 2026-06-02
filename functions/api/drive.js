@@ -1,168 +1,108 @@
-const ROOT_FOLDER_ID = "11cU5yMWafopC0JfMHotRxThpkgbQl-RW";
-const DRIVE_API = "https://www.googleapis.com/drive/v3/files";
-const FOLDER_MIME = "application/vnd.google-apps.folder";
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#222124">
+  <title>Hub de Artes | Armazém Festa e Eventos</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root{--ink:#222124;--soft:#66616a;--muted:#8b858c;--pink:#ef5585;--pink2:#d9366b;--pinkSoft:#fff1f6;--yellow:#f7d240;--blue:#38bae3;--blueSoft:#ebfaff;--cream:#fffaf6;--white:#fff;--line:#eee7e4;--green:#25d366;--greenSoft:#eafbf3;--shadow:0 26px 68px rgba(34,33,36,.12);--rLg:32px;--rMd:22px;--safe:env(safe-area-inset-bottom)}
+    *{box-sizing:border-box}html,body{min-height:100%;scrollbar-width:none}body::-webkit-scrollbar{display:none}body{margin:0;font-family:"Plus Jakarta Sans",Arial,sans-serif;color:var(--ink);background:radial-gradient(circle at 4% 5%,rgba(247,210,64,.27),transparent 29%),radial-gradient(circle at 97% 8%,rgba(56,186,227,.17),transparent 25%),radial-gradient(circle at 84% 88%,rgba(239,85,133,.14),transparent 27%),var(--cream);overflow-x:hidden}button,input{font:inherit}button{cursor:pointer}button:disabled{opacity:.55;cursor:not-allowed}.page{position:relative;z-index:1;min-height:100vh;padding:clamp(18px,3vw,38px) 14px calc(96px + var(--safe))}.app{width:min(100%,1280px);margin:auto;display:grid;gap:18px}.decor{position:fixed;pointer-events:none;z-index:0;filter:blur(.1px);opacity:.88}.decor:before{content:"";display:block;border-radius:999px}.decor.l{top:9vh;left:max(-65px,-5vw);animation:dl 18s ease-in-out infinite alternate}.decor.l:before{width:134px;height:134px;background:linear-gradient(145deg,#ffe680,var(--yellow));box-shadow:30px 118px 0 -25px rgba(56,186,227,.85)}.decor.r{top:16vh;right:max(-64px,-4vw);animation:dr 22s ease-in-out infinite alternate}.decor.r:before{width:128px;height:128px;background:linear-gradient(145deg,#ff8eb2,var(--pink));box-shadow:-38px 126px 0 -31px rgba(247,210,64,.8)}@keyframes dl{to{transform:translate3d(-8px,34px,0) rotate(-2deg)}}@keyframes dr{to{transform:translate3d(10px,32px,0) rotate(2deg)}}
+    .hero{display:grid;grid-template-columns:.82fr 1.18fr;overflow:hidden;border-radius:var(--rLg);background:rgba(255,255,255,.93);box-shadow:var(--shadow);border:1px solid rgba(255,255,255,.84);backdrop-filter:blur(14px)}.brand{padding:clamp(26px,4vw,46px);background:radial-gradient(circle at 15% 8%,rgba(247,210,64,.22),transparent 30%),radial-gradient(circle at 90% 88%,rgba(56,186,227,.18),transparent 27%),#fff;border-right:1px solid var(--line)}.logo{width:min(275px,100%);display:block}.eyebrow{display:inline-flex;gap:8px;align-items:center;margin:34px 0 16px;padding:8px 12px;color:var(--pink2);background:var(--pinkSoft);border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.13em;text-transform:uppercase}.eyebrow:before{content:"";width:8px;height:8px;border-radius:50%;background:var(--pink);box-shadow:0 0 0 5px rgba(239,85,133,.13)}h1{font-family:Montserrat,Arial,sans-serif;font-size:clamp(31px,4.2vw,48px);line-height:1.05;letter-spacing:-.055em;margin:0 0 15px;max-width:445px}.subtitle{margin:0;color:var(--soft);font-size:15px;line-height:1.65;max-width:450px}.heroSide{padding:clamp(24px,3.8vw,42px);display:grid;align-content:center;gap:16px;background:#fffdfc}.flow{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.stepBox{border:1px solid #eee7e4;background:#fff;border-radius:19px;padding:16px;box-shadow:0 12px 26px rgba(34,33,36,.045)}.stepBox b{display:block;font-family:Montserrat;font-size:14px;margin-bottom:6px}.stepBox span{font-size:12px;line-height:1.45;color:#716b71}.discount{overflow:hidden;padding:18px 17px;border-radius:19px;background:radial-gradient(circle at 94% 8%,rgba(247,210,64,.31),transparent 34%),radial-gradient(circle at 2% 100%,rgba(56,186,227,.17),transparent 39%),linear-gradient(135deg,#fff5fa 0%,#fffdf5 100%);border:1px solid rgba(239,85,133,.16)}.discountPill{display:inline-flex;margin:0 0 10px;padding:6px 10px;border-radius:999px;background:#fff;color:var(--pink2);font-family:Montserrat;font-size:10px;font-weight:800;letter-spacing:.11em;text-transform:uppercase}.discount h3{margin:0 0 7px;font-family:Montserrat;font-size:18px;line-height:1.25;letter-spacing:-.035em}.discount strong{color:var(--pink2)}.discount p{margin:0;color:#69636a;font-size:12.5px;line-height:1.55}
+    .main{display:grid;grid-template-columns:minmax(0,1fr) 375px;gap:18px;align-items:start}.catalog,.cart{border-radius:var(--rLg);background:rgba(255,255,255,.94);border:1px solid rgba(255,255,255,.85);box-shadow:var(--shadow);overflow:hidden}.catHead{position:sticky;top:0;z-index:6;background:rgba(255,255,255,.96);backdrop-filter:blur(14px);border-bottom:1px solid var(--line);padding:18px}.headTop{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}.title{font-family:Montserrat;font-size:23px;line-height:1.1;letter-spacing:-.04em;margin:0}.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;background:#f8f5f3;color:#625e64;padding:8px 12px;font-size:11px;font-weight:800}.hint{margin:0;color:var(--soft);font-size:13px;line-height:1.5}.search{width:100%;height:50px;border:1px solid #e7dfdd;border-radius:16px;padding:0 16px;font-size:15px;font-weight:700;outline:none;background:#fff;box-shadow:0 9px 16px rgba(34,33,36,.035)}.search:focus{border-color:#d8cfcd;box-shadow:0 0 0 4px rgba(34,33,36,.05)}.crumbs{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.crumb{display:inline-flex;align-items:center;gap:7px;border:1px solid #eadfde;background:#fff;border-radius:999px;padding:8px 11px;font-size:11px;font-weight:800;color:#625d64}.crumb button{border:0;background:transparent;color:var(--pink2);font-weight:900;padding:0}.catBody{height:calc(100vh - 370px);min-height:560px;overflow:auto;padding:18px;scroll-behavior:smooth}.catBody::-webkit-scrollbar{width:10px}.catBody::-webkit-scrollbar-track{background:#f6f2ef}.catBody::-webkit-scrollbar-thumb{background:#d2cbca;border-radius:999px;border:2px solid #f6f2ef}
+    .themeGrid,.productGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:14px}.themeCard,.productCard{position:relative;overflow:hidden;text-align:left;border:1px solid #eee2e4;background:#fff;border-radius:23px;min-height:154px;padding:18px;box-shadow:0 14px 30px rgba(34,33,36,.055);transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}.themeCard:hover,.productCard:hover{transform:translateY(-2px);box-shadow:0 20px 40px rgba(34,33,36,.09);border-color:rgba(239,85,133,.25)}.themeCard:before,.productCard:before{content:"";position:absolute;inset:auto -32px -35px auto;width:112px;height:112px;border-radius:999px;background:rgba(239,85,133,.10)}.themeCard:nth-child(3n+2):before{background:rgba(56,186,227,.14)}.themeCard:nth-child(3n+3):before{background:rgba(247,210,64,.20)}.roundIcon{width:46px;height:46px;display:grid;place-items:center;border-radius:16px;background:#fff4f8;color:var(--pink2);margin-bottom:14px}.themeCard:nth-child(3n+2) .roundIcon{background:#ecfbff;color:#238aad}.themeCard:nth-child(3n+3) .roundIcon{background:#fff8d8;color:#a08000}.themeCard b,.productCard b{position:relative;z-index:1;display:block;font-family:Montserrat;font-size:17px;line-height:1.2;letter-spacing:-.025em;margin-bottom:8px}.themeCard span,.productCard span{position:relative;z-index:1;display:block;color:#746d73;font-size:12.5px;line-height:1.45}.productCard{min-height:145px}.productCard .roundIcon{background:#f7f5f3;color:#2d2b2f}.sectionLabel{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 14px}.sectionLabel h3{margin:0;font-family:Montserrat;font-size:18px;letter-spacing:-.03em}.sectionLabel p{margin:0;color:var(--muted);font-size:12px}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:14px}.card{overflow:hidden;border:1px solid #eee2e4;border-radius:23px;background:#fff;box-shadow:0 14px 30px rgba(34,33,36,.055);transition:transform .18s,box-shadow .18s,border-color .18s}.card:hover{transform:translateY(-2px);box-shadow:0 20px 40px rgba(34,33,36,.09)}.card.sel{border-color:rgba(37,211,102,.62);box-shadow:0 16px 34px rgba(37,211,102,.12)}.thumbWrap{position:relative;aspect-ratio:1/1;overflow:hidden;background:linear-gradient(135deg,#fff2f7,#eefdff)}.thumb{width:100%;height:100%;object-fit:cover;display:block;transition:transform .25s ease}.thumbWrap:hover .thumb{transform:scale(1.035)}.code{position:absolute;top:10px;left:10px;border-radius:999px;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);padding:7px 10px;font-size:12px;font-weight:900;box-shadow:0 9px 18px rgba(34,33,36,.08)}.info{padding:12px;display:grid;gap:10px}.codeTitle{font-family:Montserrat;font-size:16px;font-weight:800;letter-spacing:-.025em;margin:0}.miniRow{display:flex;flex-wrap:wrap;gap:6px}.mini{display:inline-flex;align-items:center;border-radius:999px;background:#f8f5f3;color:#69636a;padding:6px 8px;font-size:10px;font-weight:800}.selBtn{width:100%;min-height:43px;border:0;border-radius:14px;background:var(--ink);color:#fff;font-family:Montserrat;font-size:12px;font-weight:800;box-shadow:0 10px 20px rgba(34,33,36,.14);display:flex;align-items:center;justify-content:center;text-align:center}.card.sel .selBtn{background:#168a69}.empty{grid-column:1/-1;min-height:235px;display:grid;place-items:center;text-align:center;padding:32px;border:1px dashed #e7dedd;border-radius:24px;background:#fffdfc;color:var(--soft);line-height:1.55}.empty b{display:block;color:var(--ink);font-family:Montserrat;font-size:20px;margin-bottom:6px}.empty .soft{max-width:430px}
+    .cart{position:sticky;top:18px;max-height:calc(100vh - 36px);overflow:auto}.cart::-webkit-scrollbar{display:none}.cartInner{padding:18px}.cartTitle{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}.cartTitle h2{font-family:Montserrat;margin:0;font-size:22px;letter-spacing:-.04em}.seller{padding:14px;border:1px solid #eee1df;border-radius:19px;margin-bottom:14px}.seller label{display:block;margin-bottom:9px;color:#625d64;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.08em}.sellerOpts{display:grid;grid-template-columns:1fr 1fr;gap:8px}.sellerBtn{height:45px;border:1px solid #eadfde;border-radius:14px;background:#fff;font-family:Montserrat;font-weight:800;color:var(--ink)}.sellerBtn.active{background:var(--ink);color:#fff;border-color:var(--ink)}.cartList{display:grid;gap:10px}.group{border:1px solid #eee4e2;border-radius:18px;background:#fff;padding:13px}.groupHead{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px}.groupHead b{font-family:Montserrat;font-size:13px;line-height:1.25}.subtotal{white-space:nowrap;font-size:12px;font-weight:900;color:var(--pink2)}.codes{font-size:12px;line-height:1.6;color:#625e64}.tokens{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.token{border:0;border-radius:999px;background:#f8f5f3;color:#5f5960;padding:7px 9px;font-size:11px;font-weight:900}.rule{margin-top:12px;padding:13px;border-radius:17px;border:1px solid #f2dddd;background:#fff4f5;color:#a1274b;font-size:12px;font-weight:800;line-height:1.45}.rule.ok{background:var(--greenSoft);border-color:#c8f0df;color:#0d7356}.totalBox{border-top:1px dashed #eee7e5;margin-top:14px;padding-top:14px;display:grid;gap:8px}.lineTotal{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#69636a}.lineTotal strong{color:var(--ink)}.lineTotal.discountLine strong{color:var(--pink2)}.grand{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin-top:4px}.grand span{font-size:12px;color:#777078;font-weight:700}.grand strong{font-family:Montserrat;font-size:28px;letter-spacing:-.05em}.actions{display:grid;gap:8px;margin-top:8px}.wa,.clear{min-height:49px;border-radius:15px;display:flex;align-items:center;justify-content:center;text-decoration:none;font-family:Montserrat;font-size:13px;font-weight:900}.wa{border:0;background:var(--green);color:#fff;box-shadow:0 12px 24px rgba(37,211,102,.22)}.wa.disabled{pointer-events:none;opacity:.48}.clear{border:1px solid #eee1df;background:#fff;color:#5b565c}.support{margin-top:12px;padding:13px;border-radius:17px;background:#fff8dc;border:1px solid rgba(247,210,64,.38);font-size:12px;line-height:1.5;color:#635d51}.support b{color:#2c292b}
+    .bar{position:fixed;z-index:20;left:10px;right:10px;bottom:calc(10px + var(--safe));display:none;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:20px;background:rgba(34,33,36,.95);color:#fff;box-shadow:0 18px 44px rgba(34,33,36,.28);backdrop-filter:blur(12px)}.bar b{font-family:Montserrat}.bar span{display:block;color:rgba(255,255,255,.74);font-size:11px}.bar button{border:0;border-radius:14px;background:#fff;color:var(--ink);font-family:Montserrat;font-size:12px;font-weight:900;padding:12px 14px}.drawerBg,.modalBg{position:fixed;inset:0;background:rgba(34,33,36,.42);z-index:31;opacity:0;pointer-events:none;transition:.18s}.drawerBg.show,.modalBg.show{opacity:1;pointer-events:auto}.drawer{position:fixed;z-index:32;left:0;right:0;bottom:0;display:none;max-height:88svh;border-radius:26px 26px 0 0;background:#fff;box-shadow:0 -24px 55px rgba(34,33,36,.18);transform:translateY(103%);transition:.22s ease;overflow:auto}.drawer.show{transform:translateY(0)}.drawer .cartInner{padding-bottom:calc(18px + var(--safe))}.modal{position:fixed;z-index:34;inset:clamp(12px,4vw,42px);display:grid;place-items:center;pointer-events:none}.preview{width:min(100%,900px);display:grid;grid-template-columns:minmax(0,1.05fr) .95fr;background:#fff;border-radius:30px;overflow:hidden;box-shadow:0 30px 90px rgba(34,33,36,.28);transform:translateY(12px) scale(.98);opacity:0;transition:.2s}.modal.show{pointer-events:auto}.modal.show .preview{opacity:1;transform:none}.previewImg{width:100%;height:100%;min-height:520px;object-fit:cover;background:#fff4f7}.prevInfo{padding:24px;display:grid;align-content:center;gap:13px}.prevInfo h3{margin:0;font-family:Montserrat;font-size:30px;letter-spacing:-.055em}.prevInfo p{margin:0;color:#66616a;line-height:1.55}.prevActions{display:grid;grid-template-columns:1fr auto;gap:9px;margin-top:8px}.prevActions button{min-height:49px;border-radius:15px;font-family:Montserrat;font-weight:900}.prevSelect{border:0;background:var(--ink);color:#fff}.prevClose{border:1px solid #eee1df;background:#fff;color:#4d484f}.toast{position:fixed;z-index:50;left:50%;bottom:calc(88px + var(--safe));transform:translateX(-50%) translateY(20px);background:rgba(34,33,36,.96);color:#fff;padding:13px 16px;border-radius:999px;font-size:13px;font-weight:800;opacity:0;pointer-events:none;transition:.18s;max-width:min(92vw,640px);text-align:center}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}.iconSvg{width:22px;height:22px;display:block}.roundIcon .iconSvg{width:24px;height:24px}.chipIcon{width:18px;height:18px;display:inline-block;vertical-align:-4px;margin-right:7px}
+    @media(max-width:980px){.hero{grid-template-columns:1fr}.brand{border-right:0;border-bottom:1px solid var(--line);text-align:center}.logo{margin:auto}.eyebrow{margin-top:24px}h1,.subtitle{max-width:100%}.flow{grid-template-columns:1fr}.main{grid-template-columns:1fr}.cart{display:none}.bar{display:flex}.drawer{display:block}.catBody{height:calc(100svh - 300px);min-height:430px}.themeGrid,.productGrid{grid-template-columns:repeat(auto-fill,minmax(155px,1fr))}}@media(max-width:560px){.page{padding:9px 9px calc(92px + var(--safe))}.brand{padding:23px 17px 22px}.logo{width:min(218px,64vw)}h1{font-size:clamp(28px,8vw,34px)}.subtitle{font-size:13.5px}.heroSide{padding:18px 15px}.flow{display:none}.catHead{padding:14px}.title{font-size:19px}.catBody{padding:12px;height:calc(100svh - 270px);min-height:390px}.themeGrid,.productGrid{grid-template-columns:1fr 1fr;gap:10px}.themeCard,.productCard{min-height:132px;border-radius:20px;padding:14px}.themeCard b,.productCard b{font-size:14px}.themeCard span,.productCard span{font-size:11px}.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.card{border-radius:18px}.info{padding:10px}.codeTitle{font-size:14px}.selBtn{min-height:39px;font-size:11px}.search{height:48px}.preview{grid-template-columns:1fr;border-radius:24px}.previewImg{min-height:320px}.modal{inset:9px}.prevInfo{padding:17px}.prevInfo h3{font-size:24px}.prevActions{grid-template-columns:1fr}.grand strong{font-size:25px}}
+    @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+  </style>
+</head>
+<body>
+  <span class="decor l" aria-hidden="true"></span><span class="decor r" aria-hidden="true"></span>
+  <main class="page"><div class="app">
+    <section class="hero">
+      <aside class="brand">
+        <img class="logo" src="https://acompanhe-armazem.pages.dev/assets/logo.svg" alt="Armazém Festa e Eventos">
+        <p class="eyebrow">Hub de Artes</p>
+        <h1>Escolha suas artes com carinho.</h1>
+        <p class="subtitle">Comece pelo tema da festa, depois escolha o produto que deseja e selecione as artes preferidas. No final, tudo vai organizadinho para a sua vendedora no WhatsApp.</p>
+      </aside>
+      <section class="heroSide">
+        <div class="flow" aria-hidden="true">
+          <div class="stepBox"><b>1. Escolha o tema</b><span>Veja as pastas do Drive organizadas por estilo de festa.</span></div>
+          <div class="stepBox"><b>2. Escolha o produto</b><span>Depois filtre por 50x50, painel, kit, romano ou cilindros.</span></div>
+          <div class="stepBox"><b>3. Envie no WhatsApp</b><span>O resumo já sai com códigos, valores e desconto aplicado.</span></div>
+        </div>
+        <aside class="discount"><span class="discountPill">🎁 Condição especial</span><h3>Comprando por aqui, você ganha <strong>10% de desconto</strong></h3><p>O desconto é aplicado automaticamente no total estimado antes do envio para a vendedora.</p></aside>
+      </section>
+    </section>
 
-const PRODUCT_RULES = [
-  ["kit-romano", [/kit.*romano/i, /romano.*kit/i, /kit\s*\+\s*romano/i, /kit\s*com\s*romano/i, /kit\s*completo/i, /completo/i]],
-  ["kit-painel-cilindros", [/kit.*painel.*cilind/i, /kit.*cilind/i, /painel.*cilind/i]],
-  ["painel-150", [/150\s*x\s*150/i, /150x150/i, /painel\s*150/i, /\b150\b/i]],
-  ["50x50", [/50\s*x\s*50/i, /50x50/i, /painel\s*50/i, /bolinha/i, /bolinhas/i, /\b50\b/i]],
-  ["cilindros", [/trio.*cilind/i, /cilindros/i, /cilindro/i]],
-  ["romano", [/romano/i]]
-];
+    <section class="main">
+      <section class="catalog" aria-label="Seleção de artes">
+        <header class="catHead">
+          <div class="headTop"><div><h2 id="viewTitle" class="title">Escolha um tema</h2><p id="viewHint" class="hint">Toque em um tema para começar a montar sua seleção.</p></div><span id="count" class="pill">0 item(ns)</span></div>
+          <input id="search" class="search" type="search" placeholder="Buscar por código ou tema..." autocomplete="off" hidden>
+          <div id="crumbs" class="crumbs" aria-label="Etapas selecionadas"></div>
+        </header>
+        <div id="catBody" class="catBody"><div id="content" class="themeGrid"></div></div>
+      </section>
 
-export async function onRequestGet(context) {
-  try {
-    const apiKey = context.env.GOOGLE_API_KEY || context.env.GOOGLE_DRIVE_API_KEY || context.env.DRIVE_API_KEY;
-    if (!apiKey) return json({ ok: false, error: "GOOGLE_API_KEY_NAO_CONFIGURADA", folders: [], items: [] }, 500);
+      <aside class="cart" aria-label="Carrinho"><div id="cartDesk" class="cartInner"></div></aside>
+    </section>
+  </div></main>
 
-    const url = new URL(context.request.url);
-    const mode = String(url.searchParams.get("mode") || "themes").toLowerCase();
-    const folderId = sanitizeId(url.searchParams.get("folderId")) || ROOT_FOLDER_ID;
-    const theme = cleanLabel(url.searchParams.get("theme") || "");
-    const productFolderName = cleanLabel(url.searchParams.get("product") || "");
-    const productKey = normalizeProduct(productFolderName);
-    const productName = productLabel(productKey, productFolderName);
+  <div class="bar"><div><b id="barTotal">R$ 0,00</b><span id="barItems">0 item(ns)</span></div><button id="openCart">Ver carrinho</button></div>
+  <div id="drawBg" class="drawerBg"></div><aside id="drawer" class="drawer"><div id="cartMob" class="cartInner"></div></aside>
+  <div id="modalBg" class="modalBg"></div><div id="modal" class="modal"><article class="preview"><img id="prevImg" class="previewImg" alt="Prévia da arte"><section class="prevInfo"><span id="prevCode" class="pill"></span><h3 id="prevTitle">Código da arte</h3><p id="prevText">Confira a arte em tamanho maior antes de adicionar ao carrinho.</p><div id="prevMeta" class="miniRow"></div><div class="prevActions"><button id="prevSelect" class="prevSelect">Selecionar arte</button><button id="prevClose" class="prevClose">Fechar</button></div></section></article></div>
+  <div id="toast" class="toast"></div>
 
-    const children = await listChildren(folderId, apiKey);
-    const folders = children
-      .filter((file) => file.mimeType === FOLDER_MIME)
-      .map((file) => folderPayload(file))
-      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR", { numeric: true }));
-
-    const imageFiles = children.filter((file) => String(file.mimeType || "").startsWith("image/"));
-    const items = imageFiles.map((file) => {
-      const code = cleanCode(file.name);
-      const image = `https://drive.google.com/thumbnail?id=${encodeURIComponent(file.id)}&sz=w1200`;
-      return {
-        id: file.id,
-        code,
-        sortId: Number(code) || 0,
-        // nome do arquivo não é exibido no front; fica apenas para debug interno se precisar.
-        name: file.name,
-        theme: theme || "Sem tema",
-        product: productKey,
-        productName,
-        productFolderName: productFolderName || productName,
-        image,
-        thumbnail: image,
-        driveUrl: file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`,
-        path: theme ? `${theme} / ${productName}` : productName
-      };
-    }).sort((a, b) => Number(b.sortId || 0) - Number(a.sortId || 0));
-
-    return json({
-      ok: true,
-      mode,
-      rootFolderId: ROOT_FOLDER_ID,
-      folderId,
-      folders,
-      items,
-      totalFolders: folders.length,
-      totalItems: items.length
-    }, 200, mode === "items" ? 45 : 120);
-  } catch (error) {
-    return json({ ok: false, error: "FALHA_AO_LER_DRIVE", detail: String(error && error.message || error), folders: [], items: [] }, 500);
-  }
-}
-
-function folderPayload(file) {
-  const clean = cleanLabel(file.name);
-  const product = normalizeProduct(clean);
-  return {
-    id: file.id,
-    name: clean,
-    rawName: file.name,
-    isProduct: isProductFolderName(clean),
-    product,
-    productName: productLabel(product, clean),
-    modifiedTime: file.modifiedTime || ""
-  };
-}
-
-async function listChildren(folderId, apiKey) {
-  const out = [];
-  let pageToken = "";
-  do {
-    const params = new URLSearchParams({
-      key: apiKey,
-      q: `'${folderId}' in parents and trashed = false`,
-      fields: "nextPageToken, files(id,name,mimeType,webViewLink,modifiedTime)",
-      pageSize: "1000",
-      orderBy: "folder,name_natural"
-    });
-    if (pageToken) params.set("pageToken", pageToken);
-    const response = await fetch(`${DRIVE_API}?${params.toString()}`, { headers: { Accept: "application/json" } });
-    if (!response.ok) {
-      let detail = "";
-      try { detail = JSON.stringify(await response.json()); } catch (_) {}
-      throw new Error(`Drive API ${response.status}${detail ? ` - ${detail}` : ""}`);
-    }
-    const data = await response.json();
-    out.push(...(data.files || []));
-    pageToken = data.nextPageToken || "";
-  } while (pageToken);
-  return out;
-}
-
-function normalizeProduct(value) {
-  const text = normalizeText(value);
-  for (const [key, rules] of PRODUCT_RULES) {
-    if (rules.some((rule) => rule.test(text))) return key;
-  }
-  return "produto";
-}
-
-function isProductFolderName(value) {
-  const text = normalizeText(value);
-  return PRODUCT_RULES.some(([, rules]) => rules.some((rule) => rule.test(text)));
-}
-
-function productLabel(key, fallback = "") {
-  const labels = {
-    "50x50": "50x50",
-    "painel-150": "Painel 150x150",
-    "cilindros": "Cilindros",
-    "romano": "Romano",
-    "kit-romano": "Kit + Romano",
-    "kit-painel-cilindros": "Kit Painel + Cilindros",
-    "produto": cleanLabel(fallback || "Produto")
-  };
-  return labels[key] || cleanLabel(fallback || "Produto");
-}
-
-function cleanCode(value) {
-  const base = String(value || "").replace(/\.[^.]+$/, "");
-  const arteMatch = base.match(/(?:arte|art)[^\d]*(\d+)/i);
-  if (arteMatch) return arteMatch[1];
-  const nums = base.match(/\d+/g);
-  return nums ? nums[nums.length - 1] : base.replace(/[^\w-]/g, "").toUpperCase();
-}
-
-function cleanLabel(value) {
-  return String(value || "")
-    .replace(/[_-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/\b\w/g, (m) => m.toLocaleUpperCase("pt-BR"));
-}
-
-function normalizeText(value) {
-  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-}
-
-function sanitizeId(value) {
-  const id = String(value || "").trim();
-  return /^[A-Za-z0-9_-]{10,}$/.test(id) ? id : "";
-}
-
-function json(payload, status = 200, browserCacheSeconds = 0) {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": browserCacheSeconds ? `public, max-age=${browserCacheSeconds}, s-maxage=${browserCacheSeconds}` : "no-store, max-age=0",
-      "X-Content-Type-Options": "nosniff"
-    }
-  });
-}
+<script>
+const ROOT_FOLDER_ID="11cU5yMWafopC0JfMHotRxThpkgbQl-RW";
+const SELLERS={ana:{label:"Ana",phone:"5581996763982"},dayane:{label:"Dayane",phone:"5581983383002"}};
+const PRICES={"50x50":9.90,"painel-150":59.90,"kit-romano":210,"cilindros":99,"romano":78,"kit-painel-cilindros":158.90,"produto":0};
+const DISCOUNT=0.10;
+let view="themes", themes=[], products=[], items=[], selectedTheme=null, selectedProduct=null, cart=[], seller="ana", prev=null, demo=false;
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>'"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[m]));
+const norm=s=>String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim();
+const money=n=>(Number(n)||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+function svg(name){const icons={theme:'<svg class="iconSvg" viewBox="0 0 24 24" fill="none"><path d="M12 3.5c2.2 0 3.8 1.6 3.8 3.7 2.2-.2 4 1.2 4.4 3.2.4 2.2-1 4.1-3 4.8.8 1.9.1 4.1-1.8 5.1-1.8 1-4 .3-5.2-1.4-1.3 1.7-3.6 2.2-5.3 1-1.8-1.2-2.2-3.5-1.1-5.3-2-.8-3.1-2.8-2.6-4.9.5-2 2.4-3.3 4.5-2.9.1-2 1.9-3.3 4-3.3Z" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="2.6" fill="currentColor"/></svg>',grid:'<svg class="iconSvg" viewBox="0 0 24 24" fill="none"><path d="M4 4h6v6H4V4Zm10 0h6v6h-6V4ZM4 14h6v6H4v-6Zm10 0h6v6h-6v-6Z" stroke="currentColor" stroke-width="1.8"/></svg>',square:'<svg class="iconSvg" viewBox="0 0 24 24" fill="none"><rect x="5" y="5" width="14" height="14" rx="3" stroke="currentColor" stroke-width="1.9"/><path d="M8.5 12h7" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>',panel:'<svg class="iconSvg" viewBox="0 0 24 24" fill="none"><rect x="4" y="6" width="16" height="12" rx="2.5" stroke="currentColor" stroke-width="1.9"/><path d="M8 10h8M8 14h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',cylinders:'<svg class="iconSvg" viewBox="0 0 24 24" fill="none"><path d="M6 7c0-1.4 2.2-2.5 5-2.5s5 1.1 5 2.5v10c0 1.4-2.2 2.5-5 2.5s-5-1.1-5-2.5V7Z" stroke="currentColor" stroke-width="1.8"/><path d="M16 8.2c1.6.4 2.7 1.2 2.7 2.2v5.7c0 1.1-1.3 2-3.1 2.4M6 7c0 1.4 2.2 2.5 5 2.5s5-1.1 5-2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',arch:'<svg class="iconSvg" viewBox="0 0 24 24" fill="none"><path d="M6 20V10a6 6 0 0 1 12 0v10" stroke="currentColor" stroke-width="1.9"/><path d="M9 20v-9.8a3 3 0 0 1 6 0V20" stroke="currentColor" stroke-width="1.8" opacity=".75"/></svg>',kit:'<svg class="iconSvg" viewBox="0 0 24 24" fill="none"><path d="M5 8h14v11H5V8Z" stroke="currentColor" stroke-width="1.8"/><path d="M8 8V6.8A2.8 2.8 0 0 1 10.8 4h2.4A2.8 2.8 0 0 1 16 6.8V8M8 12h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',stack:'<svg class="iconSvg" viewBox="0 0 24 24" fill="none"><path d="M4.5 8.5 12 4l7.5 4.5L12 13 4.5 8.5Z" stroke="currentColor" stroke-width="1.8"/><path d="m4.5 12 7.5 4.5L19.5 12M4.5 15.5 12 20l7.5-4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>'};return icons[name]||icons.grid}
+function productIcon(key){return {"50x50":"square","painel-150":"panel","cilindros":"cylinders","romano":"arch","kit-romano":"kit","kit-painel-cilindros":"stack"}[key]||"grid"}
+function productLabel(key,fallback="Produto"){return {"50x50":"50x50","painel-150":"Painel 150x150","cilindros":"Cilindros","romano":"Romano","kit-romano":"Kit + Romano","kit-painel-cilindros":"Kit Painel + Cilindros","produto":fallback||"Produto"}[key]||fallback||"Produto"}
+async function api(params){const qs=new URLSearchParams(params);const r=await fetch(`/api/drive?${qs}`,{cache:"no-store",headers:{Accept:"application/json"}});const d=await r.json().catch(()=>({ok:false,error:"RESPOSTA_INVALIDA"}));if(!r.ok||!d.ok)throw new Error(d.detail||d.error||"Falha ao ler o Drive");return d}
+function toast(msg){const el=$("toast");el.textContent=msg;el.classList.add("show");clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove("show"),2600)}
+function loading(msg){$("content").className="";$("content").innerHTML=`<div class="empty"><div><b>${esc(msg)}</b><span class="soft">Aguarde um instante. Estamos organizando as opções para você.</span></div></div>`;$("count").textContent="..."}
+function setHeader(title,hint,count=""){ $("viewTitle").textContent=title; $("viewHint").textContent=hint; $("count").textContent=count; $("search").hidden=view!=="items"; renderCrumbs(); }
+function renderCrumbs(){const c=[]; if(selectedTheme)c.push(`<span class="crumb">Tema: ${esc(selectedTheme.name)} <button data-back="themes">trocar</button></span>`); if(selectedProduct)c.push(`<span class="crumb">Produto: ${svg(productIcon(selectedProduct.product))}${esc(selectedProduct.productName)} <button data-back="products">trocar</button></span>`); $("crumbs").innerHTML=c.join(""); document.querySelectorAll("[data-back]").forEach(b=>b.onclick=()=>{ if(b.dataset.back==="themes"){selectedTheme=null;selectedProduct=null;items=[];showThemes()} else {selectedProduct=null;items=[];showProducts()} });}
+function showThemes(){view="themes";setHeader("Escolha um tema","Toque no tema da festa para ver os produtos disponíveis.",`${themes.length} tema(s)`);$("content").className="themeGrid";$("content").innerHTML=themes.length?themes.map((t,i)=>`<button class="themeCard" data-theme="${esc(t.id)}"><span class="roundIcon">${svg("theme")}</span><b>${esc(t.name)}</b><span>${gentleThemeLine(i)}</span></button>`).join(""):`<div class="empty"><div><b>Nenhum tema encontrado</b><span class="soft">Confira se a pasta do Drive está pública e se existem subpastas de temas.</span></div></div>`;document.querySelectorAll("[data-theme]").forEach(b=>b.onclick=()=>selectTheme(b.dataset.theme));}
+function gentleThemeLine(i){const lines=["Uma seleção feita para combinar com a festa.","Escolha com calma e avance para os produtos.","Depois você poderá ver as artes disponíveis.","Tudo ficará organizado no carrinho."];return lines[i%lines.length]}
+async function selectTheme(id){const t=themes.find(x=>x.id===id);if(!t)return;selectedTheme=t;selectedProduct=null;products=[];items=[];view="products";loading(`Abrindo o tema ${t.name}...`);if(demo){products=[{id:"demo-50",name:"50x50",rawName:"50x50",product:"50x50",productName:"50x50"},{id:"demo-150",name:"Painel 150x150",rawName:"Painel 150x150",product:"painel-150",productName:"Painel 150x150"},{id:"demo-kit",name:"Kit + Romano",rawName:"Kit + Romano",product:"kit-romano",productName:"Kit + Romano"},{id:"demo-cil",name:"Cilindros",rawName:"Cilindros",product:"cilindros",productName:"Cilindros"}];showProducts();return;}try{const d=await api({mode:"products",folderId:t.id,theme:t.name});products=(d.folders||[]); if(!products.length && (d.items||[]).length){products=[{id:t.id,name:"Artes",rawName:"Artes",product:"produto",productName:"Artes"}]} showProducts();}catch(e){toast("Não consegui abrir este tema: "+e.message);showThemes();}}
+function showProducts(){view="products";setHeader("Agora escolha o produto","Cada produto usa as pastas do Drive como referência. Assim as artes aparecem no lugar certo.",`${products.length} produto(s)`);$("content").className="productGrid";$("content").innerHTML=products.length?products.map(p=>`<button class="productCard" data-product="${esc(p.id)}"><span class="roundIcon">${svg(productIcon(p.product))}</span><b>${esc(p.productName||p.name)}</b><span>Ver artes disponíveis para este produto.</span></button>`).join(""):`<div class="empty"><div><b>Nenhum produto neste tema</b><span class="soft">A pasta do tema foi encontrada, mas não vi subpastas de produto dentro dela.</span></div></div>`;document.querySelectorAll("[data-product]").forEach(b=>b.onclick=()=>selectProduct(b.dataset.product));}
+async function selectProduct(id){const p=products.find(x=>x.id===id);if(!p)return;selectedProduct=p;items=[];view="items";loading(`Carregando ${p.productName || p.name}...`);if(demo){items=sanitizeItems([{id:p.id+"-220",code:"220",image:""},{id:p.id+"-195",code:"195",image:""},{id:p.id+"-188",code:"188",image:""},{id:p.id+"-177",code:"177",image:""}],p).map((it,k)=>({...it,image:["linear-gradient",""][0]||`https://placehold.co/900x900/fff1f6/222124?text=%23${it.code}`}));showItems();return;}try{const d=await api({mode:"items",folderId:p.id,theme:selectedTheme.name,product:p.rawName||p.name});items=sanitizeItems(d.items||[],p);showItems();}catch(e){toast("Não consegui carregar as artes: "+e.message);showProducts();}}
+function sanitizeItems(arr,productFolder){return arr.map((r,idx)=>{const code=cleanCode(r.code||r.name||r.id||idx);return {id:String(r.id||`${code}-${idx}`),code,sortId:Number(code)||0,theme:selectedTheme?.name||r.theme||"Sem tema",product:productFolder.product||r.product||"produto",productName:productFolder.productName||r.productName||productFolder.name||"Produto",image:r.image||r.thumbnail||`https://drive.google.com/thumbnail?id=${r.id}&sz=w1200`}}).filter(i=>i.code&&i.image).sort((a,b)=>(b.sortId||0)-(a.sortId||0))}
+function cleanCode(v){const b=String(v||"").replace(/\.[^.]+$/,"");const m=b.match(/(?:arte|art)[^\d]*(\d+)/i);if(m)return m[1];const n=b.match(/\d+/g);return n?n[n.length-1]:b.replace(/[^\w-]/g,"").toUpperCase()}
+function showItems(){view="items";const filtered=filteredItems();setHeader("Selecione suas artes","Toque na imagem para ampliar ou use o botão para adicionar ao carrinho.",`${filtered.length} arte(s)`);renderItems(filtered)}
+function filteredItems(){const q=norm($("search").value);return items.filter(i=>!q||norm([i.code,i.theme,i.productName].join(" ")).includes(q)).sort((a,b)=>(b.sortId||0)-(a.sortId||0))}
+function renderItems(list){$("content").className="grid";$("count").textContent=`${list.length} arte(s)`;$("content").innerHTML=list.length?list.map(i=>{const selected=cart.some(c=>c.id===i.id);return `<article class="card ${selected?"sel":""}"><div class="thumbWrap" data-preview="${esc(i.id)}"><img class="thumb" loading="lazy" src="${esc(i.image)}" alt="Arte código ${esc(i.code)}"><span class="code">#${esc(i.code)}</span></div><div class="info"><p class="codeTitle">Código #${esc(i.code)}</p><div class="miniRow"><span class="mini">${esc(i.theme)}</span><span class="mini">${esc(i.productName)}</span></div><button class="selBtn" data-select="${esc(i.id)}">${selected?"Remover do carrinho":"Selecionar arte"}</button></div></article>`}).join(""):`<div class="empty"><div><b>Nenhuma arte encontrada</b><span class="soft">Tente outro código ou volte para escolher outro produto.</span></div></div>`;document.querySelectorAll("[data-select]").forEach(b=>b.onclick=()=>toggleItem(b.dataset.select));document.querySelectorAll("[data-preview]").forEach(b=>b.onclick=()=>openPreview(b.dataset.preview));}
+function toggleItem(id){const item=items.find(x=>x.id===id)||cart.find(x=>x.id===id);if(!item)return;const ix=cart.findIndex(x=>x.id===id);if(ix>=0){cart.splice(ix,1);toast("Arte removida do carrinho.")}else{cart.push(item);toast("Arte adicionada ao carrinho.")}if(view==="items")renderItems(filteredItems());renderCart()}
+function groups(){const m=new Map();cart.forEach(i=>{const key=i.productName||productLabel(i.product);if(!m.has(key))m.set(key,{label:key,product:i.product,items:[]});m.get(key).items.push(i)});return [...m.values()].map(g=>({...g,items:g.items.sort((a,b)=>(b.sortId||0)-(a.sortId||0)),subtotal:subtotal(g.product,g.items.length)}))}
+function subtotal(product,qty){if(!qty)return 0;if(product==="50x50")return qty>=6?58.90+Math.max(0,qty-6)*9.90:qty*9.90;return (PRICES[product]||0)*qty}
+function rawTotal(){return groups().reduce((s,g)=>s+g.subtotal,0)}
+function discountValue(){return rawTotal()*DISCOUNT}
+function finalTotal(){return Math.max(0,rawTotal()-discountValue())}
+function cartRule(){const q50=cart.filter(i=>i.product==="50x50").length;if(q50===0)return{ok:cart.length>0,msg:"Quando estiver tudo certo, envie sua seleção para a vendedora pelo WhatsApp."};if(q50<6)return{ok:false,msg:`Para fechar 50x50, selecione pelo menos 6 artes. Faltam ${6-q50}.`};if(q50%2!==0)return{ok:false,msg:"Depois do mínimo de 6 artes 50x50, a quantidade precisa fechar em par: 8, 10, 12..."};return{ok:true,msg:"Sua seleção está pronta para ser enviada pelo WhatsApp."}}
+function cartHtml(){const gs=groups(),rule=cartRule(),can=cart.length&&rule.ok;return `<div class="cartTitle"><h2>Seu carrinho</h2><span class="pill">${cart.length} item(ns)</span></div><div class="seller"><label>Vendedora</label><div class="sellerOpts"><button class="sellerBtn ${seller==="ana"?"active":""}" data-seller="ana">Ana</button><button class="sellerBtn ${seller==="dayane"?"active":""}" data-seller="dayane">Dayane</button></div></div><div class="cartList">${gs.length?gs.map(g=>`<section class="group"><div class="groupHead"><b>${esc(g.label)} · ${g.items.length} item(ns)</b><span class="subtotal">${money(g.subtotal)}</span></div><div class="codes"><strong>Tema(s):</strong> ${esc([...new Set(g.items.map(i=>i.theme))].join(", "))}<br><strong>Códigos:</strong> ${esc(g.items.map(i=>i.code).join(", "))}</div><div class="tokens">${g.items.map(i=>`<button class="token" data-rem="${esc(i.id)}">#${esc(i.code)} ×</button>`).join("")}</div></section>`).join(""):`<div class="empty"><div><b>Carrinho vazio</b><span class="soft">Escolha um tema, selecione o produto e adicione as artes que mais gostar.</span></div></div>`}</div><div class="rule ${rule.ok?"ok":""}">${esc(rule.msg)}</div><div class="support"><b>Desconto aplicado:</b> toda seleção feita por aqui recebe 10% de desconto no total estimado.</div><div class="totalBox"><div class="lineTotal"><span>Subtotal</span><strong>${money(rawTotal())}</strong></div><div class="lineTotal discountLine"><span>Desconto de 10%</span><strong>- ${money(discountValue())}</strong></div><div class="grand"><span>Total com desconto</span><strong>${money(finalTotal())}</strong></div><div class="actions"><a class="wa ${can?"":"disabled"}" href="${can?esc(waUrl()):"#"}" target="_blank" rel="noopener">Enviar para ${esc(SELLERS[seller].label)}</a><button class="clear" data-clear ${cart.length?"":"disabled"}>Limpar carrinho</button></div></div>`}
+function renderCart(){$("cartDesk").innerHTML=cartHtml();$("cartMob").innerHTML=cartHtml();[$("cartDesk"),$("cartMob")].forEach(p=>{p.querySelectorAll("[data-seller]").forEach(b=>b.onclick=()=>{seller=b.dataset.seller;renderCart()});p.querySelectorAll("[data-rem]").forEach(b=>b.onclick=()=>{cart=cart.filter(i=>i.id!==b.dataset.rem);if(view==="items")renderItems(filteredItems());renderCart()});const cl=p.querySelector("[data-clear]");if(cl)cl.onclick=()=>{cart=[];if(view==="items")renderItems(filteredItems());renderCart();toast("Carrinho limpo.")}});$("barItems").textContent=`${cart.length} item(ns)`;$("barTotal").textContent=money(finalTotal())}
+function waMsg(){const lines=[`Oi, ${SELLERS[seller].label}! Tudo bem? Vim pelo Hub de Artes da Armazém e montei minha seleção por aqui.`,"","Gostaria dessas artes:",""];groups().forEach(g=>{lines.push(g.label,`Tema(s): ${[...new Set(g.items.map(i=>i.theme))].join(", ")}`,`Códigos: ${g.items.map(i=>i.code).join(", ")}`,`Quantidade: ${g.items.length}`,`Subtotal: ${money(g.subtotal)}`,"")});lines.push(`Subtotal: ${money(rawTotal())}`,`Desconto de 10%: - ${money(discountValue())}`,`Total estimado com desconto: ${money(finalTotal())}`,"","Pode confirmar disponibilidade e finalizar comigo, por favor?");return lines.join("\n")}
+function waUrl(){return`https://wa.me/${SELLERS[seller].phone}?text=${encodeURIComponent(waMsg())}`}
+function openPreview(id){const i=items.find(x=>x.id===id)||cart.find(x=>x.id===id);if(!i)return;prev=i;$("prevImg").src=i.image;$("prevCode").textContent="#"+i.code;$("prevTitle").textContent="Código #"+i.code;$("prevText").textContent="Veja a arte em tamanho maior e adicione ao carrinho quando quiser.";$("prevMeta").innerHTML=`<span class="mini">${esc(i.theme)}</span><span class="mini">${esc(i.productName)}</span>`;$("prevSelect").textContent=cart.some(c=>c.id===i.id)?"Remover do carrinho":"Selecionar arte";$("modalBg").classList.add("show");$("modal").classList.add("show")}
+function closePreview(){$("modalBg").classList.remove("show");$("modal").classList.remove("show");prev=null}
+function demoData(){demo=true;themes=[{id:"demo-safari",name:"Safari"},{id:"demo-princesa",name:"Princesa"},{id:"demo-fazendinha",name:"Fazendinha"},{id:"demo-circo",name:"Circo"}];showThemes();toast("Modo demonstração: confira a API do Drive no Cloudflare.")}
+async function loadThemes(){loading("Carregando temas do Drive...");try{const d=await api({mode:"themes",folderId:ROOT_FOLDER_ID});themes=(d.folders||[]).filter(f=>!f.isProduct);if(!themes.length)themes=(d.folders||[]);showThemes()}catch(e){demoData()}}
+$("search").addEventListener("input",()=>{if(view==="items")renderItems(filteredItems())});$("openCart").onclick=()=>{$("drawBg").classList.add("show");$("drawer").classList.add("show")};$("drawBg").onclick=()=>{$("drawBg").classList.remove("show");$("drawer").classList.remove("show")};$("modalBg").onclick=closePreview;$("prevClose").onclick=closePreview;$("prevSelect").onclick=()=>{if(prev)toggleItem(prev.id);closePreview()};renderCart();loadThemes();
+</script>
+</body>
+</html>
