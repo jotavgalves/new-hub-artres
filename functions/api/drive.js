@@ -14,52 +14,74 @@ const PRODUCT_ALIASES = [
 export async function onRequestGet(context) {
   try {
     const apiKey = context.env.GOOGLE_API_KEY || context.env.GOOGLE_DRIVE_API_KEY || context.env.DRIVE_API_KEY;
-    if (!apiKey) return json({ ok: false, error: "GOOGLE_API_KEY_NAO_CONFIGURADA", items: [] }, 500);
+    if (!apiKey) return json({ ok: false, error: "GOOGLE_API_KEY_NAO_CONFIGURADA", items: [], folders: [] }, 500);
 
     const url = new URL(context.request.url);
+    const mode = String(url.searchParams.get("mode") || "themes").toLowerCase();
     const folderId = sanitizeId(url.searchParams.get("folderId")) || ROOT_FOLDER_ID;
-    const maxDepth = Math.max(2, Math.min(5, Number(url.searchParams.get("depth") || 4)));
-    const items = [];
+    const theme = cleanLabel(url.searchParams.get("theme") || "");
+    const productParam = String(url.searchParams.get("product") || "");
 
-    await walkFolder({ folderId, apiKey, depth: 0, maxDepth, path: [], items });
-    items.sort((a, b) => Number(b.sortId || 0) - Number(a.sortId || 0));
+    const children = await listChildren(folderId, apiKey);
+    const folders = children
+      .filter((file) => file.mimeType === FOLDER_MIME)
+      .map((file) => folderPayload(file))
+      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR", { numeric: true }));
 
-    return json({ ok: true, rootFolderId: folderId, total: items.length, items }, 200, 180);
+    const imageFiles = children.filter((file) => String(file.mimeType || "").startsWith("image/"));
+    const product = normalizeProduct(productParam || folderNameFromChildren(children) || "");
+    const productName = productLabel(product);
+
+    const items = imageFiles.map((file) => {
+      const code = cleanCode(file.name);
+      const image = `https://drive.google.com/thumbnail?id=${encodeURIComponent(file.id)}&sz=w1000`;
+      return {
+        id: file.id,
+        code,
+        sortId: Number(code) || 0,
+        name: displayName(file.name, code),
+        theme: theme || "Sem tema",
+        product,
+        productName,
+        image,
+        thumbnail: image,
+        driveUrl: file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`,
+        path: theme ? `${theme} / ${productName}` : productName
+      };
+    }).sort((a, b) => Number(b.sortId || 0) - Number(a.sortId || 0));
+
+    return json({
+      ok: true,
+      mode,
+      rootFolderId: ROOT_FOLDER_ID,
+      folderId,
+      folders,
+      items,
+      totalFolders: folders.length,
+      totalItems: items.length,
+      note: "Leitura preguiçosa: cada chamada lê apenas uma pasta para evitar limite de subrequests do Cloudflare."
+    }, 200, 60);
   } catch (error) {
-    return json({ ok: false, error: "FALHA_AO_LER_DRIVE", detail: String(error && error.message || error), items: [] }, 500);
+    return json({ ok: false, error: "FALHA_AO_LER_DRIVE", detail: String(error && error.message || error), items: [], folders: [] }, 500);
   }
 }
 
-async function walkFolder({ folderId, apiKey, depth, maxDepth, path, items }) {
-  if (depth > maxDepth) return;
-  const files = await listChildren(folderId, apiKey);
+function folderPayload(file) {
+  const product = normalizeProduct(file.name);
+  return {
+    id: file.id,
+    name: cleanLabel(file.name),
+    rawName: file.name,
+    isProduct: isProductish(file.name),
+    product,
+    productName: productLabel(product),
+    modifiedTime: file.modifiedTime || ""
+  };
+}
 
-  for (const file of files) {
-    if (file.mimeType === FOLDER_MIME) {
-      await walkFolder({ folderId: file.id, apiKey, depth: depth + 1, maxDepth, path: path.concat(file.name), items });
-      continue;
-    }
-
-    if (!String(file.mimeType || "").startsWith("image/")) continue;
-
-    const parsed = parsePathAndFile(path, file.name);
-    const code = cleanCode(file.name);
-    const image = `https://drive.google.com/thumbnail?id=${encodeURIComponent(file.id)}&sz=w1000`;
-
-    items.push({
-      id: file.id,
-      code,
-      sortId: Number(code) || 0,
-      name: displayName(file.name, code),
-      theme: parsed.theme,
-      product: parsed.product,
-      productName: parsed.productName,
-      image,
-      thumbnail: image,
-      driveUrl: file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`,
-      path: path.join(" / ")
-    });
-  }
+function folderNameFromChildren(children) {
+  const folder = children.find((file) => file.mimeType === FOLDER_MIME);
+  return folder ? folder.name : "";
 }
 
 async function listChildren(folderId, apiKey) {
@@ -75,24 +97,16 @@ async function listChildren(folderId, apiKey) {
     });
     if (pageToken) params.set("pageToken", pageToken);
     const response = await fetch(`${DRIVE_API}?${params.toString()}`, { headers: { Accept: "application/json" } });
-    if (!response.ok) throw new Error(`Drive API ${response.status}`);
+    if (!response.ok) {
+      let detail = "";
+      try { detail = JSON.stringify(await response.json()); } catch (_) {}
+      throw new Error(`Drive API ${response.status}${detail ? ` - ${detail}` : ""}`);
+    }
     const data = await response.json();
     out.push(...(data.files || []));
     pageToken = data.nextPageToken || "";
   } while (pageToken);
   return out;
-}
-
-function parsePathAndFile(path, fileName) {
-  const segments = path.filter(Boolean);
-  const full = segments.concat(fileName).join(" ");
-  const product = normalizeProduct(full);
-  const productName = productLabel(product);
-
-  let theme = segments.find((segment) => !isProductish(segment)) || segments[0] || "Sem tema";
-  if (segments.length >= 2 && isProductish(segments[0]) && !isProductish(segments[1])) theme = segments[1];
-
-  return { theme: cleanLabel(theme), product, productName };
 }
 
 function normalizeProduct(value) {
@@ -131,7 +145,8 @@ function cleanCode(value) {
 function displayName(fileName, code) {
   const base = String(fileName || "").replace(/\.[^.]+$/, "").trim();
   if (!base) return `Arte ${code}`;
-  return base.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  const cleaned = base.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  return /^arte\s*\d+$/i.test(cleaned) ? `Arte ${code}` : cleaned;
 }
 
 function cleanLabel(value) {
