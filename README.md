@@ -1,54 +1,52 @@
-# Hub de Artes Armazém - Cloudflare Pages
+# Hub de Artes Armazém — Cloudflare Pages
 
-Projeto sem painel admin.
+Esta versão lê o Google Drive em modo preguiçoso para evitar o erro do Cloudflare:
+`Too many subrequests by single Worker invocation`.
 
-## Arquivos
+## Estrutura
 
-- `index.html`: tela pública do Hub de Artes.
-- `functions/api/drive.js`: Function Cloudflare que lê as artes da pasta do Google Drive.
+- `index.html` — app público
+- `functions/api/drive.js` — API Cloudflare para ler uma pasta por vez
+- `_headers` — headers básicos
 
-## Drive usado
+## Variável obrigatória
 
-https://drive.google.com/drive/folders/11cU5yMWafopC0JfMHotRxThpkgbQl-RW
-
-## Como publicar no Cloudflare Pages
-
-1. Suba estes arquivos em um repositório GitHub.
-2. Conecte o repositório no Cloudflare Pages.
-3. Build command: deixe vazio.
-4. Build output directory: `/` ou deixe padrão.
-5. Em Settings > Environment variables, crie:
+Em Cloudflare Pages > Settings > Variables and Secrets > Production:
 
 ```txt
-GOOGLE_API_KEY = sua_chave_do_google_cloud
+GOOGLE_API_KEY = sua chave do Google Cloud
 ```
 
-6. A pasta do Drive e os arquivos de imagem precisam estar públicos ou acessíveis pela chave/API.
+Depois faça um novo deploy.
 
-## Estrutura esperada no Drive
+## Permissões
 
-O app foi feito para funcionar bem com:
+A pasta do Drive e subpastas precisam estar como:
 
 ```txt
-Tema/
-  Produto/
-    ARTE-195.png
-    ARTE-196.jpg
+Qualquer pessoa com o link pode visualizar
 ```
 
-Ele também tenta corrigir nomes equivalentes:
+## Organização esperada do Drive
 
-- `Painel 50`, `50`, `50x50`, `bolinha` => 50x50
-- `Painel 150`, `150`, `150x150` => Painel 150x150
-- `Cilindros`, `Trio de cilindros` => Cilindros
-- `Kit completo`, `Kit com romano`, `Kit + Romano` => Kit + Romano
-- `Kit painel e cilindros`, `Kit painel + cilindros` => Kit Painel + Cilindros
+```txt
+Pasta raiz
+├── Tema 1
+│   ├── 50x50
+│   ├── Painel 150
+│   ├── Cilindros
+│   └── Kit + Romano
+├── Tema 2
+│   ├── 50x50
+│   └── Kit + Romano
+```
 
-## Preços configurados
+O site agora carrega primeiro os temas, depois os produtos do tema, e só então as imagens daquele produto. Isso evita estourar o limite de subrequests do Cloudflare.
 
-- 50x50: 6 unidades = R$ 58,90. Extras: R$ 9,90 cada, sempre em pares depois de 6.
-- Painel 150x150: R$ 59,90.
-- Kit + Romano: R$ 210,00.
-- Cilindros: R$ 99,00.
-- Romano: R$ 78,00.
-- Kit Painel + Cilindros: R$ 158,90.
+## Testes úteis
+
+```txt
+/api/drive?mode=themes
+/api/drive?mode=children&folderId=ID_DA_PASTA_DO_TEMA
+/api/drive?mode=items&folderId=ID_DA_PASTA_DO_PRODUTO&theme=Safari&product=50x50
+```
