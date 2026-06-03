@@ -158,6 +158,88 @@
   }
 }
 
+
+/* ===== Ajustes finais: produtos oficiais e voltar do carrinho no mobile ===== */
+.closeCart{
+  display:none;
+  border:1px solid #cfeefa;
+  background:linear-gradient(135deg,#effbff,#dff7ff);
+  color:#117696;
+  min-height:38px;
+  padding:0 13px;
+  border-radius:999px;
+  font-family:Montserrat,Arial,sans-serif;
+  font-size:12px;
+  font-weight:900;
+  cursor:pointer;
+  box-shadow:0 8px 18px rgba(56,186,227,.12);
+}
+.drawer .cartTitle{
+  position:sticky;
+  top:-18px;
+  z-index:10;
+  margin:-18px -18px 14px;
+  padding:16px 18px 12px;
+  background:rgba(255,253,252,.96);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid #eee7e5;
+  border-radius:28px 28px 0 0;
+}
+.drawer .closeCart{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+}
+.drawer .cartTitle h2{
+  font-size:20px;
+}
+.drawer .cartTitle{
+  display:grid;
+  grid-template-columns:auto 1fr auto;
+  align-items:center;
+}
+@media(max-width:560px){
+  .drawer{
+    padding-top:18px;
+  }
+  .drawer .cartTitle{
+    top:-18px;
+    gap:8px;
+  }
+  .drawer .cartTitle h2{
+    font-size:18px;
+    text-align:left;
+  }
+  .drawer .pill{
+    padding:7px 9px;
+    font-size:10px;
+  }
+  .closeCart{
+    min-height:36px;
+    padding:0 11px;
+    font-size:11.5px;
+  }
+}
+
+
+/* ===== Perfis de atendimento por link ===== */
+.sellerLocked{
+  background:
+    radial-gradient(circle at 96% 12%, rgba(56,186,227,.16), transparent 32%),
+    linear-gradient(135deg,#f8fdff,#fffafd);
+  border-color:rgba(56,186,227,.26);
+}
+.sellerLocked .sellerHint{
+  margin-bottom:0;
+}
+.sellerLocked strong{
+  color:#0b7898;
+  font-family:Montserrat,Arial,sans-serif;
+}
+.sellerOpts{
+  grid-template-columns:repeat(auto-fit,minmax(120px,1fr)) !important;
+}
+
 </style>
 </head>
 <body>
@@ -172,15 +254,37 @@
   <div class="toast" id="toast"></div>
 <script>
 const $=id=>document.getElementById(id);
-const SELLERS={ana:{label:"Ana",phone:"5581996763982"},dayane:{label:"Dayane",phone:"5581983383002"}};
-let view="themes", themes=[], products=[], items=[], selectedTheme=null, selectedProduct=null, currentFolder=null, folderTrail=[], cart=[], seller=null, prev=null, favs=new Set(), showFavs=false, searchTimer=null, lastPlace=null, preloadTimer=null;
+const SELLERS={
+  ana:{label:"Ana",phone:"5581996763982"},
+  dayane:{label:"Dayane",phone:"5581983383002"}
+
+  /*
+    Para criar novos perfis, adicione aqui:
+    ,carla:{label:"Carla",phone:"5581988888888"}
+
+    Links aceitos automaticamente:
+    ?carla
+    ?perfil=carla
+  */
+};
+function getLockedSellerFromUrl(){
+  const params=new URLSearchParams(location.search);
+  const byPerfil=String(params.get("perfil")||"").toLowerCase().trim();
+  if(byPerfil && SELLERS[byPerfil]) return byPerfil;
+  for(const key of Object.keys(SELLERS)){
+    if(params.has(key)) return key;
+  }
+  return null;
+}
+const LOCKED_SELLER=getLockedSellerFromUrl();
+let view="themes", themes=[], products=[], items=[], selectedTheme=null, selectedProduct=null, currentFolder=null, folderTrail=[], cart=[], seller=LOCKED_SELLER||null, prev=null, favs=new Set(), showFavs=false, searchTimer=null, lastPlace=null, preloadTimer=null;
 const STORAGE="armazemHubCartV2";
 const FAV_STORAGE="armazemHubFavsV2";
 const phrases=["Buscando artes lindas para você...","Separando os temas com carinho...","Organizando as opções da sua festa...","Preparando uma seleção cheia de possibilidades...","Só mais um instante, estamos deixando tudo prontinho...","Carregando as artes da Armazém para você escolher com calma..."];
 let phraseIndex=0, phraseTimer=null;
 function esc(v){return String(v??"").replace(/[&<>'"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;","\"":"&quot;"}[m]))}
 function money(v){return Number(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}
-function priceTextFor(p){const key=p.product||p.key||"";if(key==="50x50")return "a partir de R$ 58,90 com 6 unidades";if(key==="painel-150")return "R$ 59,90 antes do desconto";if(key==="cenario"||key==="lateral"||key==="retangular")return "R$ 59,90 antes do desconto";if(key==="cilindros")return "R$ 99,00 antes do desconto";if(key==="romano")return "R$ 78,00 antes do desconto";if(key==="kit-romano")return "R$ 210,00 antes do desconto";if(key==="kit-painel-cilindros")return "R$ 158,90 antes do desconto";if(key==="sacolinha")return "valor confirmado pela vendedora";return "toque para ver as opções"}
+function priceTextFor(p){const key=p.product||p.key||"";if(key==="50x50")return "a partir de R$ 58,90 com 6 unidades";if(key==="painel-150"||key==="redondo-indefinido")return "R$ 59,90 antes do desconto";if(key==="cenario"||key==="lateral"||key==="retangular")return "R$ 59,90 antes do desconto";if(key==="cilindros")return "R$ 99,00 antes do desconto";if(key==="romano")return "R$ 78,00 antes do desconto";if(key==="romano-lateral")return "R$ 137,90 antes do desconto";if(key==="kit-romano")return "R$ 210,00 antes do desconto";if(key==="kit-painel-cilindros")return "R$ 158,90 antes do desconto";if(key==="sacolinha")return "valor confirmado pela vendedora";return "toque para ver as opções"}
 function artPriceText(item){const key=item.product||"";if(key==="50x50")return "R$ 9,90 cada";return priceTextFor({product:key,key}).replace(" antes do desconto","").replace("toque para ver as opções","")}
 function imageFail(img,code){const p=img.parentElement;if(!p)return;const box=document.createElement("div");box.className="imageFallback";box.innerHTML=`<div>Imagem indisponível<br><small>Arte #${esc(code||"")}</small></div>`;img.replaceWith(box)}
 function rememberPlace(){try{if(view==="themes"||view==="search"||view==="folderSearch")return;lastPlace={view,selectedTheme,selectedProduct,currentFolder,folderTrail};localStorage.setItem("armazem:lastPlace",JSON.stringify(lastPlace))}catch(e){}}
@@ -214,7 +318,7 @@ function renderFolderResults(results,q){stopLoading();view="folderSearch";update
 function openSearchResult(r){if(!r)return;selectedTheme={id:r.themeId,name:r.theme};folderTrail=Array.isArray(r.trail)?r.trail:[];currentFolder=r.kind==="folder"?r:(folderTrail[folderTrail.length-1]||selectedTheme);if(r.kind==="product"){selectedProduct={id:r.id,name:r.name,rawName:r.rawName,product:r.product,productName:r.productName||r.label,kind:"product"};loadItems(selectedProduct)}else{loadProducts(r,"push")}}
 function errorScreen(message){stopLoading();$("content").innerHTML=`<div class="errorBox"><h3>Não conseguimos carregar as artes agora</h3><p>As artes não carregaram neste momento. Você pode tentar novamente ou chamar uma vendedora para receber ajuda com carinho.</p><div class="errorActions"><button id="retryLoad">Tentar novamente</button><a href="https://wa.me/${SELLERS.ana.phone}" target="_blank">Falar com Ana</a><a href="https://wa.me/${SELLERS.dayane.phone}" target="_blank">Falar com Dayane</a></div></div>`;$("retryLoad").onclick=()=> view==="themes"?loadThemes():view==="products"?loadProducts(selectedTheme):loadItems(selectedProduct)}
 function save(){localStorage.setItem(STORAGE,JSON.stringify({cart,seller}));localStorage.setItem(FAV_STORAGE,JSON.stringify([...favs]))}
-function restore(){try{const f=JSON.parse(localStorage.getItem(FAV_STORAGE)||"[]");favs=new Set(f)}catch(e){}try{const fromUrl=new URLSearchParams(location.search).get("pedido");if(fromUrl){const d=JSON.parse(decodeURIComponent(escape(atob(fromUrl))));cart=d.cart||[];seller=null;save();history.replaceState(null,"",location.pathname);toast("Pedido carregado pelo link compartilhado. Escolha a vendedora para enviar.");return}const d=JSON.parse(localStorage.getItem(STORAGE)||"{}");cart=Array.isArray(d.cart)?d.cart:[];seller=null}catch(e){cart=[];seller=null}}
+function restore(){try{const f=JSON.parse(localStorage.getItem(FAV_STORAGE)||"[]");favs=new Set(f)}catch(e){}try{const fromUrl=new URLSearchParams(location.search).get("pedido");if(fromUrl){const d=JSON.parse(decodeURIComponent(escape(atob(fromUrl))));cart=d.cart||[];seller=LOCKED_SELLER||null;save();history.replaceState(null,"",location.pathname+(LOCKED_SELLER?`?${LOCKED_SELLER}`:""));toast(LOCKED_SELLER?`Pedido carregado para enviar com ${SELLERS[LOCKED_SELLER].label}.`:"Pedido carregado pelo link compartilhado. Escolha a vendedora para enviar.");return}const d=JSON.parse(localStorage.getItem(STORAGE)||"{}");cart=Array.isArray(d.cart)?d.cart:[];seller=LOCKED_SELLER||null}catch(e){cart=[];seller=LOCKED_SELLER||null}}
 function sharePayload(){return btoa(unescape(encodeURIComponent(JSON.stringify({cart,seller}))))}
 function copyShare(){const url=`${location.origin}${location.pathname}?pedido=${sharePayload()}`;navigator.clipboard?.writeText(url).then(()=>toast("Link do pedido copiado."),()=>toast("Não consegui copiar o link agora."))}
 function updateHead(title,caption,count){$("viewTitle").textContent=title;$("viewCaption").textContent=caption;$("count").textContent=count;$("search").hidden=false;$("search").placeholder=(view==="items"||view==="search")?"Buscar pelo código da arte...":"Digite o código da arte ou busque por tema/peça...";$("favToggle").hidden=view!=="items";$("addFavs").hidden=view!=="items";$("favToggle").textContent=showFavs?"Ver todas":"Ver favoritas";renderCrumbs()}
@@ -237,17 +341,17 @@ function toggleFav(id){if(favs.has(id)){favs.delete(id);toast("Removida das favo
 function addFavorites(){const fs=items.filter(i=>favs.has(i.id));if(!fs.length){toast("Você ainda não marcou favoritas neste produto.");return}fs.forEach(i=>{let e=entry(i.id);if(e)e.qty+=1;else cart.push({...i,qty:1})});save();renderItems();renderCart();toast("Prontinho, suas favoritas entraram no pedido.")}
 function addItem(id){const it=items.find(x=>x.id===id)||cart.find(x=>x.id===id);if(!it)return;let e=entry(id);if(e)e.qty+=1;else cart.push({...it,qty:1});save();toast(e?"Prontinho, adicionamos mais 1 unidade dessa arte.":"Prontinho, essa arte entrou no seu pedido.");if(view==="items"||view==="search")renderItems();renderCart()}
 function changeQty(id,delta){const e=entry(id);if(!e)return;e.qty+=delta;if(e.qty<=0)cart=cart.filter(c=>c.id!==id);save();if(view==="items"||view==="search")renderItems();renderCart()}
-function price(product,qty){if(!qty)return 0;if(product==="50x50")return qty>=6?58.90+Math.max(0,qty-6)*9.90:qty*9.90;if(product==="painel-150"||product==="cenario"||product==="lateral")return qty*59.90;if(product==="kit-romano")return qty*210;if(product==="cilindros")return qty*99;if(product==="romano")return qty*78;if(product==="kit-painel-cilindros")return qty*158.90;if(product==="sacolinha")return 0;return 0}
+function price(product,qty){if(!qty)return 0;if(product==="50x50")return qty>=6?58.90+Math.max(0,qty-6)*9.90:qty*9.90;if(product==="painel-150"||product==="redondo-indefinido"||product==="cenario"||product==="lateral"||product==="retangular")return qty*59.90;if(product==="kit-romano")return qty*210;if(product==="cilindros")return qty*99;if(product==="romano")return qty*78;if(product==="romano-lateral")return qty*137.90;if(product==="kit-painel-cilindros")return qty*158.90;if(product==="sacolinha")return 0;return 0}
 function groups(){const m=new Map();cart.forEach(i=>{const key=i.product||"produto";if(!m.has(key))m.set(key,{product:key,label:i.productName||label(key),items:[],qty:0});m.get(key).items.push(i);m.get(key).qty+=i.qty});return [...m.values()].map(g=>({...g,items:g.items.sort((a,b)=>(b.sortId||0)-(a.sortId||0)),subtotal:price(g.product,g.qty)}))}
 function gross(){return groups().reduce((s,g)=>s+g.subtotal,0)}function discount(){return gross()*0.10}function total(){return Math.max(0,gross()-discount())}
 function rule50(){const q=cart.filter(i=>i.product==="50x50").reduce((s,i)=>s+i.qty,0);if(q===0)return null;if(q<6){const falta=6-q;return{type:"bad",title:"Bolinhas 50x50",msg:`Faltam ${falta} para fechar o mínimo de 6.`}}if(q>6&&q%2!==0)return{type:"warn",title:"Bolinhas 50x50",msg:`Adicione mais 1 bolinha para fechar ${q+1}. Depois de 6, seguimos sempre em pares.`};return{type:"ok",title:"Bolinhas 50x50",msg:q===6?"Mínimo fechado. Se quiser, acrescente de 2 em 2.":`Quantidade certinha em par.`}}
-function cartRule(){const r=rule50();if(cartQty()===0)return{ok:false,msg:"Seu pedido ainda está vazio. Escolha o tema da festa e adicione as artes que mais gostar. O desconto de 10% entra automaticamente."};if(r&&r.type!=="ok")return{ok:false,msg:r.msg};if(!seller)return{ok:false,msg:"Escolha Ana ou Dayane para enviarmos sua seleção para a vendedora certa."};return{ok:true,msg:"Perfeito. Sua seleção está pronta para enviar com 10% de desconto por aqui."}}
+function cartRule(){const r=rule50();if(cartQty()===0)return{ok:false,msg:"Seu pedido ainda está vazio. Escolha o tema da festa e adicione as artes que mais gostar. O desconto de 10% entra automaticamente."};if(r&&r.type!=="ok")return{ok:false,msg:r.msg};if(!seller)return{ok:false,msg:"Escolha para quem você quer enviar sua seleção antes de finalizar."};return{ok:true,msg:"Perfeito. Sua seleção está pronta para enviar com 10% de desconto por aqui."}}
 function itemLine(i){return `#${i.code}${i.qty>1?` (${i.qty} un.)`:""}`}
-function cartMarkup(){const r=cartRule(),rf=rule50(),can=cartQty()&&r.ok,gs=groups();return `<div class="cartTitle"><h2>Seu orçamento</h2><span class="pill">${cartQty()} item(ns)</span></div><div class="seller"><label>Escolha sua vendedora</label><p class="sellerHint">Selecione para quem você quer enviar sua seleção no WhatsApp.</p><div class="sellerOpts"><button class="sellerBtn ${seller==="ana"?"active":""}" data-seller="ana">Ana</button><button class="sellerBtn ${seller==="dayane"?"active":""}" data-seller="dayane">Dayane</button></div></div>${cartQty()?`<div class="discountCard"><span>10% OFF por aqui</span><strong>Você economiza ${money(discount())}</strong><small>O desconto já entra automaticamente no total antes de enviar para a vendedora. Quanto mais você escolhe por aqui, mais fácil fica finalizar seu pedido.</small></div>`:""}<div class="cartList">${gs.length?gs.map(g=>{const is50=g.product==="50x50";const ruleHtml=(is50&&rf&&rf.type!=="ok")?`<div class="ruleCard ${rf.type}"><b>${rf.title}</b>${rf.msg}</div>`:"";return `<section class="group ${is50?"group50":""}"><div class="groupHead"><b>${esc(g.label)} · ${g.qty} unidade(s)</b><span class="subtotal">${money(g.subtotal)}</span></div>${ruleHtml}<div class="codes"><strong>Tema(s):</strong> ${esc([...new Set(g.items.map(i=>i.theme))].join(", "))}</div>${g.items.map(i=>`<div class="cartItem" data-locate="${esc(i.id)}"><img class="cartThumb" src="${esc(i.image)}" alt="Arte #${esc(i.code)}" onerror="imageFail(this, '${esc(i.code)}')"><div class="cartInfo"><b>Código #${esc(i.code)}</b><span>${esc(i.theme)} · ${esc(i.productName)}</span><div class="qtyRow"><button class="qtyBtn" data-minus="${esc(i.id)}">−</button><span class="qtyCount">${i.qty} un.</span><button class="qtyBtn" data-plus="${esc(i.id)}">+</button></div><div class="findHint">Toque no item para encontrar essa arte.</div></div></div>`).join("")}</section>`}).join(""):`<div class="emptyCart"><b>Seu pedido ainda está vazio</b>Escolha um tema que combine com sua festa e adicione as artes que mais gostar. O desconto de 10% será aplicado automaticamente no final.</div>`}</div><div class="ruleCard ${r.ok?"":"warn"}">${esc(r.msg)}</div><div class="totalBox"><div class="totalLine"><span>Subtotal</span><strong>${money(gross())}</strong></div><div class="totalLine"><span>Desconto por aqui 10%</span><strong>- ${money(discount())}</strong></div><div class="total"><span>Total com desconto</span><strong>${money(total())}</strong></div><div class="actions"><a class="wa ${can?"":"disabled"}" href="${can?esc(waUrl()):"#"}" target="_blank" rel="noopener">Enviar pedido com 10% OFF</a><button class="clear" data-clear ${cartQty()?"":"disabled"}>Limpar carrinho</button></div></div>`}
-function renderCart(){$("cartDesk").innerHTML=cartMarkup();$("cartMob").innerHTML=cartMarkup();[$("cartDesk"),$("cartMob")].forEach(p=>{p.querySelectorAll("[data-seller]").forEach(b=>b.onclick=()=>{seller=b.dataset.seller;save();renderCart()});p.querySelectorAll("[data-minus]").forEach(b=>b.onclick=e=>{e.stopPropagation();changeQty(b.dataset.minus,-1)});p.querySelectorAll("[data-plus]").forEach(b=>b.onclick=e=>{e.stopPropagation();changeQty(b.dataset.plus,1)});p.querySelectorAll("[data-locate]").forEach(b=>b.onclick=()=>locateItem(b.dataset.locate));const cl=p.querySelector("[data-clear]");if(cl)cl.onclick=()=>{cart=[];save();if(view==="items"||view==="search")renderItems();renderCart();toast("Carrinho limpo.")}});$("barItems").textContent=`${cartQty()} item(ns)`;$("barTotal").textContent=money(total())}
+function cartMarkup(){const r=cartRule(),rf=rule50(),can=cartQty()&&r.ok,gs=groups();return `<div class="cartTitle"><button class="closeCart" data-close-cart aria-label="Voltar para escolher artes">Voltar</button><h2>Seu orçamento</h2><span class="pill">${cartQty()} item(ns)</span></div>${LOCKED_SELLER?`<div class="seller sellerLocked"><label>Atendimento escolhido</label><p class="sellerHint">Sua seleção será enviada diretamente para <strong>${esc(SELLERS[LOCKED_SELLER].label)}</strong>.</p></div>`:`<div class="seller"><label>Escolha sua vendedora</label><p class="sellerHint">Selecione para quem você quer enviar sua seleção no WhatsApp.</p><div class="sellerOpts">${Object.entries(SELLERS).map(([key,profile])=>`<button class="sellerBtn ${seller===key?"active":""}" data-seller="${esc(key)}">${esc(profile.label)}</button>`).join("")}</div></div>`}${cartQty()?`<div class="discountCard"><span>10% OFF por aqui</span><strong>Você economiza ${money(discount())}</strong><small>O desconto já entra automaticamente no total antes de enviar para a vendedora. Quanto mais você escolhe por aqui, mais fácil fica finalizar seu pedido.</small></div>`:""}<div class="cartList">${gs.length?gs.map(g=>{const is50=g.product==="50x50";const ruleHtml=(is50&&rf&&rf.type!=="ok")?`<div class="ruleCard ${rf.type}"><b>${rf.title}</b>${rf.msg}</div>`:"";return `<section class="group ${is50?"group50":""}"><div class="groupHead"><b>${esc(g.label)} · ${g.qty} unidade(s)</b><span class="subtotal">${money(g.subtotal)}</span></div>${ruleHtml}<div class="codes"><strong>Tema(s):</strong> ${esc([...new Set(g.items.map(i=>i.theme))].join(", "))}</div>${g.items.map(i=>`<div class="cartItem" data-locate="${esc(i.id)}"><img class="cartThumb" src="${esc(i.image)}" alt="Arte #${esc(i.code)}" onerror="imageFail(this, '${esc(i.code)}')"><div class="cartInfo"><b>Código #${esc(i.code)}</b><span>${esc(i.theme)} · ${esc(i.productName)}</span><div class="qtyRow"><button class="qtyBtn" data-minus="${esc(i.id)}">−</button><span class="qtyCount">${i.qty} un.</span><button class="qtyBtn" data-plus="${esc(i.id)}">+</button></div><div class="findHint">Toque no item para encontrar essa arte.</div></div></div>`).join("")}</section>`}).join(""):`<div class="emptyCart"><b>Seu pedido ainda está vazio</b>Escolha um tema que combine com sua festa e adicione as artes que mais gostar. O desconto de 10% será aplicado automaticamente no final.</div>`}</div><div class="ruleCard ${r.ok?"":"warn"}">${esc(r.msg)}</div><div class="totalBox"><div class="totalLine"><span>Subtotal</span><strong>${money(gross())}</strong></div><div class="totalLine"><span>Desconto por aqui 10%</span><strong>- ${money(discount())}</strong></div><div class="total"><span>Total com desconto</span><strong>${money(total())}</strong></div><div class="actions"><a class="wa ${can?"":"disabled"}" href="${can?esc(waUrl()):"#"}" target="_blank" rel="noopener">Enviar pedido com 10% OFF</a><button class="clear" data-clear ${cartQty()?"":"disabled"}>Limpar carrinho</button></div></div>`}
+function renderCart(){$("cartDesk").innerHTML=cartMarkup();$("cartMob").innerHTML=cartMarkup();[$("cartDesk"),$("cartMob")].forEach(p=>{p.querySelectorAll("[data-seller]").forEach(b=>b.onclick=()=>{if(LOCKED_SELLER)return;seller=b.dataset.seller;save();renderCart()});p.querySelectorAll("[data-minus]").forEach(b=>b.onclick=e=>{e.stopPropagation();changeQty(b.dataset.minus,-1)});p.querySelectorAll("[data-plus]").forEach(b=>b.onclick=e=>{e.stopPropagation();changeQty(b.dataset.plus,1)});p.querySelectorAll("[data-locate]").forEach(b=>b.onclick=()=>locateItem(b.dataset.locate));p.querySelectorAll("[data-close-cart]").forEach(b=>b.onclick=()=>{$("drawerBg").classList.remove("show");$("drawer").classList.remove("show")});const cl=p.querySelector("[data-clear]");if(cl)cl.onclick=()=>{cart=[];save();if(view==="items"||view==="search")renderItems();renderCart();toast("Carrinho limpo.")}});$("barItems").textContent=`${cartQty()} item(ns)`;$("barTotal").textContent=money(total())}
 async function locateItem(id){const it=entry(id);if(!it)return;try{$("drawerBg").classList.remove("show");$("drawer").classList.remove("show");selectedTheme={id:it.themeId||"",name:(it.theme||"Tema").split(" / ")[0]||it.theme||"Tema"};folderTrail=[];selectedProduct={id:it.productFolderId,product:it.product,productName:it.productName,name:it.productName,kind:"product"};view="items";loading("Encontrando sua arte.","arts");const d=await api({mode:"items",folderId:selectedProduct.id,theme:it.theme,product:selectedProduct.rawName||selectedProduct.name||selectedProduct.productName});items=d.items||[];renderItems();setTimeout(()=>{const el=document.querySelector(`[data-card="${CSS.escape(id)}"]`);if(el){el.scrollIntoView({behavior:"smooth",block:"center"});el.classList.add("located");setTimeout(()=>el.classList.remove("located"),1900)}},80)}catch(e){toast("Não consegui voltar para essa arte agora.")}}
-function waMsg(){const s=SELLERS[seller]||SELLERS.ana;const lines=[`Oi, ${s.label}! Escolhi minhas artes por aqui na página da Armazém e vi que minha seleção ganha 10% OFF.`,"",`Deixei tudo separadinho abaixo para você conferir comigo:`];groups().forEach(g=>{lines.push("",`• ${g.label}`,`Tema(s): ${[...new Set(g.items.map(i=>i.theme))].join(", ")}`,`Artes: ${g.items.map(itemLine).join(", ")}`,`Quantidade: ${g.qty}`,`Subtotal: ${money(g.subtotal)}`)});lines.push("",`Subtotal: ${money(gross())}`,`Desconto por aqui 10%: - ${money(discount())}`,`Total com desconto: ${money(total())}`,"",`Pode conferir as artes e me ajudar a finalizar o pedido, por favor?`);return lines.join("\n")}
-function waUrl(){if(!seller)return"#";return`https://wa.me/${SELLERS[seller].phone}?text=${encodeURIComponent(waMsg())}`}
+function waMsg(){const s=SELLERS[seller]||SELLERS[LOCKED_SELLER]||SELLERS.ana;const lines=[`Oi, ${s.label}! Escolhi minhas artes por aqui na página da Armazém e vi que minha seleção ganha 10% OFF.`,"",`Deixei tudo separadinho abaixo para você conferir comigo:`];groups().forEach(g=>{lines.push("",`• ${g.label}`,`Tema(s): ${[...new Set(g.items.map(i=>i.theme))].join(", ")}`,`Artes: ${g.items.map(itemLine).join(", ")}`,`Quantidade: ${g.qty}`,`Subtotal: ${money(g.subtotal)}`)});lines.push("",`Subtotal: ${money(gross())}`,`Desconto por aqui 10%: - ${money(discount())}`,`Total com desconto: ${money(total())}`,"",`Pode conferir as artes e me ajudar a finalizar o pedido, por favor?`);return lines.join("\n")}
+function waUrl(){if(!seller)return"#";const s=SELLERS[seller]||SELLERS[LOCKED_SELLER];return s?`https://wa.me/${s.phone}?text=${encodeURIComponent(waMsg())}`:"#"}
 function openPreview(id){const i=items.find(x=>x.id===id)||cart.find(x=>x.id===id);if(!i)return;prev=i;$("prevImg").onerror=function(){imageFail(this,i.code)};$("prevImg").src=i.image;$("prevCode").textContent="#"+i.code;$("prevTitle").textContent="Código #"+i.code;$("prevMeta").innerHTML=`<span class="mini">${esc(i.theme)}</span><span class="mini">${esc(i.productName)}</span>`;$("prevSelect").textContent=entry(i.id)?"Adicionar 1 unidade":"Adicionar arte";$("prevFav").textContent=favs.has(i.id)?"Remover favorita":"Favoritar";$("modalBg").classList.add("show");$("modal").classList.add("show")}
 function closePreview(){$("modalBg").classList.remove("show");$("modal").classList.remove("show");prev=null}
 function toast(msg){const e=$("toast");e.textContent=msg;e.classList.add("show");clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove("show"),1900)}
