@@ -288,11 +288,11 @@ function normalizeProductInfo(value) {
   if (hasRomano) return { key:"romano", label:"Romano" };
   if (hasLateral) return { key:"lateral", label:"Lateral" };
   if (s.includes("cenario") || s.includes("paisagem") || s.includes("horizontal")) return { key:"cenario", label:"Cenário" };
-  if (hasRetangular || s.includes("vertical") || s.includes("retrato")) return { key:"retangular", label:"Retangular" };
+  if (hasRetangular || s.includes("vertical") || s.includes("retrato")) return { key:"lateral", label:"Lateral" };
   if (s.includes("sacolinha") || s.includes("sacolinhas") || s.includes("sacola") || s.includes("sacolas")) return { key:"sacolinha", label:"Sacolinha de Festa" };
   if (hasRedondo && is150) return { key:"painel-150", label:"Painel 150x150" };
   if (hasRedondo && is50) return { key:"50x50", label:"Bolinhas 50x50" };
-  if (hasRedondo) return { key:"redondo-indefinido", label:"Painel Redondo" };
+  if (hasRedondo) return { key:"painel-150", label:"Painel 150x150" };
   return { key:"folder", label:cleanLabel(raw || "Pasta") };
 }
 
@@ -300,16 +300,14 @@ function productOrder(key){
   return ({
     "50x50":1,
     "painel-150":2,
-    "redondo-indefinido":3,
-    "cenario":4,
-    "retangular":5,
-    "lateral":6,
-    "sacolinha":7,
-    "cilindros":8,
-    "kit-painel-cilindros":9,
-    "romano":10,
-    "romano-lateral":11,
-    "kit-romano":12
+    "cenario":3,
+    "lateral":4,
+    "sacolinha":5,
+    "cilindros":6,
+    "kit-painel-cilindros":7,
+    "romano":8,
+    "romano-lateral":9,
+    "kit-romano":10
   })[key] || 99;
 }
 
