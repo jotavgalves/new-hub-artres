@@ -240,6 +240,588 @@
   grid-template-columns:repeat(auto-fit,minmax(120px,1fr)) !important;
 }
 
+
+/* ===== Sistema de medidas e personalização ===== */
+.measureNotice{margin:14px 0 12px;padding:14px 15px;border-radius:18px;border:1px solid rgba(56,186,227,.24);background:radial-gradient(circle at 94% 12%,rgba(56,186,227,.15),transparent 34%),linear-gradient(135deg,#f6fdff,#fffafd);color:#4e5e65;font-size:12.5px;line-height:1.45}
+.measureNotice b{display:block;margin-bottom:3px;color:#117696;font-family:Montserrat,Arial,sans-serif;font-size:12px;letter-spacing:.03em;text-transform:uppercase}
+.measureBox{margin-top:12px;padding:13px;border-radius:17px;background:#fffdfc;border:1px solid #eee7e5;box-shadow:0 8px 18px rgba(34,33,36,.035)}
+.measureTitle{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px}
+.measureTitle b{display:block;font-family:Montserrat,Arial,sans-serif;font-size:13px;color:#2f2c32}
+.measureTitle span{display:block;margin-top:3px;color:#777178;font-size:11.5px;line-height:1.35}
+.measureGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.measureGrid.one{grid-template-columns:1fr}
+.measureField label{display:block;margin-bottom:5px;color:#706970;font-size:10px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+.cmInput{display:flex;align-items:center;height:40px;border:1px solid #e7dddd;border-radius:13px;background:#fff;overflow:hidden}
+.cmInput input{width:100%;min-width:0;border:0;outline:0;padding:0 10px;font-family:Montserrat,Arial,sans-serif;font-size:14px;font-weight:800;color:#2f2c32;background:transparent}
+.cmInput span{flex:0 0 auto;padding:0 10px;color:#8d858a;font-size:11px;font-weight:900}
+.quickCm{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.quickCm button,.sizeBtn{border:1px solid #d9f1fa;background:#f3fcff;color:#117696;min-height:30px;padding:0 10px;border-radius:999px;font-family:Montserrat,Arial,sans-serif;font-size:10.5px;font-weight:900;cursor:pointer}
+.sizeOptions{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+.sizeBtn{min-height:auto;padding:9px 8px;display:grid;gap:3px;text-align:center;background:#fff;border-color:#eee2e5;color:#5f5860}
+.sizeBtn.active{background:#fff1f6;border-color:#ef5585;color:#d9366b;box-shadow:0 7px 14px rgba(239,85,133,.12)}
+.sizeBtn b{font-size:13px}.sizeBtn span{font-size:10px;color:inherit}
+.kitBlock{padding:11px;border-radius:15px;border:1px dashed #eadfe2;background:#fffafc;margin-top:9px}
+.kitBlock:first-of-type{margin-top:0}.kitBlockTitle{margin:0 0 9px;font-family:Montserrat,Arial,sans-serif;font-size:12px;font-weight:900;color:#4a454c}
+.unknownMeasure{margin-top:10px;display:flex;align-items:flex-start;gap:8px;color:#69636a;font-size:11.5px;line-height:1.35}.unknownMeasure input{margin-top:2px}
+.measureSummary{margin-top:8px;color:#8a8288;font-size:11.5px;line-height:1.35}
+.bagRule{margin-top:9px;padding:10px 11px;border-radius:14px;background:#fff8dc;color:#756127;font-size:11.5px;line-height:1.35}.bagRule.warn{background:#fff1f6;color:#a1274b}
+@media(max-width:560px){.measureBox{padding:12px}.measureGrid{grid-template-columns:1fr;gap:8px}.sizeOptions{grid-template-columns:1fr}.quickCm button{flex:1 1 auto}}
+
+
+/* ===== Medidas opcionais, sacolinhas e busca refinada ===== */
+.customizeBtn,.saveMeasureBtn{
+  border:1px solid #d9f1fa;
+  background:linear-gradient(135deg,#f3fcff,#e4f8ff);
+  color:#117696;
+  min-height:34px;
+  padding:0 12px;
+  border-radius:999px;
+  font-family:Montserrat,Arial,sans-serif;
+  font-size:10.5px;
+  font-weight:900;
+  cursor:pointer;
+  box-shadow:0 7px 15px rgba(56,186,227,.10);
+}
+.saveMeasureBtn{
+  width:100%;
+  margin-top:12px;
+  min-height:40px;
+}
+.measureSummary.clamp{
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+  cursor:pointer;
+  color:#a098a0;
+}
+.measureNotice{
+  margin:0 0 12px;
+}
+.customCheck{
+  margin-top:10px;
+  display:flex;
+  align-items:flex-start;
+  gap:9px;
+  color:#69636a;
+  font-size:11.5px;
+  line-height:1.35;
+  cursor:pointer;
+}
+.customCheck input{
+  position:absolute;
+  opacity:0;
+  pointer-events:none;
+}
+.customCheck .box{
+  flex:0 0 19px;
+  width:19px;
+  height:19px;
+  margin-top:1px;
+  border-radius:7px;
+  border:2px solid #d9f1fa;
+  background:#f8fdff;
+  box-shadow:inset 0 0 0 3px #fff;
+}
+.customCheck input:checked + .box{
+  border-color:#38bae3;
+  background:#38bae3;
+}
+.customCheck input:checked + .box::after{
+  content:"";
+  display:block;
+  width:7px;
+  height:4px;
+  border-left:2px solid #fff;
+  border-bottom:2px solid #fff;
+  transform:rotate(-45deg);
+  margin:5px auto 0;
+}
+.unitChoice{
+  display:flex;
+  gap:6px;
+  margin:8px 0 10px;
+}
+.unitChoice button{
+  flex:1;
+  border:1px solid #eee2e5;
+  background:#fff;
+  min-height:34px;
+  border-radius:999px;
+  color:#69636a;
+  font-family:Montserrat,Arial,sans-serif;
+  font-size:10.5px;
+  font-weight:900;
+  cursor:pointer;
+}
+.unitChoice button.active{
+  background:#e9f9ff;
+  border-color:#9fe8fb;
+  color:#117696;
+}
+.sizeChoiceGrid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:12px;
+}
+.sizeChoiceCard{
+  border:1px solid #eee2e5;
+  background:
+    radial-gradient(circle at 90% 18%, rgba(56,186,227,.12), transparent 32%),
+    #fffdfc;
+  border-radius:22px;
+  min-height:118px;
+  padding:18px;
+  text-align:left;
+  cursor:pointer;
+  box-shadow:0 14px 28px rgba(34,33,36,.045);
+}
+.sizeChoiceCard b{
+  display:block;
+  color:#2f2c32;
+  font-family:Montserrat,Arial,sans-serif;
+  font-size:18px;
+  margin-bottom:7px;
+}
+.sizeChoiceCard span{
+  display:block;
+  color:#7a7379;
+  font-size:13px;
+  line-height:1.35;
+}
+@media(max-width:560px){
+  .sizeChoiceGrid{grid-template-columns:1fr}
+}
+
+
+/* ===== Correção medidas opcionais v2 ===== */
+.measureNotice{display:none!important}
+.measureClosed{
+  margin-top:10px;
+  display:flex;
+  flex-direction:column;
+  gap:7px;
+  align-items:flex-start;
+}
+.customizeBtn{
+  border:1px solid #d9f1fa!important;
+  background:linear-gradient(135deg,#f4fcff,#e4f8ff)!important;
+  color:#117696!important;
+  min-height:32px!important;
+  padding:0 12px!important;
+  border-radius:999px!important;
+  font-family:Montserrat,Arial,sans-serif!important;
+  font-size:10.5px!important;
+  font-weight:900!important;
+  cursor:pointer!important;
+  box-shadow:0 7px 14px rgba(56,186,227,.10)!important;
+}
+.measureOpen{
+  margin-top:10px;
+}
+.measureBox{
+  margin-top:0!important;
+  background:#fffdfc!important;
+}
+.saveMeasureBtn{
+  margin-top:10px!important;
+  border:1px solid #d9f1fa!important;
+  background:linear-gradient(135deg,#eaf9ff,#d8f5ff)!important;
+  color:#117696!important;
+  min-height:38px!important;
+  border-radius:999px!important;
+  font-family:Montserrat,Arial,sans-serif!important;
+  font-size:11px!important;
+  font-weight:900!important;
+  cursor:pointer!important;
+}
+.measureSummary.clamp{
+  max-width:100%;
+  color:#aaa2a8!important;
+  font-size:11.2px!important;
+  line-height:1.35!important;
+  display:-webkit-box!important;
+  -webkit-line-clamp:2!important;
+  -webkit-box-orient:vertical!important;
+  overflow:hidden!important;
+}
+.customNoticeConfirm{
+  margin:12px 0;
+  padding:12px 13px;
+  border-radius:16px;
+  border:1px solid rgba(239,85,133,.22);
+  background:#fff6fa;
+  color:#7b4055;
+  font-size:11.8px;
+  line-height:1.4;
+}
+.customNoticeConfirm b{
+  display:block;
+  margin-bottom:4px;
+  color:#d9366b;
+  font-family:Montserrat,Arial,sans-serif;
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:.06em;
+}
+.customNoticeConfirm .customCheck{
+  margin-top:9px;
+  color:#6f5962;
+}
+.roundRule{
+  margin-top:8px;
+  padding:9px 10px;
+  border-radius:13px;
+  background:#fff6fa;
+  color:#a1274b;
+  font-size:11.2px;
+  line-height:1.35;
+}
+.roundRule.ok{
+  background:#effbff;
+  color:#117696;
+}
+.cmInput input:focus{
+  box-shadow:inset 0 0 0 2px rgba(56,186,227,.16);
+}
+@media(max-width:560px){
+  .customizeBtn{width:auto!important;max-width:100%}
+  .measureClosed{align-items:flex-start}
+}
+
+
+/* ===== Correções finais de personalização ===== */
+.artPrice.isBag{display:inline-flex!important}
+.measureBox{display:block!important}
+.measureClosed{margin-top:10px;display:flex;flex-direction:column;align-items:flex-start;gap:7px}
+.customizeBtn{border:1px solid #d9f1fa!important;background:linear-gradient(135deg,#f4fcff,#e4f8ff)!important;color:#117696!important;min-height:32px!important;padding:0 12px!important;border-radius:999px!important;font-family:Montserrat,Arial,sans-serif!important;font-size:10.5px!important;font-weight:900!important;cursor:pointer!important;box-shadow:0 7px 14px rgba(56,186,227,.10)!important}
+.measureOpen{margin-top:10px}.measureBox{margin-top:0!important}
+.saveMeasureBtn{margin-top:10px!important;border:1px solid #d9f1fa!important;background:linear-gradient(135deg,#eaf9ff,#d8f5ff)!important;color:#117696!important;min-height:38px!important;border-radius:999px!important;font-family:Montserrat,Arial,sans-serif!important;font-size:11px!important;font-weight:900!important;cursor:pointer!important}
+.measureSummary.clamp{max-width:100%;color:#aaa2a8!important;font-size:11.2px!important;line-height:1.35!important;display:-webkit-box!important;-webkit-line-clamp:2!important;-webkit-box-orient:vertical!important;overflow:hidden!important}
+.customNoticeConfirm{margin:12px 0;padding:12px 13px;border-radius:16px;border:1px solid rgba(239,85,133,.22);background:#fff6fa;color:#7b4055;font-size:11.8px;line-height:1.4}
+.customNoticeConfirm b{display:block;margin-bottom:4px;color:#d9366b;font-family:Montserrat,Arial,sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+.customNoticeConfirm .customCheck{margin-top:9px;color:#6f5962}
+.customCheck{margin-top:10px;display:flex;align-items:flex-start;gap:9px;color:#69636a;font-size:11.5px;line-height:1.35;cursor:pointer}
+.customCheck input{position:absolute;opacity:0;pointer-events:none}
+.customCheck .box{flex:0 0 19px;width:19px;height:19px;margin-top:1px;border-radius:7px;border:2px solid #d9f1fa;background:#f8fdff;box-shadow:inset 0 0 0 3px #fff}
+.customCheck input:checked + .box{border-color:#38bae3;background:#38bae3}
+.customCheck input:checked + .box::after{content:"";display:block;width:7px;height:4px;border-left:2px solid #fff;border-bottom:2px solid #fff;transform:rotate(-45deg);margin:5px auto 0}
+.roundRule{margin-top:8px;padding:9px 10px;border-radius:13px;background:#fff6fa;color:#a1274b;font-size:11.2px;line-height:1.35}
+.roundRule.ok{background:#effbff;color:#117696}
+.cmInput input:focus{box-shadow:inset 0 0 0 2px rgba(56,186,227,.16)}
+
+
+/* ===== Correção final: medidas, sacolinhas, favoritos ===== */
+.artPrice.isBag{display:inline-flex!important}
+.artPrice{max-width:100%;white-space:normal;text-align:center;gap:5px}
+.artPrice::before{flex:0 0 auto}.card .mini{max-width:100%;white-space:normal;line-height:1.25}.miniRow{align-items:flex-start;flex-wrap:wrap}
+.measureBox{display:block!important}.cartItem .measureBox{display:block!important}.cartItem.customizing .measureBox{display:block!important}
+.measureClosed{margin-top:10px;display:flex;flex-direction:column;align-items:flex-start;gap:7px}.measureOpen{margin-top:10px;position:relative;z-index:5}
+.customizeBtn{border:1px solid #d9f1fa!important;background:linear-gradient(135deg,#f4fcff,#e4f8ff)!important;color:#117696!important;min-height:32px!important;padding:0 12px!important;border-radius:999px!important;font-family:Montserrat,Arial,sans-serif!important;font-size:10.5px!important;font-weight:900!important;cursor:pointer!important;box-shadow:0 7px 14px rgba(56,186,227,.10)!important}
+.measureActions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.saveMeasureBtn,.cancelMeasureBtn{border:1px solid #d9f1fa!important;background:linear-gradient(135deg,#eaf9ff,#d8f5ff)!important;color:#117696!important;min-height:38px!important;border-radius:999px!important;font-family:Montserrat,Arial,sans-serif!important;font-size:11px!important;font-weight:900!important;cursor:pointer!important}.cancelMeasureBtn{background:#fff!important;border-color:#eee2e5!important;color:#7c747b!important}
+.measureSummary.clamp{max-width:100%;color:#aaa2a8!important;font-size:11.2px!important;line-height:1.35!important;display:-webkit-box!important;-webkit-line-clamp:2!important;-webkit-box-orient:vertical!important;overflow:hidden!important}
+.cmInput input{outline:none!important;box-shadow:none!important;-webkit-appearance:none}.cmInput input:focus{outline:none!important;box-shadow:none!important;background:#fff!important}
+.customNoticeConfirm{margin:12px 0;padding:12px 13px;border-radius:16px;border:1px solid rgba(239,85,133,.22);background:#fff6fa;color:#7b4055;font-size:11.8px;line-height:1.4}.customNoticeConfirm b{display:block;margin-bottom:4px;color:#d9366b;font-family:Montserrat,Arial,sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:.06em}.customNoticeConfirm .customCheck{margin-top:9px;color:#6f5962}
+.customCheck{margin-top:10px;display:flex;align-items:flex-start;gap:9px;color:#69636a;font-size:11.5px;line-height:1.35;cursor:pointer}.customCheck input{position:absolute;opacity:0;pointer-events:none}.customCheck .box{flex:0 0 19px;width:19px;height:19px;margin-top:1px;border-radius:7px;border:2px solid #d9f1fa;background:#f8fdff;box-shadow:inset 0 0 0 3px #fff}.customCheck input:checked + .box{border-color:#38bae3;background:#38bae3}.customCheck input:checked + .box::after{content:"";display:block;width:7px;height:4px;border-left:2px solid #fff;border-bottom:2px solid #fff;transform:rotate(-45deg);margin:5px auto 0}
+.roundRule{margin-top:8px;padding:9px 10px;border-radius:13px;background:#fff6fa;color:#a1274b;font-size:11.2px;line-height:1.35}.roundRule.ok{background:#effbff;color:#117696}
+@media(max-width:560px){.artPrice{font-size:10.8px!important;padding:7px 8px!important}.artPrice::before{font-size:7.5px!important;margin-right:3px!important}.measureActions{grid-template-columns:1fr}}
+
+
+/* ===== Ajustes finais: carrinho, sacolinhas, botões e navegação ===== */
+.backChain{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.backChain .backBtn{min-height:36px;padding:0 12px;display:inline-flex;align-items:center;justify-content:center}.cartItemTop{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:2px}.cartItemTop b{min-width:0}.iconMeasureBtn,.bagSizeMiniBtn{flex:0 0 auto;border:1px solid #d9f1fa;background:linear-gradient(135deg,#f4fcff,#e4f8ff);color:#117696;border-radius:999px;min-height:32px;padding:0 11px;display:inline-flex;align-items:center;justify-content:center;font-family:Montserrat,Arial,sans-serif;font-size:10.5px;font-weight:900;cursor:pointer;box-shadow:0 7px 14px rgba(56,186,227,.10)}.iconMeasureBtn{width:34px;padding:0;font-size:15px;line-height:1}.bagSizeMiniBtn{white-space:nowrap}.measureClosed{margin-top:8px;display:block}.measureOpen{margin-top:12px;padding:0 2px}.measureBox{padding:14px!important;margin:0!important;border-radius:17px!important;background:#fffdfc!important}.measureActions{display:grid!important;grid-template-columns:1fr 1fr!important;gap:10px!important;margin-top:12px!important;padding:0 2px!important;align-items:center!important}.saveMeasureBtn,.cancelMeasureBtn{width:100%!important;min-height:40px!important;display:flex!important;align-items:center!important;justify-content:center!important;text-align:center!important;margin:0!important;border-radius:999px!important;font-family:Montserrat,Arial,sans-serif!important;font-size:11px!important;font-weight:900!important;cursor:pointer!important}.saveMeasureBtn{border:1px solid #d9f1fa!important;background:linear-gradient(135deg,#eaf9ff,#d8f5ff)!important;color:#117696!important}.cancelMeasureBtn{border:1px solid #eee2e5!important;background:#fff!important;color:#7c747b!important}.measureSummary.clamp{margin-top:5px;max-width:100%;color:#aaa2a8!important;font-size:11.2px!important;line-height:1.35!important;display:-webkit-box!important;-webkit-line-clamp:2!important;-webkit-box-orient:vertical!important;overflow:hidden!important;cursor:pointer}.artPrice.isBag{display:inline-flex!important;align-self:center!important;width:auto!important;max-width:100%;padding:8px 11px!important;font-size:12px!important;letter-spacing:-.02em!important}.artPrice.isBag::before{content:"Valor"!important;margin-right:6px!important}.sizeOptions{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:8px!important}.sizeBtn{min-height:58px!important;border-radius:16px!important;background:#fff!important;border-color:#eee2e5!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;text-align:center!important}.sizeBtn.active{background:#fff1f6!important;border-color:#ef5585!important;color:#d9366b!important}.sizeChoiceGrid{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:14px!important}.sizeChoiceCard{position:relative;overflow:hidden;border:1px solid #eee2e5!important;background:#fffdfc!important;border-radius:24px!important;min-height:132px!important;padding:20px!important;text-align:left!important;box-shadow:0 14px 28px rgba(34,33,36,.045)!important}.sizeChoiceCard::before,.sizeChoiceCard::after{content:"";position:absolute;border-radius:999px;pointer-events:none}.sizeChoiceCard::before{width:58px;height:58px;left:-18px;top:16px;background:rgba(56,186,227,.15)}.sizeChoiceCard::after{width:74px;height:74px;right:-22px;bottom:-20px;background:rgba(239,85,133,.12)}.sizeChoiceCard b{position:relative;z-index:1;display:block;color:#2f2c32;font-family:Montserrat,Arial,sans-serif;font-size:18px;margin-bottom:8px}.sizeChoiceCard span{position:relative;z-index:1;display:block;color:#7a7379;font-size:13px;line-height:1.35}.customNoticeConfirm{margin:12px 0;padding:12px 13px;border-radius:16px;border:1px solid rgba(239,85,133,.22);background:#fff6fa;color:#7b4055;font-size:11.8px;line-height:1.4}.customNoticeConfirm b{display:block;margin-bottom:4px;color:#d9366b;font-family:Montserrat,Arial,sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:.06em}.customCheck{margin-top:10px;display:flex;align-items:flex-start;gap:9px;color:#69636a;font-size:11.5px;line-height:1.35;cursor:pointer}.customCheck input{position:absolute;opacity:0;pointer-events:none}.customCheck .box{flex:0 0 19px;width:19px;height:19px;margin-top:1px;border-radius:7px;border:2px solid #d9f1fa;background:#f8fdff;box-shadow:inset 0 0 0 3px #fff}.customCheck input:checked + .box{border-color:#38bae3;background:#38bae3}.customCheck input:checked + .box::after{content:"";display:block;width:7px;height:4px;border-left:2px solid #fff;border-bottom:2px solid #fff;transform:rotate(-45deg);margin:5px auto 0}.roundRule{margin-top:8px;padding:9px 10px;border-radius:13px;background:#fff6fa;color:#a1274b;font-size:11.2px;line-height:1.35}.roundRule.ok{background:#effbff;color:#117696}.cmInput input{outline:none!important;box-shadow:none!important;-webkit-appearance:none}.cmInput input:focus{outline:none!important;box-shadow:none!important;background:#fff!important}
+@media(max-width:560px){.sizeChoiceGrid{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:8px!important}.sizeChoiceCard{min-height:96px!important;padding:13px 10px!important;border-radius:18px!important}.sizeChoiceCard b{font-size:15px}.sizeChoiceCard span{font-size:11px}.sizeOptions{grid-template-columns:1fr!important}.cartItemTop{align-items:flex-start}.bagSizeMiniBtn{font-size:10px;min-height:30px}.measureActions{gap:8px!important}.backChain{gap:6px}.backChain .backBtn{min-height:34px;font-size:11px;padding:0 10px}}
+
+
+/* Ajuste solicitado: botão textual de personalização */
+.measureIcon,
+.customIcon,
+.customizeIcon,
+button[data-customize]{
+  width:auto!important;
+  min-width:0!important;
+  min-height:32px!important;
+  padding:0 12px!important;
+  border-radius:999px!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  font-family:Montserrat,Arial,sans-serif!important;
+  font-size:10.5px!important;
+  font-weight:900!important;
+  white-space:nowrap!important;
+}
+
+
+/* ===== Correção segura do breadcrumb sem travar cliques ===== */
+#breadcrumbs,
+.breadcrumbs{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:flex-start!important;
+  gap:8px!important;
+  flex-wrap:wrap!important;
+  margin-top:10px!important;
+}
+#breadcrumbs::before,
+.breadcrumbs::before{
+  content:none;
+  flex:0 0 auto;
+  color:#9a9198;
+  font-family:Montserrat,Arial,sans-serif;
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:.02em;
+  margin-right:2px;
+}
+#breadcrumbs button,
+#breadcrumbs .backBtn,
+#breadcrumbs .crumb,
+.breadcrumbs button,
+.breadcrumbs .backBtn,
+.breadcrumbs .crumb{
+  position:relative!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  text-align:center!important;
+  min-height:38px!important;
+  padding:0 14px!important;
+  border-radius:999px!important;
+  line-height:1!important;
+  white-space:nowrap!important;
+  max-width:190px!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  border:1px solid #efd7df!important;
+  background:#fff!important;
+  color:#e23f75!important;
+  font-family:Montserrat,Arial,sans-serif!important;
+  font-size:13px!important;
+  font-weight:900!important;
+  cursor:pointer!important;
+  pointer-events:auto!important;
+}
+#breadcrumbs button::before,
+#breadcrumbs button::after,
+#breadcrumbs .backBtn::before,
+#breadcrumbs .backBtn::after,
+#breadcrumbs .crumb::before,
+#breadcrumbs .crumb::after,
+.breadcrumbs button::before,
+.breadcrumbs button::after,
+.breadcrumbs .backBtn::before,
+.breadcrumbs .backBtn::after,
+.breadcrumbs .crumb::before,
+.breadcrumbs .crumb::after{
+  content:none!important;
+  display:none!important;
+}
+#breadcrumbs button:first-of-type,
+.breadcrumbs button:first-of-type{
+  background:linear-gradient(135deg,#fff1f6,#ffe5ef)!important;
+  border-color:#ef9bb8!important;
+  color:#d9366b!important;
+}
+@media(max-width:560px){
+  #breadcrumbs::before,
+  .breadcrumbs::before{
+    width:100%;
+    margin-bottom:1px;
+    font-size:10.5px;
+  }
+  #breadcrumbs button,
+  #breadcrumbs .backBtn,
+  #breadcrumbs .crumb,
+  .breadcrumbs button,
+  .breadcrumbs .backBtn,
+  .breadcrumbs .crumb{
+    max-width:145px!important;
+    min-height:36px!important;
+    padding:0 11px!important;
+    font-size:11.5px!important;
+  }
+}
+
+
+/* ===== REGRA FINAL DAS PÍLULAS =====
+   Ordem visual gerada no JS:
+   Temas > Tema atual > Subtema(s) > Produtos > Nome do produto atual
+   Sem texto "Você está em" e sem setas.
+*/
+#breadcrumbs,
+.breadcrumbs{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:flex-start!important;
+  gap:8px!important;
+  flex-wrap:wrap!important;
+  margin-top:10px!important;
+}
+#breadcrumbs::before,
+.breadcrumbs::before,
+#breadcrumbs::after,
+.breadcrumbs::after{
+  content:none!important;
+  display:none!important;
+}
+#breadcrumbs .pathPill,
+.breadcrumbs .pathPill,
+#breadcrumbs button,
+.breadcrumbs button,
+#breadcrumbs .backBtn,
+.breadcrumbs .backBtn,
+#breadcrumbs .crumb,
+.breadcrumbs .crumb{
+  position:relative!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  text-align:center!important;
+  min-height:38px!important;
+  padding:0 15px!important;
+  border-radius:999px!important;
+  line-height:1!important;
+  white-space:nowrap!important;
+  max-width:210px!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  border:1px solid #efd7df!important;
+  background:#fff!important;
+  color:#e23f75!important;
+  font-family:Montserrat,Arial,sans-serif!important;
+  font-size:13px!important;
+  font-weight:900!important;
+  cursor:pointer!important;
+  pointer-events:auto!important;
+}
+#breadcrumbs .pathPill.current,
+.breadcrumbs .pathPill.current{
+  background:linear-gradient(135deg,#fff1f6,#ffe5ef)!important;
+  border-color:#ef9bb8!important;
+  color:#d9366b!important;
+  box-shadow:0 8px 18px rgba(239,85,133,.10)!important;
+}
+#breadcrumbs .pathPill::before,
+#breadcrumbs .pathPill::after,
+#breadcrumbs button::before,
+#breadcrumbs button::after,
+#breadcrumbs .backBtn::before,
+#breadcrumbs .backBtn::after,
+#breadcrumbs .crumb::before,
+#breadcrumbs .crumb::after,
+.breadcrumbs .pathPill::before,
+.breadcrumbs .pathPill::after,
+.breadcrumbs button::before,
+.breadcrumbs button::after,
+.breadcrumbs .backBtn::before,
+.breadcrumbs .backBtn::after,
+.breadcrumbs .crumb::before,
+.breadcrumbs .crumb::after{
+  content:none!important;
+  display:none!important;
+}
+@media(max-width:560px){
+  #breadcrumbs,
+  .breadcrumbs{
+    gap:6px!important;
+  }
+  #breadcrumbs .pathPill,
+  .breadcrumbs .pathPill,
+  #breadcrumbs button,
+  .breadcrumbs button,
+  #breadcrumbs .backBtn,
+  .breadcrumbs .backBtn,
+  #breadcrumbs .crumb,
+  .breadcrumbs .crumb{
+    max-width:150px!important;
+    min-height:36px!important;
+    padding:0 12px!important;
+    font-size:11.5px!important;
+  }
+}
+
+
+/* ===== Ajuste final das pílulas: atual azul, sem rosa em Temas/Favoritas ===== */
+#breadcrumbs,
+.breadcrumbs{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:flex-start!important;
+  gap:8px!important;
+  flex-wrap:nowrap!important;
+  overflow-x:auto!important;
+  overflow-y:hidden!important;
+  -webkit-overflow-scrolling:touch!important;
+  padding-bottom:4px!important;
+  scrollbar-width:none!important;
+}
+#breadcrumbs::-webkit-scrollbar,
+.breadcrumbs::-webkit-scrollbar{
+  display:none!important;
+}
+#breadcrumbs .pathPill,
+.breadcrumbs .pathPill,
+#breadcrumbs button,
+.breadcrumbs button{
+  flex:0 0 auto!important;
+}
+#breadcrumbs .pathPill,
+.breadcrumbs .pathPill{
+  background:#fff!important;
+  border-color:#eadfe3!important;
+  color:#625a62!important;
+  box-shadow:none!important;
+}
+#breadcrumbs .pathPill.current,
+.breadcrumbs .pathPill.current{
+  background:linear-gradient(135deg,#eaf9ff,#d8f5ff)!important;
+  border-color:#9fe8fb!important;
+  color:#117696!important;
+  box-shadow:0 8px 18px rgba(56,186,227,.13)!important;
+}
+#breadcrumbs .pathPill:first-child,
+.breadcrumbs .pathPill:first-child{
+  background:#fff!important;
+  border-color:#eadfe3!important;
+  color:#625a62!important;
+  box-shadow:none!important;
+}
+
+/* Botões de favoritas neutros para não parecerem etapa atual */
+button[data-fav-filter],
+button[data-add-favs],
+.favFilter,
+.favAdd,
+.favoritesBtn,
+.addFavoritesBtn{
+  background:#fff!important;
+  border-color:#eadfe3!important;
+  color:#625a62!important;
+  box-shadow:none!important;
+}
+
+/* fallback para botões pelo texto */
+button{
+  text-align:center;
+}
+@media(max-width:560px){
+  #breadcrumbs,
+  .breadcrumbs{
+    flex-wrap:nowrap!important;
+    overflow-x:auto!important;
+    gap:7px!important;
+    margin-right:-12px!important;
+    padding-right:12px!important;
+  }
+  #breadcrumbs .pathPill,
+  .breadcrumbs .pathPill{
+    max-width:none!important;
+    min-width:max-content!important;
+    padding:0 12px!important;
+  }
+}
+
+.favoriteNeutral{background:#fff!important;border-color:#eadfe3!important;color:#625a62!important;box-shadow:none!important}
 </style>
 </head>
 <body>
@@ -277,15 +859,33 @@ function getLockedSellerFromUrl(){
   return null;
 }
 const LOCKED_SELLER=getLockedSellerFromUrl();
-let view="themes", themes=[], products=[], items=[], selectedTheme=null, selectedProduct=null, currentFolder=null, folderTrail=[], cart=[], seller=LOCKED_SELLER||null, prev=null, favs=new Set(), showFavs=false, searchTimer=null, lastPlace=null, preloadTimer=null;
+let view="themes", themes=[], products=[], items=[], selectedTheme=null, selectedProduct=null, currentFolder=null, folderTrail=[], cart=[], seller=LOCKED_SELLER||null, prev=null, favs=new Set(), favItems={}, showFavs=false, searchTimer=null, lastPlace=null, preloadTimer=null;
 const STORAGE="armazemHubCartV2";
 const FAV_STORAGE="armazemHubFavsV2";
+const FAV_ITEMS_STORAGE="armazemHubFavItemsV2";
 const phrases=["Buscando artes lindas para você...","Separando os temas com carinho...","Organizando as opções da sua festa...","Preparando uma seleção cheia de possibilidades...","Só mais um instante, estamos deixando tudo prontinho...","Carregando as artes da Armazém para você escolher com calma..."];
 let phraseIndex=0, phraseTimer=null;
 function esc(v){return String(v??"").replace(/[&<>'"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;","\"":"&quot;"}[m]))}
 function money(v){return Number(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}
-function priceTextFor(p){const key=p.product||p.key||"";if(key==="50x50")return "a partir de R$ 58,90 com 6 unidades";if(key==="painel-150"||key==="redondo-indefinido")return "R$ 59,90 antes do desconto";if(key==="cenario"||key==="lateral"||key==="retangular")return "R$ 59,90 antes do desconto";if(key==="cilindros")return "R$ 99,00 antes do desconto";if(key==="romano")return "R$ 78,00 antes do desconto";if(key==="romano-lateral")return "R$ 137,90 antes do desconto";if(key==="kit-romano")return "R$ 210,00 antes do desconto";if(key==="kit-painel-cilindros")return "R$ 158,90 antes do desconto";if(key==="sacolinha")return "valor confirmado pela vendedora";return "toque para ver as opções"}
-function artPriceText(item){const key=item.product||"";if(key==="50x50")return "R$ 9,90 cada";return priceTextFor({product:key,key}).replace(" antes do desconto","").replace("toque para ver as opções","")}
+function priceTextFor(p){
+  const key=p.product||p.key||"";
+  const cfg=productConfig(key);
+  if(key==="50x50")return "R$ 9,90 cada";
+  if(cfg.type==="bag")return "Escolha o tamanho";
+  if(cfg.unitPrice)return `R$ ${money(cfg.unitPrice)} antes do desconto`;
+  return "toque para ver as opções";
+}
+function artPriceText(item){
+  if(item.product==="50x50")return "R$ 9,90 cada";
+  const cfg=productConfig(item.product);
+  if(cfg.type==="bag"){
+    const size=(item.details&&item.details.size)||cfg.defaultSize||"P";
+    const s=cfg.sizes[size]||cfg.sizes.P;
+    return `${money(s.price)} cada`;
+  }
+  if(cfg.unitPrice)return money(cfg.unitPrice);
+  return priceTextFor(item);
+}
 function imageFail(img,code){const p=img.parentElement;if(!p)return;const box=document.createElement("div");box.className="imageFallback";box.innerHTML=`<div>Imagem indisponível<br><small>Arte #${esc(code||"")}</small></div>`;img.replaceWith(box)}
 function rememberPlace(){try{if(view==="themes"||view==="search"||view==="folderSearch")return;lastPlace={view,selectedTheme,selectedProduct,currentFolder,folderTrail};localStorage.setItem("armazem:lastPlace",JSON.stringify(lastPlace))}catch(e){}}
 function loadLastPlace(){try{return JSON.parse(localStorage.getItem("armazem:lastPlace")||"null")}catch(e){return null}}
@@ -314,49 +914,414 @@ function demoItemsFor(product,themeObj=selectedTheme){const t=themeObj?.name||"T
 function demoSearchByCode(q){const query=normalize(q).replace(/[^0-9]/g,"");const demoThemes=(themes&&themes.length?themes:["101 Dálmatas","Fazendinha","Princesa","Safari","Jardim Encantado","Fundo do Mar"].map((name,i)=>({id:`demo-theme-${i+1}`,name})));let out=[];demoThemes.forEach(t=>DEMO_PRODUCTS.forEach(p=>out.push(...demoItemsFor(p,t))));return out.filter(i=>String(i.code).includes(query)).sort((a,b)=>(b.sortId||0)-(a.sortId||0)).slice(0,60)}
 async function globalCodeSearch(q){view="search";selectedProduct=null;showFavs=false;updateHead("Busca por código",`Procurando a arte #${q}. Se ela aparecer, você pode adicionar direto ao pedido.`,"buscando");loading("Procurando essa arte para você...");try{const d=await api({mode:"search",code:q});items=d.items||[];if(!items.length&&String(q).match(/\d/))items=demoSearchByCode(q);renderItems()}catch(e){items=demoSearchByCode(q);renderItems();if(items.length)toast("Mostrando opções de demonstração para testar a busca.")}}
 async function globalFolderSearch(q){view="folderSearch";selectedProduct=null;showFavs=false;updateHead("Resultado da busca",`Buscando por ${q}. Você pode abrir temas, personagens, produtos ou digitar um código.`,"buscando");loading("Procurando opções para você...");try{const d=await api({mode:"folderSearch",q});const results=d.results||[];renderFolderResults(results,q)}catch(e){renderFolderResults([],q)}}
-function renderFolderResults(results,q){stopLoading();view="folderSearch";updateHead("Resultado da busca",`Encontramos opções relacionadas a ${q}.`,`${results.length} resultado(s)`);$("content").innerHTML=results.length?`<div class="productGrid">${results.map(r=>`<button class="productCard" data-result="${esc(r.id)}"><b>${esc(r.label||r.name)}</b><span>${esc(r.path||r.name)}</span><em class="globalResultTag">${r.kind==="product"?"Produto":"Pasta"}</em></button>`).join("")}</div>`:`<div class="empty"><div><b>Nada encontrado com esse nome</b><span>Tente buscar por outro personagem, tema ou digite o código da arte.</span></div></div>`;document.querySelectorAll("[data-result]").forEach(btn=>btn.onclick=()=>{const r=results.find(x=>x.id===btn.dataset.result);openSearchResult(r)})}
+function renderFolderResults(results,q){stopLoading();if(!results.length&&filteredThemes().length){showThemes();return}view="folderSearch";updateHead("Resultado da busca",`Encontramos opções relacionadas a ${q}.`,`${results.length} resultado(s)`);$("content").innerHTML=results.length?`<div class="productGrid">${results.map(r=>`<button class="productCard" data-result="${esc(r.id)}"><b>${esc(r.label||r.name)}</b><span>${esc(r.path||r.name)}</span><em class="globalResultTag">${r.kind==="product"?"Produto":"Pasta"}</em></button>`).join("")}</div>`:`<div class="empty"><div><b>Nada encontrado com esse nome</b><span>Tente buscar por outro personagem, tema ou digite o código da arte.</span></div></div>`;document.querySelectorAll("[data-result]").forEach(btn=>btn.onclick=()=>{const r=results.find(x=>x.id===btn.dataset.result);openSearchResult(r)})}
 function openSearchResult(r){if(!r)return;selectedTheme={id:r.themeId,name:r.theme};folderTrail=Array.isArray(r.trail)?r.trail:[];currentFolder=r.kind==="folder"?r:(folderTrail[folderTrail.length-1]||selectedTheme);if(r.kind==="product"){selectedProduct={id:r.id,name:r.name,rawName:r.rawName,product:r.product,productName:r.productName||r.label,kind:"product"};loadItems(selectedProduct)}else{loadProducts(r,"push")}}
 function errorScreen(message){stopLoading();$("content").innerHTML=`<div class="errorBox"><h3>Não conseguimos carregar as artes agora</h3><p>As artes não carregaram neste momento. Você pode tentar novamente ou chamar uma vendedora para receber ajuda com carinho.</p><div class="errorActions"><button id="retryLoad">Tentar novamente</button><a href="https://wa.me/${SELLERS.ana.phone}" target="_blank">Falar com Ana</a><a href="https://wa.me/${SELLERS.dayane.phone}" target="_blank">Falar com Dayane</a></div></div>`;$("retryLoad").onclick=()=> view==="themes"?loadThemes():view==="products"?loadProducts(selectedTheme):loadItems(selectedProduct)}
-function save(){localStorage.setItem(STORAGE,JSON.stringify({cart,seller}));localStorage.setItem(FAV_STORAGE,JSON.stringify([...favs]))}
-function restore(){try{const f=JSON.parse(localStorage.getItem(FAV_STORAGE)||"[]");favs=new Set(f)}catch(e){}try{const fromUrl=new URLSearchParams(location.search).get("pedido");if(fromUrl){const d=JSON.parse(decodeURIComponent(escape(atob(fromUrl))));cart=d.cart||[];seller=LOCKED_SELLER||null;save();history.replaceState(null,"",location.pathname+(LOCKED_SELLER?`?${LOCKED_SELLER}`:""));toast(LOCKED_SELLER?`Pedido carregado para enviar com ${SELLERS[LOCKED_SELLER].label}.`:"Pedido carregado pelo link compartilhado. Escolha a vendedora para enviar.");return}const d=JSON.parse(localStorage.getItem(STORAGE)||"{}");cart=Array.isArray(d.cart)?d.cart:[];seller=LOCKED_SELLER||null}catch(e){cart=[];seller=LOCKED_SELLER||null}}
+function save(){
+  localStorage.setItem(STORAGE,JSON.stringify({cart,seller}));
+  localStorage.setItem(FAV_STORAGE,JSON.stringify([...favs]));
+  localStorage.setItem(FAV_ITEMS_STORAGE,JSON.stringify(favItems||{}));
+}
+function restore(){try{const f=JSON.parse(localStorage.getItem(FAV_STORAGE)||"[]");favs=new Set(f);favItems=JSON.parse(localStorage.getItem(FAV_ITEMS_STORAGE)||"{}")||{}}catch(e){favItems={}}try{const fromUrl=new URLSearchParams(location.search).get("pedido");if(fromUrl){const d=JSON.parse(decodeURIComponent(escape(atob(fromUrl))));cart=d.cart||[];seller=LOCKED_SELLER||null;save();history.replaceState(null,"",location.pathname+(LOCKED_SELLER?`?${LOCKED_SELLER}`:""));toast(LOCKED_SELLER?`Pedido carregado para enviar com ${SELLERS[LOCKED_SELLER].label}.`:"Pedido carregado pelo link compartilhado. Escolha a vendedora para enviar.");return}const d=JSON.parse(localStorage.getItem(STORAGE)||"{}");cart=Array.isArray(d.cart)?d.cart:[];seller=LOCKED_SELLER||null}catch(e){cart=[];seller=LOCKED_SELLER||null}}
 function sharePayload(){return btoa(unescape(encodeURIComponent(JSON.stringify({cart,seller}))))}
 function copyShare(){const url=`${location.origin}${location.pathname}?pedido=${sharePayload()}`;navigator.clipboard?.writeText(url).then(()=>toast("Link do pedido copiado."),()=>toast("Não consegui copiar o link agora."))}
 function updateHead(title,caption,count){$("viewTitle").textContent=title;$("viewCaption").textContent=caption;$("count").textContent=count;$("search").hidden=false;$("search").placeholder=(view==="items"||view==="search")?"Buscar pelo código da arte...":"Digite o código da arte ou busque por tema/peça...";$("favToggle").hidden=view!=="items";$("addFavs").hidden=view!=="items";$("favToggle").textContent=showFavs?"Ver todas":"Ver favoritas";renderCrumbs()}
 function fullThemeName(){const parts=[];if(selectedTheme)parts.push(selectedTheme.name);folderTrail.forEach(f=>parts.push(f.name));return parts.join(" / ")}
-function renderCrumbs(){const b=$("breadcrumbs");let html="";if(view!=="themes"){let label="Voltar";if(view==="items")label="Voltar para produtos";else if(folderTrail.length)label=`Voltar para ${esc(folderTrail[folderTrail.length-1]?.name||selectedTheme?.name||"tema")}`;else label="Voltar para temas";html+=`<button class="backBtn mainBack" data-smart-back>${label}</button>`}b.innerHTML=html;const sb=b.querySelector("[data-smart-back]");if(sb)sb.onclick=smartBack}
-function smartBack(){if(view==="items"){showProducts();return}if(view==="products"&&folderTrail.length){goToFolder(folderTrail.length-2);return}showThemes()}
+
+function cleanBreadcrumbText(){
+  const b=$("breadcrumbs");
+  if(!b)return;
+  b.querySelectorAll("button,.backBtn,.crumb").forEach(el=>{
+    el.childNodes.forEach(n=>{
+      if(n.nodeType===Node.TEXT_NODE){
+        n.nodeValue=String(n.nodeValue||"").replace(/[←‹❮›]/g,"").replace(/^Voltar para\s+/i,"").replace(/\s+/g," ").trim();
+      }
+    });
+  });
+}
+
+function renderCrumbs(){
+  const b=$("breadcrumbs");
+  if(!b)return;
+
+  function sanitizePathLabel(value){
+    return String(value||"")
+      .replace(/[←‹❮›]/g,"")
+      .replace(/^Voltar para\s+/i,"")
+      .replace(/\s+/g," ")
+      .trim();
+  }
+
+  const pills=[];
+  const add=(label,fn,key)=>{
+    label=sanitizePathLabel(label);
+    if(!label)return;
+    pills.push({label,fn,key});
+  };
+
+  // ORDEM INVARIÁVEL:
+  // 1. Temas
+  // 2. Tema atual
+  // 3. Subtema(s), se houver
+  // 4. Produtos
+  // 5. Nome do produto atual
+  if(view!=="themes"){
+    add("Temas",()=>showThemes(),"themes");
+  }
+
+  if(selectedTheme && view!=="themes"){
+    add(selectedTheme.name,()=>loadProducts(selectedTheme,"root"),"theme");
+  }
+
+  if(Array.isArray(folderTrail) && folderTrail.length){
+    folderTrail.forEach((folder,index)=>{
+      add(folder.name,()=>goToFolder(index),`folder-${index}`);
+    });
+  }
+
+  if(view==="products" || view==="bagSizes" || view==="items"){
+    add("Produtos",()=>showProducts(),"products");
+  }
+
+  if(view==="bagSizes"){
+    add("Tamanhos",()=>{}, "current");
+  }
+
+  if(view==="items" && selectedProduct){
+    const productName = selectedProduct.product==="sacolinha" && selectedProduct.bagSize
+      ? `Sacolinha ${selectedProduct.bagSize}`
+      : (selectedProduct.productName || selectedProduct.name || "Artes");
+    add(productName,()=>{}, "current");
+  }
+
+  // Etapa atual: sempre a última pílula visível.
+  const currentIndex=pills.length-1;
+
+  b.innerHTML=pills.map((p,index)=>`
+    <button type="button" class="pathPill ${index===currentIndex?"current":""}" data-path-index="${index}">
+      ${esc(p.label)}
+    </button>
+  `).join("");
+
+  b.querySelectorAll("[data-path-index]").forEach(btn=>{
+    const idx=Number(btn.dataset.pathIndex);
+    const pill=pills[idx];
+    btn.onclick=()=>{
+      if(!pill || idx===currentIndex)return;
+      if(typeof pill.fn==="function")pill.fn();
+    };
+  });
+}
+function smartBack(){if(view==="items"&&selectedProduct&&selectedProduct.product==="sacolinha"&&selectedProduct.bagSize){const p={...selectedProduct};delete p.bagSize;delete p.bagLabel;showBagSizes(p);return}if(view==="items"||view==="bagSizes"){showProducts();return}if(view==="products"&&folderTrail.length){goToFolder(folderTrail.length-2);return}showThemes()}
 async function loadThemes(){view="themes";selectedTheme=null;selectedProduct=null;currentFolder=null;folderTrail=[];$("search").value="";updateHead("Escolha um tema","Escolha o tema da sua festa ou digite o código de uma arte para procurar direto.","carregando");loading("Buscando artes lindas para você...");try{const d=await api({mode:"themes"});themes=d.folders||[];showThemes()}catch(e){useDemoThemes()}}
 function filteredThemes(){const q=normalize($("search").value);return q?themes.filter(t=>normalize(t.name).includes(q)):themes}
 function showThemes(){stopLoading();view="themes";selectedTheme=null;selectedProduct=null;currentFolder=null;folderTrail=[];const list=filteredThemes();updateHead("Escolha um tema","Escolha o tema que mais combina com a sua festa. Você também pode digitar personagem ou código da arte na busca.",`${list.length} tema(s)`);const last=loadLastPlace();const cont=last&&last.selectedTheme?`<div class="continueCard"><div><b>Continue de onde parou</b><span>${esc(last.selectedProduct?.productName||last.currentFolder?.name||last.selectedTheme?.name||"Sua última seleção")} ficou salvo. Seu carrinho continua guardado até você limpar.</span></div><button id="continueLast">Continuar escolhendo</button></div>`:"";$("content").innerHTML=cont+(list.length?`<div class="themeGrid">${list.map(t=>`<button class="themeCard" data-theme="${esc(t.id)}"><b>${esc(t.name)}</b><span>Toque para ver as opções desse tema.</span></button>`).join("")}</div>`:`<div class="empty"><div><b>Nenhum tema encontrado</b><span>Tente buscar por outro nome ou apague a busca para ver todos os temas.</span></div></div>`);const c=$("continueLast");if(c)c.onclick=continueLastPlace;document.querySelectorAll("[data-theme]").forEach(btn=>btn.onclick=()=>{const t=themes.find(x=>x.id===btn.dataset.theme);loadProducts(t,"root")});list.slice(0,4).forEach(prefetchProductsForTheme)}
 async function loadProducts(folder,navMode="root"){if(navMode==="root"){selectedTheme=folder;folderTrail=[];currentFolder=folder}else if(navMode==="push"){folderTrail.push(folder);currentFolder=folder}else if(navMode==="keep"){currentFolder=folder}view="products";selectedProduct=null;$("search").value="";rememberPlace();updateHead("Escolha a próxima opção",`Agora escolha a opção dentro de ${fullThemeName()||folder.name}.`,"carregando");loading("Separando as opções desse tema com carinho...");try{const d=await api({mode:"products",folderId:folder.id,theme:fullThemeName()||folder.name});products=d.folders||[];showProducts()}catch(e){if(String(folder.id||"").startsWith("demo-")){products=DEMO_PRODUCTS;showProducts()}else errorScreen(e.message)}}
 async function goToFolder(index){if(index<0){folderTrail=[];currentFolder=selectedTheme;await loadProducts(selectedTheme,"keep");return}folderTrail=folderTrail.slice(0,index+1);currentFolder=folderTrail[index];await loadProducts(currentFolder,"keep")}
 function filteredProducts(){const q=normalize($("search").value);return q?products.filter(p=>normalize(`${p.productName||p.name} ${p.rawName||""} ${p.kind||""}`).includes(q)):products}
-function showProducts(){stopLoading();view="products";rememberPlace();const list=filteredProducts();const folders=list.filter(p=>p.kind==="folder").length;const prods=list.length-folders;updateHead("Escolha a próxima opção",`Você está em ${fullThemeName()||selectedTheme.name}. Se aparecer uma subpasta, toque nela para abrir mais opções.`,`${prods} produto(s)${folders?` · ${folders} pasta(s)`:""}`);$("content").innerHTML=pathHtml()+(list.length?`<div class="productGrid">${list.map(p=>`<button class="productCard" data-product="${esc(p.id)}"><b>${esc(p.productName||p.name)}</b><span>${p.kind==="folder"?"Abrir esta pasta para ver os produtos dentro dela.":"Escolha esse produto e veja as artes disponíveis."}</span>${p.kind==="folder"?`<em class="globalResultTag">Pasta</em>`:""}</button>`).join("")}</div>`:`<div class="empty"><div><b>Nenhuma opção encontrada</b><span>Tente buscar por outro nome ou volte para escolher outro tema.</span></div></div>`);document.querySelectorAll("[data-product]").forEach(btn=>btn.onclick=()=>{const p=products.find(x=>x.id===btn.dataset.product);if(p&&p.kind==="folder")loadProducts(p,"push");else loadItems(p)});prefetchItemsForProducts(list)}
-async function loadItems(product){selectedProduct=product;view="items";showFavs=false;$("search").value="";updateHead("Escolha suas artes",`Toque na arte para ver melhor. Quando gostar, adicione ao seu pedido; o desconto de 10% entra automaticamente.`,"carregando");loading("Preparando as artes para você escolher com calma...","arts");rememberPlace();try{const d=await api({mode:"items",folderId:product.id,theme:fullThemeName()||selectedTheme.name,product:product.rawName||product.name||product.productName});items=d.items||[];items.forEach(i=>{if(!i.themeId&&selectedTheme)i.themeId=selectedTheme.id});renderItems()}catch(e){if(String(product.id||"").startsWith("demo-")){items=demoItemsFor(product);renderItems()}else errorScreen(e.message)}}
-function filteredItems(){const q=normalize($("search").value);let list=items;if(showFavs)list=list.filter(i=>favs.has(i.id));if(q)list=list.filter(i=>normalize(`${i.code} ${i.theme} ${i.productName}`).includes(q));return list}
+function showProducts(){stopLoading();view="products";rememberPlace();const list=filteredProducts();const folders=list.filter(p=>p.kind==="folder").length;const prods=list.length-folders;updateHead("Escolha a próxima opção",`Você está em ${fullThemeName()||selectedTheme.name}. Se aparecer uma subpasta, toque nela para abrir mais opções.`,`${prods} produto(s)${folders?` · ${folders} pasta(s)`:""}`);$("content").innerHTML=pathHtml()+(list.length?`<div class="productGrid">${list.map(p=>`<button class="productCard" data-product="${esc(p.id)}"><b>${esc(p.productName||p.name)}</b><span>${p.kind==="folder"?"Abrir esta pasta para ver os produtos dentro dela.":"Escolha esse produto e veja as artes disponíveis."}</span>${p.kind==="folder"?`<em class="globalResultTag">Pasta</em>`:""}</button>`).join("")}</div>`:`<div class="empty"><div><b>Nenhuma opção encontrada</b><span>Tente buscar por outro nome ou volte para escolher outro tema.</span></div></div>`);document.querySelectorAll("[data-product]").forEach(btn=>btn.onclick=()=>{const p=products.find(x=>x.id===btn.dataset.product);if(p&&p.kind==="folder")loadProducts(p,"push");else if(p&&p.product==="sacolinha")showBagSizes(p);else loadItems(p)});prefetchItemsForProducts(list)}
+async function loadItems(product){selectedProduct=product;view="items";showFavs=false;$("search").value="";updateHead("Escolha suas artes",`Toque na arte para ver melhor. Quando gostar, adicione ao seu pedido; o desconto de 10% entra automaticamente.`,"carregando");loading("Preparando as artes para você escolher com calma...","arts");rememberPlace();try{const d=await api({mode:"items",folderId:product.id,theme:fullThemeName()||selectedTheme.name,product:product.rawName||product.name||product.productName});items=d.items||[];items.forEach(i=>{if(!i.themeId&&selectedTheme)i.themeId=selectedTheme.id;if(product.product==="sacolinha"&&product.bagSize){i.details={...(i.details||{}),size:product.bagSize};i.productName=`Sacolinha ${product.bagSize}`;}});renderItems()}catch(e){if(String(product.id||"").startsWith("demo-")){items=demoItemsFor(product);renderItems()}else errorScreen(e.message)}}
+function filteredItems(){
+  const q=normalize($("search").value);
+  let list=showFavs?Object.values(favItems||{}).filter(i=>favs.has(i.id)):items;
+  if(q)list=list.filter(i=>normalize(`${i.code} ${i.theme} ${i.productName}`).includes(q));
+  return list;
+}
 function normalize(s){return String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase()}
 function entry(id){return cart.find(c=>c.id===id)}function cartQty(){return cart.reduce((s,c)=>s+c.qty,0)}
-function renderItems(){stopLoading();const list=filteredItems();const isSearch=view==="search";updateHead(isSearch?"Resultado da busca":(showFavs?"Suas favoritas":"Escolha suas artes"),isSearch?"Encontramos as artes com esse código. Confira a imagem e adicione a que você quiser ao pedido.":(showFavs?"Aqui estão as artes que você marcou para comparar. Você pode adicionar uma por uma ou todas ao carrinho.":"Toque na arte para ver melhor. O valor aparece em cada item e o desconto entra no carrinho."),`${list.length} arte(s)`);$("content").innerHTML=list.length?`<div class="grid">${list.map(i=>{const e=entry(i.id);const fav=favs.has(i.id);return `<article class="card ${e?"sel":""}" data-card="${esc(i.id)}"><div class="thumbWrap" data-preview="${esc(i.id)}"><img class="thumb" loading="lazy" src="${esc(i.image)}" alt="Arte código ${esc(i.code)}" onerror="imageFail(this, '${esc(i.code)}')"><span class="code">#${esc(i.code)}</span>${e?`<span class="badge">Selecionada ${e.qty}x</span>`:`<span class="badge">Toque para ver melhor</span>`}<button class="favBtn ${fav?"active":""}" data-fav="${esc(i.id)}" aria-label="Favoritar">${fav?"♥":"♡"}</button></div><div class="info"><p class="codeTitle">Código #${esc(i.code)}</p><div class="miniRow"><span class="mini">${esc(i.theme)}</span><span class="mini">${esc(i.productName)}</span></div><span class="artPrice">${esc(artPriceText(i))}</span>${e?`<span class="inCartNote">No carrinho: ${e.qty} unidade(s)</span><div class="cardActions two"><button class="selBtn" data-select="${esc(i.id)}">Adicionar 1 unidade</button><button class="removeBtn" data-remove="${esc(i.id)}">Tirar 1 unidade</button></div>`:`<div class="cardActions"><button class="selBtn" data-select="${esc(i.id)}">Adicionar arte</button></div>`}</div></article>`}).join("")}</div>`:`<div class="empty"><div><b>Nenhuma arte encontrada por aqui</b><span>Tente buscar por outro código ou volte para escolher outra peça.</span></div></div>`;document.querySelectorAll("[data-select]").forEach(b=>b.onclick=()=>addItem(b.dataset.select));document.querySelectorAll("[data-remove]").forEach(b=>b.onclick=()=>changeQty(b.dataset.remove,-1));document.querySelectorAll("[data-preview]").forEach(b=>b.onclick=()=>openPreview(b.dataset.preview));document.querySelectorAll("[data-fav]").forEach(b=>b.onclick=e=>{e.stopPropagation();toggleFav(b.dataset.fav)})}
-function toggleFav(id){if(favs.has(id)){favs.delete(id);toast("Removida das favoritas.")}else{favs.add(id);toast("Guardamos essa arte nas favoritas.")}save();renderItems()}
-function addFavorites(){const fs=items.filter(i=>favs.has(i.id));if(!fs.length){toast("Você ainda não marcou favoritas neste produto.");return}fs.forEach(i=>{let e=entry(i.id);if(e)e.qty+=1;else cart.push({...i,qty:1})});save();renderItems();renderCart();toast("Prontinho, suas favoritas entraram no pedido.")}
-function addItem(id){const it=items.find(x=>x.id===id)||cart.find(x=>x.id===id);if(!it)return;let e=entry(id);if(e)e.qty+=1;else cart.push({...it,qty:1});save();toast(e?"Prontinho, adicionamos mais 1 unidade dessa arte.":"Prontinho, essa arte entrou no seu pedido.");if(view==="items"||view==="search")renderItems();renderCart()}
+function renderItems(){stopLoading();const list=filteredItems();const isSearch=view==="search";updateHead(isSearch?"Resultado da busca":(showFavs?"Suas favoritas":"Escolha suas artes"),isSearch?"Encontramos as artes com esse código. Confira a imagem e adicione a que você quiser ao pedido.":(showFavs?"Aqui estão as artes que você marcou para comparar. Você pode adicionar uma por uma ou todas ao carrinho.":"Toque na arte para ver melhor. O valor aparece em cada item e o desconto entra no carrinho."),`${list.length} arte(s)`);$("content").innerHTML=list.length?`<div class="grid">${list.map(i=>{const e=entry(i.id);const fav=favs.has(i.id);return `<article class="card ${e?"sel":""}" data-card="${esc(i.id)}"><div class="thumbWrap" data-preview="${esc(i.id)}"><img class="thumb" loading="lazy" src="${esc(i.image)}" alt="Arte código ${esc(i.code)}" onerror="imageFail(this, '${esc(i.code)}')"><span class="code">#${esc(i.code)}</span>${e?`<span class="badge">Selecionada ${e.qty}x</span>`:`<span class="badge">Toque para ver melhor</span>`}<button class="favBtn ${fav?"active":""}" data-fav="${esc(i.id)}" aria-label="Favoritar">${fav?"♥":"♡"}</button></div><div class="info"><p class="codeTitle">Código #${esc(i.code)}</p><div class="miniRow"><span class="mini">${esc(i.theme)}</span><span class="mini">${esc(i.product==="sacolinha"&&i.details&&i.details.size?`Sacolinha ${i.details.size}`:i.productName)}</span></div><span class="artPrice ${i.product==="sacolinha"?"isBag":""}">${esc(artPriceText(i))}</span>${e?`<span class="inCartNote">No carrinho: ${e.qty} unidade(s)</span><div class="cardActions two"><button class="selBtn" data-select="${esc(i.id)}">Adicionar 1 unidade</button><button class="removeBtn" data-remove="${esc(i.id)}">Tirar 1 unidade</button></div>`:`<div class="cardActions"><button class="selBtn" data-select="${esc(i.id)}">Adicionar arte</button></div>`}</div></article>`}).join("")}</div>`:`<div class="empty"><div><b>Nenhuma arte encontrada por aqui</b><span>Tente buscar por outro código ou volte para escolher outra peça.</span></div></div>`;document.querySelectorAll("[data-select]").forEach(b=>b.onclick=()=>addItem(b.dataset.select));document.querySelectorAll("[data-remove]").forEach(b=>b.onclick=()=>changeQty(b.dataset.remove,-1));document.querySelectorAll("[data-preview]").forEach(b=>b.onclick=()=>openPreview(b.dataset.preview));document.querySelectorAll("[data-fav]").forEach(b=>b.onclick=e=>{e.stopPropagation();toggleFav(b.dataset.fav)})}
+function toggleFav(id){
+  const item=items.find(x=>x.id===id)||cart.find(x=>x.id===id);
+  if(favs.has(id)){favs.delete(id);delete favItems[id];toast("Removida das favoritas.")}
+  else{favs.add(id);if(item)favItems[id]={...item,details:{...(item.details||{})}};toast("Guardamos essa arte nas favoritas.")}
+  save();renderItems()
+}
+function addFavorites(){
+  const fs=Object.values(favItems||{}).filter(i=>favs.has(i.id));
+  if(!fs.length){toast("Você ainda não marcou favoritas.");return}
+  fs.forEach(i=>{let e=entry(i.id);if(e)e.qty+=1;else{const newItem={...i,qty:i.product==="sacolinha"?10:1,details:{...(i.details||{})}};ensureDetails(newItem);cart.push(newItem)}});
+  save();renderItems();renderCart();toast("Prontinho, suas favoritas entraram no pedido.")
+}
+function addItem(id){
+  const it=items.find(x=>x.id===id)||cart.find(x=>x.id===id);if(!it)return;
+  let e=entry(id);
+  if(e)e.qty+=1;else{const newItem={...it,qty:it.product==="sacolinha"?10:1,details:{...(it.details||{})}};ensureDetails(newItem);cart.push(newItem)}
+  save();toast(e?"Prontinho, adicionamos mais 1 unidade dessa arte.":"Prontinho, essa arte entrou no seu pedido.");if(view==="items"||view==="search")renderItems();renderCart()
+}
 function changeQty(id,delta){const e=entry(id);if(!e)return;e.qty+=delta;if(e.qty<=0)cart=cart.filter(c=>c.id!==id);save();if(view==="items"||view==="search")renderItems();renderCart()}
-function price(product,qty){if(!qty)return 0;if(product==="50x50")return qty>=6?58.90+Math.max(0,qty-6)*9.90:qty*9.90;if(product==="painel-150"||product==="redondo-indefinido"||product==="cenario"||product==="lateral"||product==="retangular")return qty*59.90;if(product==="kit-romano")return qty*210;if(product==="cilindros")return qty*99;if(product==="romano")return qty*78;if(product==="romano-lateral")return qty*137.90;if(product==="kit-painel-cilindros")return qty*158.90;if(product==="sacolinha")return 0;return 0}
-function groups(){const m=new Map();cart.forEach(i=>{const key=i.product||"produto";if(!m.has(key))m.set(key,{product:key,label:i.productName||label(key),items:[],qty:0});m.get(key).items.push(i);m.get(key).qty+=i.qty});return [...m.values()].map(g=>({...g,items:g.items.sort((a,b)=>(b.sortId||0)-(a.sortId||0)),subtotal:price(g.product,g.qty)}))}
+
+const PRODUCT_CONFIG={
+  "50x50":{label:"Bolinhas 50x50",type:"round",unitPrice:9.90,baseQty:6,basePrice:58.90,afterStep:2,defaultDiameter:50},
+  "painel-150":{label:"Painel 150x150",type:"round",unitPrice:59.90,defaultDiameter:150},
+  "redondo-indefinido":{label:"Painel 150x150",type:"round",unitPrice:59.90,defaultDiameter:150},
+  "cenario":{label:"Cenário",type:"rectangle",unitPrice:59.90},
+  "lateral":{label:"Lateral",type:"rectangle",unitPrice:59.90},
+  "retangular":{label:"Lateral",type:"rectangle",unitPrice:59.90},
+  "cilindros":{label:"Cilindros",type:"cylinders",unitPrice:99},
+  "kit-painel-cilindros":{label:"Kit Painel + Cilindros",type:"kitPanelCylinders",unitPrice:158.90},
+  "kit-romano":{label:"Kit + Romano",type:"kitRoman",unitPrice:210},
+  "romano":{label:"Romano",type:"roman",unitPrice:78},
+  "romano-lateral":{label:"Romano + Lateral",type:"romanRectangle",unitPrice:137.90},
+  "sacolinha":{label:"Sacolinha de Festa",type:"bag",sizes:{P:{label:"P",dimensions:"15x20 cm",price:6},M:{label:"M",dimensions:"20x25 cm",price:8},G:{label:"G",dimensions:"25x30 cm",price:10}},minQty:10,step:5,defaultSize:"P"}
+};
+
+function bagSizeLabel(size){
+  const s=(PRODUCT_CONFIG.sacolinha.sizes||{})[size||"P"]||PRODUCT_CONFIG.sacolinha.sizes.P;
+  return `${s.label} · ${s.dimensions}`;
+}
+function showBagSizes(product){
+  selectedProduct=product;
+  view="bagSizes";
+  $("search").value="";
+  updateHead("Escolha o tamanho da sacolinha","As sacolinhas já têm tamanhos prontos. Escolha o tamanho e depois selecione as artes.","3 tamanho(s)");
+  $("content").innerHTML=pathHtml()+`<div class="sizeChoiceGrid">${Object.entries(PRODUCT_CONFIG.sacolinha.sizes).map(([k,s])=>`<button class="sizeChoiceCard" data-bag-size="${k}"><b>${s.label}</b><span>${s.dimensions}</span></button>`).join("")}</div>`;
+  document.querySelectorAll("[data-bag-size]").forEach(b=>b.onclick=()=>loadItems({...product,bagSize:b.dataset.bagSize,bagLabel:bagSizeLabel(b.dataset.bagSize)}));
+}
+
+function productConfig(product){return PRODUCT_CONFIG[product]||PRODUCT_CONFIG["painel-150"]}
+function onlyNumber(v){const n=String(v||"").replace(",",".").match(/\d+(\.\d+)?/);return n?Number(n[0]):""}
+function cm(v){const n=onlyNumber(v);return n?`${String(n).replace(".",",")} cm`:""}
+function ensureDetails(item){if(!item.details)item.details={};const cfg=productConfig(item.product);if(cfg.type==="round"&&!item.details.diameter)item.details.diameter=cfg.defaultDiameter||"";if(cfg.type==="bag"&&!item.details.size)item.details.size=cfg.defaultSize||"P";return item.details}
+function setDetail(id,path,value){
+  const item=cart.find(x=>x.id===id);
+  if(!item)return;
+  ensureDetails(item);
+  if(typeof value==="string"&&path!=="unit"&&path!=="size")value=value.replace(/[^0-9,.]/g,"");
+  const parts=path.split(".");
+  let obj=item.details;
+  for(let i=0;i<parts.length-1;i++){obj[parts[i]]=obj[parts[i]]||{};obj=obj[parts[i]]}
+  obj[parts[parts.length-1]]=value;
+  if(item.product==="sacolinha"&&path==="size")item.details.editingSize=false;
+  save();
+  renderCart();
+}
+function updateDetailDraft(id,path,value){
+  const item=cart.find(x=>x.id===id);
+  if(!item)return;
+  ensureDetails(item);
+  if(typeof value==="string"&&path!=="unit"&&path!=="size")value=value.replace(/[^0-9,.]/g,"");
+  const parts=path.split(".");
+  let obj=item.details;
+  for(let i=0;i<parts.length-1;i++){obj[parts[i]]=obj[parts[i]]||{};obj=obj[parts[i]]}
+  obj[parts[parts.length-1]]=value;
+  save();
+}
+function measureSummary(item){const cfg=productConfig(item.product),d=ensureDetails(item);if(d.unknown)return"Medidas: cliente precisa de ajuda para definir.";if(cfg.type==="round")return d.diameter?`Diâmetro: ${cm(d.diameter)}`:"Diâmetro não informado.";if(cfg.type==="rectangle")return(d.width||d.height)?`Medida: ${cm(d.width)||"largura não informada"} x ${cm(d.height)||"altura não informada"}`:"Medida ainda não informada.";if(cfg.type==="roman")return(d.roman?.width||d.roman?.height)?`Romano: ${cm(d.roman?.width)||"largura não informada"} x ${cm(d.roman?.height)||"altura não informada"}`:"Medidas do romano ainda não informadas.";if(cfg.type==="romanRectangle")return"Inclui medidas do romano e da lateral.";if(cfg.type==="cylinders")return"Medidas dos cilindros P, M e G.";if(cfg.type==="kitPanelCylinders")return"Medidas dos cilindros e do painel redondo.";if(cfg.type==="kitRoman")return"Medidas dos cilindros e do romano.";if(cfg.type==="bag"){const s=cfg.sizes[d.size||"P"];return`Sacolinha ${s.label}: ${s.dimensions} · R$ ${money(s.price)} cada`}return""}
+function hasCustomizable(){return cart.some(it=>productConfig(it.product).type!=="bag")}
+function measurementNotice(){return`<div class="measureNotice"><b>Sobre medidas personalizadas</b>Artes em medidas personalizadas podem ser solicitadas hoje, mas a produção da personalização acontece a partir do próximo dia útil. Se você não souber alguma medida, tudo bem: envie assim mesmo que a vendedora te ajuda.</div>`}
+
+function roundCustomValid(item){
+  const d=ensureDetails(item);
+  const val=onlyNumber(d.diameter);
+  if(!val)return{ok:false,msg:"Informe o diâmetro personalizado."};
+  if(val<90)return{ok:false,msg:"Painel redondo personalizado precisa ter no mínimo 90 cm."};
+  if(val%10!==0)return{ok:false,msg:"Use medidas de 10 em 10 cm. Exemplos: 90, 100, 110, 120."};
+  return{ok:true,msg:"Medida personalizada válida."};
+}
+
+
+function roundCustomValid(item){
+  const d=ensureDetails(item);const val=onlyNumber(d.diameter);const def=Number(productConfig(item.product).defaultDiameter||0);
+  if(!val)return{ok:false,msg:"Informe o diâmetro personalizado."};
+  if(val===def)return{ok:true,msg:"Medida padrão mantida.",standard:true};
+  if(val<90)return{ok:false,msg:"Painel redondo personalizado precisa ter no mínimo 90 cm."};
+  if(val%10!==0)return{ok:false,msg:"Use medidas de 10 em 10 cm. Exemplos: 90, 100, 110, 120."};
+  return{ok:true,msg:"Medida personalizada válida."};
+}
+function isFilled(v){return String(v??"").trim()!==""}
+function hasMeaningfulCustomValue(item){
+  const cfg=productConfig(item.product),d=ensureDetails(item);
+  if(d.unknown)return true;
+  if(cfg.type==="round")return onlyNumber(d.diameter)!==Number(cfg.defaultDiameter||0);
+  if(cfg.type==="rectangle")return isFilled(d.width)||isFilled(d.height);
+  if(cfg.type==="roman")return isFilled(d.roman?.width)||isFilled(d.roman?.height);
+  if(cfg.type==="romanRectangle")return isFilled(d.roman?.width)||isFilled(d.roman?.height)||isFilled(d.width)||isFilled(d.height);
+  if(cfg.type==="cylinders"||cfg.type==="kitPanelCylinders"||cfg.type==="kitRoman"){
+    const c=d.cylinders||{};let any=["p","m","g"].some(k=>isFilled(c[k]?.width)||isFilled(c[k]?.height)||isFilled(c[k]?.cap));
+    if(cfg.type==="kitPanelCylinders")any=any||isFilled(d.panel?.diameter);
+    if(cfg.type==="kitRoman")any=any||isFilled(d.roman?.width)||isFilled(d.roman?.height);
+    return any;
+  }
+  return false;
+}
+function requiredCustomValid(item){
+  const cfg=productConfig(item.product),d=ensureDetails(item);
+  if(d.unknown)return{ok:true,msg:""};
+  if(!hasMeaningfulCustomValue(item))return{ok:true,msg:"",standard:true};
+  if(cfg.type==="round")return roundCustomValid(item);
+  if(cfg.type==="rectangle")return(isFilled(d.width)&&isFilled(d.height))?{ok:true,msg:""}:{ok:false,msg:"Preencha largura e altura para salvar a medida personalizada."};
+  if(cfg.type==="roman")return(isFilled(d.roman?.width)&&isFilled(d.roman?.height))?{ok:true,msg:""}:{ok:false,msg:"Preencha largura e altura do romano."};
+  if(cfg.type==="romanRectangle")return(isFilled(d.roman?.width)&&isFilled(d.roman?.height)&&isFilled(d.width)&&isFilled(d.height))?{ok:true,msg:""}:{ok:false,msg:"Preencha as medidas do romano e da lateral."};
+  if(cfg.type==="cylinders"||cfg.type==="kitPanelCylinders"||cfg.type==="kitRoman"){
+    const c=d.cylinders||{};const okC=["p","m","g"].every(k=>isFilled(c[k]?.width)&&isFilled(c[k]?.height)&&isFilled(c[k]?.cap));
+    if(!okC)return{ok:false,msg:"Preencha largura, altura e tampa dos cilindros P, M e G."};
+    if(cfg.type==="kitPanelCylinders"&&!isFilled(d.panel?.diameter))return{ok:false,msg:"Preencha o diâmetro do painel do kit."};
+    if(cfg.type==="kitPanelCylinders"){
+      const val=onlyNumber(d.panel?.diameter);if(val<90||val%10!==0)return{ok:false,msg:"O painel do kit precisa ter no mínimo 90 cm e ir de 10 em 10."};
+    }
+    if(cfg.type==="kitRoman"&&!(isFilled(d.roman?.width)&&isFilled(d.roman?.height)))return{ok:false,msg:"Preencha largura e altura do romano do kit."};
+    return{ok:true,msg:""};
+  }
+  return{ok:true,msg:""};
+}
+
+function roundFields(item){
+  const d=ensureDetails(item);const rule=roundCustomValid(item);
+  return `<div class="measureBox"><div class="measureTitle"><div><b>Diâmetro personalizado</b><span>Diâmetro é a medida de uma ponta à outra do círculo. Para personalizar, use no mínimo 90 cm e sempre de 10 em 10 cm.</span></div></div><div class="measureGrid one"><div class="measureField"><label>Diâmetro</label><div class="cmInput"><input inputmode="decimal" value="${esc(d.diameter||"")}" data-detail="${esc(item.id)}" data-path="diameter"><span>cm</span></div><div class="roundRule ${rule.ok?"ok":""}">${rule.msg}</div></div></div></div>`;
+}
+function rectangleFields(item,title="Medida da peça"){
+  const d=ensureDetails(item);d.unit=d.unit||"cm";
+  const unit=d.unit==="m"?"m":"cm";
+  const help=unit==="m"?"Digite em metros. Ex.: 1,5 significa 1 metro e meio, que equivale a 150 cm.":"Digite em centímetros. Ex.: 150 cm equivale a 1 metro e meio.";
+  return `<div class="measureBox"><div class="measureTitle"><div><b>${title}</b><span>${help}</span></div></div><div class="unitChoice"><button type="button" class="${unit==="cm"?"active":""}" data-detail="${esc(item.id)}" data-path="unit" data-value="cm">Usar cm</button><button type="button" class="${unit==="m"?"active":""}" data-detail="${esc(item.id)}" data-path="unit" data-value="m">Usar metro</button></div><div class="measureGrid"><div class="measureField"><label>Largura</label><div class="cmInput"><input inputmode="decimal" value="${esc(d.width||"")}" data-detail="${esc(item.id)}" data-path="width"><span>${unit}</span></div></div><div class="measureField"><label>Altura</label><div class="cmInput"><input inputmode="decimal" value="${esc(d.height||"")}" data-detail="${esc(item.id)}" data-path="height"><span>${unit}</span></div></div></div></div>`;
+}
+function romanFields(item,prefix="roman",title="Medidas do romano"){const d=ensureDetails(item),r=d[prefix]||{};return`<div class="kitBlock"><p class="kitBlockTitle">${title}</p><div class="measureGrid"><div class="measureField"><label>Largura</label><div class="cmInput"><input inputmode="decimal" value="${esc(r.width||"")}" data-detail="${esc(item.id)}" data-path="${prefix}.width"><span>cm</span></div></div><div class="measureField"><label>Altura</label><div class="cmInput"><input inputmode="decimal" value="${esc(r.height||"")}" data-detail="${esc(item.id)}" data-path="${prefix}.height"><span>cm</span></div></div></div></div>`}
+function cylinderBlock(item,key,label){const d=ensureDetails(item),c=(d.cylinders&&d.cylinders[key])||{};return`<div class="kitBlock"><p class="kitBlockTitle">Cilindro ${label}</p><div class="measureGrid"><div class="measureField"><label>Largura</label><div class="cmInput"><input inputmode="decimal" value="${esc(c.width||"")}" data-detail="${esc(item.id)}" data-path="cylinders.${key}.width"><span>cm</span></div></div><div class="measureField"><label>Altura</label><div class="cmInput"><input inputmode="decimal" value="${esc(c.height||"")}" data-detail="${esc(item.id)}" data-path="cylinders.${key}.height"><span>cm</span></div></div><div class="measureField"><label>Diâmetro da tampa</label><div class="cmInput"><input inputmode="decimal" value="${esc(c.cap||"")}" data-detail="${esc(item.id)}" data-path="cylinders.${key}.cap"><span>cm</span></div></div></div></div>`}
+function kitPanelField(item){const d=ensureDetails(item),p=d.panel||{};return`<div class="kitBlock"><p class="kitBlockTitle">Painel redondo do kit</p><div class="measureGrid one"><div class="measureField"><label>Diâmetro do painel</label><div class="cmInput"><input inputmode="decimal" value="${esc(p.diameter||"")}" data-detail="${esc(item.id)}" data-path="panel.diameter"><span>cm</span></div></div></div></div>`}
+function kitFields(item,withPanel=false,withRoman=false){const d=ensureDetails(item);const unknown=`<label class="customCheck"><input type="checkbox" ${d.unknown?"checked":""} data-detail="${esc(item.id)}" data-path="unknown" data-check="1"><span class="box"></span><span>Ainda não sei todas as medidas. Quero ajuda da vendedora para confirmar.</span></label>`;return`<div class="measureBox"><div class="measureTitle"><div><b>Medidas do kit</b><span>Preencha o que souber. As medidas são em centímetros.</span></div></div>${cylinderBlock(item,"p","P")}${cylinderBlock(item,"m","M")}${cylinderBlock(item,"g","G")}${withPanel?kitPanelField(item):""}${withRoman?romanFields(item,"roman","Romano do kit"):""}${unknown}</div>`}
+function bagFields(item){
+  const cfg=productConfig(item.product),d=ensureDetails(item),size=d.size||"P",s=cfg.sizes[size]||cfg.sizes.P;
+  const valid=bagValid(item);
+  if(!d.editingSize)return `<div class="measureClosed"><div class="measureSummary clamp">Sacolinha ${s.label}: ${s.dimensions} · ${money(s.price)} cada</div></div>`;
+  return`<div class="measureBox"><div class="measureTitle"><div><b>Trocar tamanho</b><span>Escolha o tamanho da sacolinha. A quantidade continua no carrinho.</span></div></div><div class="sizeOptions">${Object.entries(cfg.sizes).map(([k,opt])=>`<button type="button" class="sizeBtn ${size===k?"active":""}" data-detail="${esc(item.id)}" data-path="size" data-value="${k}"><b>${opt.label}</b><span>${opt.dimensions}</span><span>${money(opt.price)} cada</span></button>`).join("")}</div>${valid.msg?`<div class="bagRule ${valid.ok?"":"warn"}">${valid.msg}</div>`:""}</div>`}
+function bagValid(item){const q=item.qty||0;if(q<10)return{ok:false,msg:`Para sacolinhas, o mínimo é 10 unidades. Faltam ${10-q} para fechar.`};if((q-10)%5!==0){const next=q+(5-((q-10)%5));return{ok:false,msg:`Depois de 10 unidades, as sacolinhas seguem de 5 em 5. Ajuste para ${next} unidades.`}}return{ok:true,msg:""}}
+function measureFields(item){
+  const cfg=productConfig(item.product);
+  ensureDetails(item);
+  if(cfg.type==="bag")return bagFields(item);
+  if(!item.details.customizing){
+    const summary=customMeasureSummary(item);
+    return `<div class="measureClosed">${summary?`<div class="measureSummary clamp" data-customize="${esc(item.id)}">${esc(summary)}</div>`:""}</div>`;
+  }
+  let fields="";
+  if(cfg.type==="round")fields=roundFields(item);
+  else if(cfg.type==="rectangle")fields=rectangleFields(item);
+  else if(cfg.type==="roman")fields=romanFields(item);
+  else if(cfg.type==="romanRectangle")fields=romanFields(item,"roman","Medidas do romano")+rectangleFields(item,"Medidas da lateral");
+  else if(cfg.type==="cylinders")fields=kitFields(item,false,false);
+  else if(cfg.type==="kitPanelCylinders")fields=kitFields(item,true,false);
+  else if(cfg.type==="kitRoman")fields=kitFields(item,false,true);
+  return `<div class="measureOpen">${fields}<div class="measureActions"><button type="button" class="cancelMeasureBtn" data-cancel-measure="${esc(item.id)}">Cancelar</button><button type="button" class="saveMeasureBtn" data-save-measure="${esc(item.id)}">Salvar medidas</button></div></div>`;
+}
+function customMeasureSummary(item){
+  const cfg=productConfig(item.product),d=ensureDetails(item);
+  if(!d.customized&&!d.unknown)return "";
+  return measureSummary(item);
+}
+function detailsForWhatsApp(item){
+  const cfg=productConfig(item.product),d=ensureDetails(item);
+  if(cfg.type!=="bag"&&!d.customized&&!d.unknown)return"";
+  if(d.unknown)return"Medida personalizada: cliente precisa de ajuda para definir.";
+  if(cfg.type==="round")return d.diameter?`Medida personalizada: diâmetro ${cm(d.diameter)}`:"";
+  if(cfg.type==="rectangle")return`Medida personalizada: ${cm(d.width)||"largura não informada"} x ${cm(d.height)||"altura não informada"}`;
+  if(cfg.type==="roman")return`Medida personalizada do romano: ${cm(d.roman?.width)||"largura não informada"} x ${cm(d.roman?.height)||"altura não informada"}`;
+  if(cfg.type==="romanRectangle")return`Medida personalizada — Romano: ${cm(d.roman?.width)||"largura não informada"} x ${cm(d.roman?.height)||"altura não informada"} | Lateral: ${cm(d.width)||"largura não informada"} x ${cm(d.height)||"altura não informada"}`;
+  if(cfg.type==="cylinders"||cfg.type==="kitPanelCylinders"||cfg.type==="kitRoman"){
+    const c=d.cylinders||{};const line=k=>`${k.toUpperCase()}: ${cm(c[k]?.width)||"larg."} x ${cm(c[k]?.height)||"alt."} | tampa ${cm(c[k]?.cap)||"não informada"}`;
+    const lines=[`Medida personalizada:`,`Cilindro ${line("p")}`,`Cilindro ${line("m")}`,`Cilindro ${line("g")}`];
+    if(cfg.type==="kitPanelCylinders")lines.push(`Painel redondo: ${cm(d.panel?.diameter)||"diâmetro não informado"}`);
+    if(cfg.type==="kitRoman")lines.push(`Romano: ${cm(d.roman?.width)||"largura não informada"} x ${cm(d.roman?.height)||"altura não informada"}`);
+    return lines.join("\n");
+  }
+  if(cfg.type==="bag"){const s=cfg.sizes[d.size||"P"];return`Tamanho: ${s.label} (${s.dimensions})`}
+  return"";
+}
+
+function price(product,qty,item=null){
+  if(!qty)return 0;
+  const cfg=productConfig(product);
+  if(product==="50x50")return qty>=6?58.90+Math.max(0,qty-6)*9.90:qty*9.90;
+  if(cfg.type==="bag"){
+    const size=(item&&item.details&&item.details.size)||cfg.defaultSize||"P";
+    const s=cfg.sizes[size]||cfg.sizes.P;
+    return qty*s.price;
+  }
+  return qty*(cfg.unitPrice||0);
+}
+function groups(){
+  const m=new Map();
+  cart.forEach(i=>{
+    const cfg=productConfig(i.product);
+    const size=cfg.type==="bag"?(i.details&&i.details.size)||cfg.defaultSize||"P":"";
+    const key=(i.product||"produto")+"::"+size;
+    const label=cfg.type==="bag"?`Sacolinha ${size}`:(i.productName||label(i.product));
+    if(!m.has(key))m.set(key,{product:i.product||"produto",label,items:[],qty:0,size});
+    m.get(key).items.push(i);m.get(key).qty+=i.qty;
+  });
+  return [...m.values()].map(g=>({...g,items:g.items.sort((a,b)=>(b.sortId||0)-(a.sortId||0)),subtotal:g.items.reduce((s,i)=>s+price(i.product,i.qty,i),0)}));
+}
 function gross(){return groups().reduce((s,g)=>s+g.subtotal,0)}function discount(){return gross()*0.10}function total(){return Math.max(0,gross()-discount())}
 function rule50(){const q=cart.filter(i=>i.product==="50x50").reduce((s,i)=>s+i.qty,0);if(q===0)return null;if(q<6){const falta=6-q;return{type:"bad",title:"Bolinhas 50x50",msg:`Faltam ${falta} para fechar o mínimo de 6.`}}if(q>6&&q%2!==0)return{type:"warn",title:"Bolinhas 50x50",msg:`Adicione mais 1 bolinha para fechar ${q+1}. Depois de 6, seguimos sempre em pares.`};return{type:"ok",title:"Bolinhas 50x50",msg:q===6?"Mínimo fechado. Se quiser, acrescente de 2 em 2.":`Quantidade certinha em par.`}}
-function cartRule(){const r=rule50();if(cartQty()===0)return{ok:false,msg:"Seu pedido ainda está vazio. Escolha o tema da festa e adicione as artes que mais gostar. O desconto de 10% entra automaticamente."};if(r&&r.type!=="ok")return{ok:false,msg:r.msg};if(!seller)return{ok:false,msg:"Escolha para quem você quer enviar sua seleção antes de finalizar."};return{ok:true,msg:"Perfeito. Sua seleção está pronta para enviar com 10% de desconto por aqui."}}
+
+function hasCustomizedItems(){
+  return cart.some(i=>productConfig(i.product).type!=="bag"&&i.details&&(i.details.customized||i.details.unknown));
+}
+function customNoticeAccepted(){
+  return localStorage.getItem("armazem_custom_notice_ok")==="1";
+}
+function setCustomNoticeAccepted(v){
+  if(v)localStorage.setItem("armazem_custom_notice_ok","1");
+  else localStorage.removeItem("armazem_custom_notice_ok");
+}
+function customNoticeHtml(){
+  if(!hasCustomizedItems())return "";
+  return `<div class="customNoticeConfirm"><b>Medidas personalizadas</b>A personalização de medidas é solicitada hoje, mas a produção da arte personalizada acontece a partir do próximo dia útil.<label class="customCheck"><input type="checkbox" ${customNoticeAccepted()?"checked":""} data-custom-notice="1"><span class="box"></span><span>Li e estou ciente sobre o prazo da personalização.</span></label></div>`;
+}
+
+function cartRule(){
+  const r=rule50();
+  if(cartQty()===0)return{ok:false,msg:"Seu pedido ainda está vazio. Escolha o tema da festa e adicione as artes que mais gostar. O desconto de 10% entra automaticamente."};
+  if(r&&r.type!=="ok")return{ok:false,msg:r.msg};
+  if(!seller)return{ok:false,msg:"Escolha para quem você quer enviar sua seleção antes de finalizar."};
+  const bag=cart.find(i=>i.product==="sacolinha"&&!bagValid(i).ok);if(bag)return{ok:false,msg:bagValid(bag).msg};
+  const bad=cart.find(i=>i.details&&i.details.customized&&!requiredCustomValid(i).ok);if(bad)return{ok:false,msg:requiredCustomValid(bad).msg};
+  if(hasCustomizedItems()&&!customNoticeAccepted())return{ok:false,msg:"Confirme que leu o aviso sobre produção de medidas personalizadas."};
+  return{ok:true,msg:"Perfeito. Sua seleção está pronta para enviar com 10% de desconto por aqui."};
+}
+function itemActionButton(i){
+  const cfg=productConfig(i.product);
+  if(cfg.type==="bag")return `<button type="button" class="bagSizeMiniBtn" data-edit-size="${esc(i.id)}">Trocar tamanho</button>`;
+  return `<button type="button" class="iconMeasureBtn" data-customize="${esc(i.id)}" aria-label="Personalizar medidas" title="Personalizar medidas">Personalizar tamanho</button>`;
+}
 function itemLine(i){return `#${i.code}${i.qty>1?` (${i.qty} un.)`:""}`}
-function cartMarkup(){const r=cartRule(),rf=rule50(),can=cartQty()&&r.ok,gs=groups();return `<div class="cartTitle"><button class="closeCart" data-close-cart aria-label="Voltar para escolher artes">Voltar</button><h2>Seu orçamento</h2><span class="pill">${cartQty()} item(ns)</span></div>${LOCKED_SELLER?`<div class="seller sellerLocked"><label>Atendimento escolhido</label><p class="sellerHint">Sua seleção será enviada diretamente para <strong>${esc(SELLERS[LOCKED_SELLER].label)}</strong>.</p></div>`:`<div class="seller"><label>Escolha sua vendedora</label><p class="sellerHint">Selecione para quem você quer enviar sua seleção no WhatsApp.</p><div class="sellerOpts">${Object.entries(SELLERS).map(([key,profile])=>`<button class="sellerBtn ${seller===key?"active":""}" data-seller="${esc(key)}">${esc(profile.label)}</button>`).join("")}</div></div>`}${cartQty()?`<div class="discountCard"><span>10% OFF por aqui</span><strong>Você economiza ${money(discount())}</strong><small>O desconto já entra automaticamente no total antes de enviar para a vendedora. Quanto mais você escolhe por aqui, mais fácil fica finalizar seu pedido.</small></div>`:""}<div class="cartList">${gs.length?gs.map(g=>{const is50=g.product==="50x50";const ruleHtml=(is50&&rf&&rf.type!=="ok")?`<div class="ruleCard ${rf.type}"><b>${rf.title}</b>${rf.msg}</div>`:"";return `<section class="group ${is50?"group50":""}"><div class="groupHead"><b>${esc(g.label)} · ${g.qty} unidade(s)</b><span class="subtotal">${money(g.subtotal)}</span></div>${ruleHtml}<div class="codes"><strong>Tema(s):</strong> ${esc([...new Set(g.items.map(i=>i.theme))].join(", "))}</div>${g.items.map(i=>`<div class="cartItem" data-locate="${esc(i.id)}"><img class="cartThumb" src="${esc(i.image)}" alt="Arte #${esc(i.code)}" onerror="imageFail(this, '${esc(i.code)}')"><div class="cartInfo"><b>Código #${esc(i.code)}</b><span>${esc(i.theme)} · ${esc(i.productName)}</span><div class="qtyRow"><button class="qtyBtn" data-minus="${esc(i.id)}">−</button><span class="qtyCount">${i.qty} un.</span><button class="qtyBtn" data-plus="${esc(i.id)}">+</button></div><div class="findHint">Toque no item para encontrar essa arte.</div></div></div>`).join("")}</section>`}).join(""):`<div class="emptyCart"><b>Seu pedido ainda está vazio</b>Escolha um tema que combine com sua festa e adicione as artes que mais gostar. O desconto de 10% será aplicado automaticamente no final.</div>`}</div><div class="ruleCard ${r.ok?"":"warn"}">${esc(r.msg)}</div><div class="totalBox"><div class="totalLine"><span>Subtotal</span><strong>${money(gross())}</strong></div><div class="totalLine"><span>Desconto por aqui 10%</span><strong>- ${money(discount())}</strong></div><div class="total"><span>Total com desconto</span><strong>${money(total())}</strong></div><div class="actions"><a class="wa ${can?"":"disabled"}" href="${can?esc(waUrl()):"#"}" target="_blank" rel="noopener">Enviar pedido com 10% OFF</a><button class="clear" data-clear ${cartQty()?"":"disabled"}>Limpar carrinho</button></div></div>`}
-function renderCart(){$("cartDesk").innerHTML=cartMarkup();$("cartMob").innerHTML=cartMarkup();[$("cartDesk"),$("cartMob")].forEach(p=>{p.querySelectorAll("[data-seller]").forEach(b=>b.onclick=()=>{if(LOCKED_SELLER)return;seller=b.dataset.seller;save();renderCart()});p.querySelectorAll("[data-minus]").forEach(b=>b.onclick=e=>{e.stopPropagation();changeQty(b.dataset.minus,-1)});p.querySelectorAll("[data-plus]").forEach(b=>b.onclick=e=>{e.stopPropagation();changeQty(b.dataset.plus,1)});p.querySelectorAll("[data-locate]").forEach(b=>b.onclick=()=>locateItem(b.dataset.locate));p.querySelectorAll("[data-close-cart]").forEach(b=>b.onclick=()=>{$("drawerBg").classList.remove("show");$("drawer").classList.remove("show")});const cl=p.querySelector("[data-clear]");if(cl)cl.onclick=()=>{cart=[];save();if(view==="items"||view==="search")renderItems();renderCart();toast("Carrinho limpo.")}});$("barItems").textContent=`${cartQty()} item(ns)`;$("barTotal").textContent=money(total())}
+function cartMarkup(){const r=cartRule(),rf=rule50(),can=cartQty()&&r.ok,gs=groups();return `<div class="cartTitle"><button class="closeCart" data-close-cart aria-label="Voltar para escolher artes">Voltar</button><h2>Seu orçamento</h2><span class="pill">${cartQty()} item(ns)</span></div>${LOCKED_SELLER?`<div class="seller sellerLocked"><label>Atendimento escolhido</label><p class="sellerHint">Sua seleção será enviada diretamente para <strong>${esc(SELLERS[LOCKED_SELLER].label)}</strong>.</p></div>`:`<div class="seller"><label>Escolha sua vendedora</label><p class="sellerHint">Selecione para quem você quer enviar sua seleção no WhatsApp.</p><div class="sellerOpts">${Object.entries(SELLERS).map(([key,profile])=>`<button class="sellerBtn ${seller===key?"active":""}" data-seller="${esc(key)}">${esc(profile.label)}</button>`).join("")}</div></div>`}${cartQty()?`<div class="discountCard"><span>10% OFF por aqui</span><strong>Você economiza ${money(discount())}</strong><small>O desconto já entra automaticamente no total antes de enviar para a vendedora. Quanto mais você escolhe por aqui, mais fácil fica finalizar seu pedido.</small></div>`:""}<div class="cartList">${gs.length?gs.map(g=>{const is50=g.product==="50x50";const ruleHtml=(is50&&rf&&rf.type!=="ok")?`<div class="ruleCard ${rf.type}"><b>${rf.title}</b>${rf.msg}</div>`:"";return `<section class="group ${is50?"group50":""}"><div class="groupHead"><b>${esc(g.label)} · ${g.qty} unidade(s)</b><span class="subtotal">${money(g.subtotal)}</span></div>${ruleHtml}<div class="codes"><strong>Tema(s):</strong> ${esc([...new Set(g.items.map(i=>i.theme))].join(", "))}</div>${g.items.map(i=>`<div class="cartItem" data-locate="${esc(i.id)}"><img class="cartThumb" src="${esc(i.image)}" alt="Arte #${esc(i.code)}" onerror="imageFail(this, '${esc(i.code)}')"><div class="cartInfo"><div class="cartItemTop"><b>Código #${esc(i.code)}</b>${itemActionButton(i)}</div><span>${esc(i.theme)} · ${esc(i.productName)}</span><div class="qtyRow"><button class="qtyBtn" data-minus="${esc(i.id)}">−</button><span class="qtyCount">${i.qty} un.</span><button class="qtyBtn" data-plus="${esc(i.id)}">+</button></div><div class="findHint">Toque no item para encontrar essa arte.</div>${measureFields(i)}</div></div>`).join("")}</section>`}).join(""):`<div class="emptyCart"><b>Seu pedido ainda está vazio</b>Escolha um tema que combine com sua festa e adicione as artes que mais gostar. O desconto de 10% será aplicado automaticamente no final.</div>`}</div>${customNoticeHtml()}<div class="ruleCard ${r.ok?"":"warn"}">${esc(r.msg)}</div><div class="totalBox"><div class="totalLine"><span>Subtotal</span><strong>${money(gross())}</strong></div><div class="totalLine"><span>Desconto por aqui 10%</span><strong>- ${money(discount())}</strong></div><div class="total"><span>Total com desconto</span><strong>${money(total())}</strong></div><div class="actions"><a class="wa ${can?"":"disabled"}" href="${can?esc(waUrl()):"#"}" target="_blank" rel="noopener">Enviar pedido com 10% OFF</a><button class="clear" data-clear ${cartQty()?"":"disabled"}>Limpar carrinho</button></div></div>`}
+function renderCart(){$("cartDesk").innerHTML=cartMarkup();$("cartMob").innerHTML=cartMarkup();[$("cartDesk"),$("cartMob")].forEach(p=>{p.querySelectorAll("[data-seller]").forEach(b=>b.onclick=()=>{if(LOCKED_SELLER)return;seller=b.dataset.seller;save();renderCart()});p.querySelectorAll(".measureOpen,.measureBox,.measureClosed,.cmInput").forEach(el=>el.addEventListener("click",e=>e.stopPropagation()));p.querySelectorAll(".cmInput input").forEach(inp=>{inp.addEventListener("click",e=>e.stopPropagation());inp.addEventListener("input",()=>{inp.value=inp.value.replace(/[^0-9,.]/g,"")})});p.querySelectorAll("[data-detail]").forEach(el=>{const apply=()=>{const val=el.dataset.check?el.checked:(el.dataset.value||el.value);setDetail(el.dataset.detail,el.dataset.path,val)};if(el.tagName==="BUTTON")el.addEventListener("click",apply);else{el.addEventListener("input",()=>{el.value=el.value.replace(/[^0-9,.]/g,"");updateDetailDraft(el.dataset.detail,el.dataset.path,el.value)});el.addEventListener("change",()=>updateDetailDraft(el.dataset.detail,el.dataset.path,el.value))}});p.querySelectorAll("[data-custom-notice]").forEach(el=>el.onchange=()=>{setCustomNoticeAccepted(el.checked);renderCart()});p.querySelectorAll("[data-customize]").forEach(b=>b.onclick=e=>{e.stopPropagation();const item=cart.find(x=>x.id===b.dataset.customize);if(item){ensureDetails(item);item.details.customizing=true;item.details._draft=JSON.stringify(item.details);save();renderCart()}});p.querySelectorAll("[data-edit-size]").forEach(b=>b.onclick=e=>{e.stopPropagation();const item=cart.find(x=>x.id===b.dataset.editSize);if(item){ensureDetails(item);item.details.editingSize=true;save();renderCart()}});
+p.querySelectorAll("[data-save-measure]").forEach(b=>b.onclick=e=>{e.stopPropagation();const item=cart.find(x=>x.id===b.dataset.saveMeasure);if(item){ensureDetails(item);const rule=requiredCustomValid(item);if(!rule.ok){toast(rule.msg);return}item.details.customizing=false;if(rule.standard){item.details.customized=false;item.details.unknown=false}else item.details.customized=true;delete item.details._draft;save();renderCart();toast(rule.standard?"Medida padrão mantida.":"Medidas salvas.")}});p.querySelectorAll("[data-cancel-measure]").forEach(b=>b.onclick=e=>{e.stopPropagation();const item=cart.find(x=>x.id===b.dataset.cancelMeasure);if(item){ensureDetails(item);if(item.details._draft){try{item.details=JSON.parse(item.details._draft)}catch(err){}}item.details.customizing=false;delete item.details._draft;save();renderCart()}});p.querySelectorAll("[data-minus]").forEach(b=>b.onclick=e=>{e.stopPropagation();changeQty(b.dataset.minus,-1)});p.querySelectorAll("[data-plus]").forEach(b=>b.onclick=e=>{e.stopPropagation();changeQty(b.dataset.plus,1)});p.querySelectorAll("[data-locate]").forEach(b=>b.onclick=()=>locateItem(b.dataset.locate));p.querySelectorAll("[data-close-cart]").forEach(b=>b.onclick=()=>{$("drawerBg").classList.remove("show");$("drawer").classList.remove("show")});const cl=p.querySelector("[data-clear]");if(cl)cl.onclick=()=>{cart=[];save();if(view==="items"||view==="search")renderItems();renderCart();toast("Carrinho limpo.")}});$("barItems").textContent=`${cartQty()} item(ns)`;$("barTotal").textContent=money(total())}
 async function locateItem(id){const it=entry(id);if(!it)return;try{$("drawerBg").classList.remove("show");$("drawer").classList.remove("show");selectedTheme={id:it.themeId||"",name:(it.theme||"Tema").split(" / ")[0]||it.theme||"Tema"};folderTrail=[];selectedProduct={id:it.productFolderId,product:it.product,productName:it.productName,name:it.productName,kind:"product"};view="items";loading("Encontrando sua arte.","arts");const d=await api({mode:"items",folderId:selectedProduct.id,theme:it.theme,product:selectedProduct.rawName||selectedProduct.name||selectedProduct.productName});items=d.items||[];renderItems();setTimeout(()=>{const el=document.querySelector(`[data-card="${CSS.escape(id)}"]`);if(el){el.scrollIntoView({behavior:"smooth",block:"center"});el.classList.add("located");setTimeout(()=>el.classList.remove("located"),1900)}},80)}catch(e){toast("Não consegui voltar para essa arte agora.")}}
-function waMsg(){const s=SELLERS[seller]||SELLERS[LOCKED_SELLER]||SELLERS.ana;const lines=[`Oi, ${s.label}! Escolhi minhas artes por aqui na página da Armazém e vi que minha seleção ganha 10% OFF.`,"",`Deixei tudo separadinho abaixo para você conferir comigo:`];groups().forEach(g=>{lines.push("",`• ${g.label}`,`Tema(s): ${[...new Set(g.items.map(i=>i.theme))].join(", ")}`,`Artes: ${g.items.map(itemLine).join(", ")}`,`Quantidade: ${g.qty}`,`Subtotal: ${money(g.subtotal)}`)});lines.push("",`Subtotal: ${money(gross())}`,`Desconto por aqui 10%: - ${money(discount())}`,`Total com desconto: ${money(total())}`,"",`Pode conferir as artes e me ajudar a finalizar o pedido, por favor?`);return lines.join("\n")}
+function waMsg(){
+  const s=SELLERS[seller]||SELLERS[LOCKED_SELLER]||SELLERS.ana;
+  const lines=[`Oi, ${s.label}! Separei minhas artes por aqui e quero finalizar minha seleção.`,"","Minha seleção:"];
+  groups().forEach(g=>{lines.push("");lines.push(`${g.label}`);lines.push(`Tema(s): ${[...new Set(g.items.map(i=>i.theme))].join(", ")}`);g.items.forEach(i=>{lines.push(`• Arte #${i.code}${i.qty>1?` (${i.qty} un.)`:""}`);const det=detailsForWhatsApp(i);if(det)lines.push(det)})});
+  if(hasCustomizedItems()){lines.push("");lines.push("Observação: há medida personalizada nesta seleção.")}
+  lines.push("");lines.push("Pode conferir para mim e me ajudar a finalizar?");
+  return lines.join("\n");
+}
 function waUrl(){if(!seller)return"#";const s=SELLERS[seller]||SELLERS[LOCKED_SELLER];return s?`https://wa.me/${s.phone}?text=${encodeURIComponent(waMsg())}`:"#"}
-function openPreview(id){const i=items.find(x=>x.id===id)||cart.find(x=>x.id===id);if(!i)return;prev=i;$("prevImg").onerror=function(){imageFail(this,i.code)};$("prevImg").src=i.image;$("prevCode").textContent="#"+i.code;$("prevTitle").textContent="Código #"+i.code;$("prevMeta").innerHTML=`<span class="mini">${esc(i.theme)}</span><span class="mini">${esc(i.productName)}</span>`;$("prevSelect").textContent=entry(i.id)?"Adicionar 1 unidade":"Adicionar arte";$("prevFav").textContent=favs.has(i.id)?"Remover favorita":"Favoritar";$("modalBg").classList.add("show");$("modal").classList.add("show")}
+function openPreview(id){const i=items.find(x=>x.id===id)||cart.find(x=>x.id===id);if(!i)return;prev=i;$("prevImg").onerror=function(){imageFail(this,i.code)};$("prevImg").src=i.image;$("prevCode").textContent="#"+i.code;$("prevTitle").textContent="Código #"+i.code;$("prevMeta").innerHTML=`<span class="mini">${esc(i.theme)}</span><span class="mini">${esc(i.product==="sacolinha"&&i.details&&i.details.size?`Sacolinha ${i.details.size}`:i.productName)}</span>`;$("prevSelect").textContent=entry(i.id)?"Adicionar 1 unidade":"Adicionar arte";$("prevFav").textContent=favs.has(i.id)?"Remover favorita":"Favoritar";$("modalBg").classList.add("show");$("modal").classList.add("show")}
 function closePreview(){$("modalBg").classList.remove("show");$("modal").classList.remove("show");prev=null}
 function toast(msg){const e=$("toast");e.textContent=msg;e.classList.add("show");clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove("show"),1900)}
-$("search").oninput=()=>{clearTimeout(searchTimer);const q=$("search").value.trim();const code=q.replace(/\D/g,"");if((view==="themes"||view==="products"||view==="search"||view==="folderSearch")&&code.length>=2){searchTimer=setTimeout(()=>globalCodeSearch(code),360);return}if((view==="themes"||view==="products"||view==="folderSearch"||view==="search")&&q.length>=2){searchTimer=setTimeout(()=>globalFolderSearch(q),420);return}if((view==="search"||view==="folderSearch")&&q.length===0){loadThemes();return}if(view==="themes")showThemes();else if(view==="products")showProducts();else if(view==="items")renderItems()};$("openCart").onclick=()=>{$("drawerBg").classList.add("show");$("drawer").classList.add("show")};$("drawerBg").onclick=()=>{$("drawerBg").classList.remove("show");$("drawer").classList.remove("show")};$("modalBg").onclick=closePreview;$("prevClose").onclick=closePreview;$("prevSelect").onclick=()=>{if(prev)addItem(prev.id);closePreview()};$("prevFav").onclick=()=>{if(prev)toggleFav(prev.id);closePreview()};$("favToggle").onclick=()=>{showFavs=!showFavs;renderItems()};$("addFavs").onclick=addFavorites;
+$("search").oninput=()=>{clearTimeout(searchTimer);const q=$("search").value.trim();const code=q.replace(/\D/g,"");if((view==="themes"||view==="products"||view==="search"||view==="folderSearch")&&code.length>=2){searchTimer=setTimeout(()=>globalCodeSearch(code),360);return}if((view==="themes"||view==="products"||view==="folderSearch"||view==="search")&&q.length>=2){if(view==="themes")showThemes();else if(view==="products")showProducts();searchTimer=setTimeout(()=>globalFolderSearch(q),520);return}if((view==="search"||view==="folderSearch")&&q.length===0){loadThemes();return}if(view==="themes")showThemes();else if(view==="products")showProducts();else if(view==="items")renderItems()};$("openCart").onclick=()=>{$("drawerBg").classList.add("show");$("drawer").classList.add("show")};$("drawerBg").onclick=()=>{$("drawerBg").classList.remove("show");$("drawer").classList.remove("show")};$("modalBg").onclick=closePreview;$("prevClose").onclick=closePreview;$("prevSelect").onclick=()=>{if(prev)addItem(prev.id);closePreview()};$("prevFav").onclick=()=>{if(prev)toggleFav(prev.id);closePreview()};$("favToggle").onclick=()=>{showFavs=!showFavs;$("search").value="";renderItems()};$("addFavs").onclick=addFavorites;
 restore();renderCart();loadThemes();
 </script>
+
+<script>
+document.addEventListener("DOMContentLoaded",()=>{
+  function neutralFavoriteButtons(){
+    document.querySelectorAll("button").forEach(btn=>{
+      const t=(btn.textContent||"").trim().toLowerCase();
+      if(t==="ver favoritas" || t==="adicionar favoritas"){
+        btn.classList.add("favoriteNeutral");
+        btn.style.background="#fff";
+        btn.style.borderColor="#eadfe3";
+        btn.style.color="#625a62";
+        btn.style.boxShadow="none";
+      }
+    });
+  }
+  neutralFavoriteButtons();
+  new MutationObserver(neutralFavoriteButtons).observe(document.body,{childList:true,subtree:true});
+});
+</script>
+
 </body>
 </html>
