@@ -34,8 +34,11 @@ export async function onRequestGet(context) {
 
     if (mode === "products") {
       const folders = (await listChildren(folderId, apiKey)).filter(f => f.mimeType === FOLDER_MIME).map(f => {
+        const rawLabel = cleanLabel(f.name);
         const product = normalizeProduct(f.name);
-        return { id:f.id, name: productLabel(product), rawName:f.name, product, productName: productLabel(product) };
+        // A categoria exibida deve respeitar exatamente o nome da subpasta do Drive.
+        // O `product` normalizado fica apenas para preço/regras internas.
+        return { id:f.id, name: rawLabel, rawName:f.name, product, productName: rawLabel };
       });
       folders.sort((a,b)=>productOrder(a.product)-productOrder(b.product) || a.name.localeCompare(b.name,"pt-BR"));
       return json({ ok:true, mode, theme, folders }, 200, 180);
@@ -44,13 +47,20 @@ export async function onRequestGet(context) {
     if (mode === "items") {
       const files = (await listChildren(folderId, apiKey)).filter(f => String(f.mimeType||"").startsWith("image/"));
       const product = normalizeProduct(productRaw);
-      const productName = productLabel(product);
+      // Mostra o nome da subpasta original do Drive; usa o normalizado só para regra/preço.
+      const productName = cleanLabel(productRaw) || productLabel(product);
       const items = files.map(f => {
         const code = cleanCode(f.name);
         const image = `https://drive.google.com/thumbnail?id=${encodeURIComponent(f.id)}&sz=w1200`;
         return { id:f.id, code, sortId:Number(code)||0, theme: theme || "Sem tema", product, productName, themeId:"", productFolderId:folderId, image, thumbnail:image, driveUrl:f.webViewLink || `https://drive.google.com/file/d/${f.id}/view` };
       }).filter(i=>i.code).sort((a,b)=>(Number(b.sortId)||0)-(Number(a.sortId)||0));
       return json({ ok:true, mode, theme, product, productName, total:items.length, items }, 200, 120);
+    }
+
+
+    if (mode === "taxonomy") {
+      const taxonomy = await buildTaxonomy(apiKey, folderId);
+      return json({ ok:true, mode, rootFolderId: folderId, ...taxonomy }, 200, 60);
     }
 
     if (mode === "search") {
@@ -63,6 +73,47 @@ export async function onRequestGet(context) {
   } catch (error) {
     return json({ ok:false, error:"FALHA_AO_LER_DRIVE", detail:String(error && error.message || error) }, 500);
   }
+}
+
+
+async function buildTaxonomy(apiKey, rootFolderId) {
+  const themeFolders = (await listChildren(rootFolderId, apiKey))
+    .filter(f => f.mimeType === FOLDER_MIME)
+    .sort((a,b)=>cleanLabel(a.name).localeCompare(cleanLabel(b.name),"pt-BR"));
+
+  const themes = [];
+  const allProducts = [];
+  const seenProducts = new Map();
+
+  for (const theme of themeFolders) {
+    const productFolders = (await listChildren(theme.id, apiKey))
+      .filter(f => f.mimeType === FOLDER_MIME)
+      .map(f => {
+        const original = cleanLabel(f.name);
+        const key = normalizeProduct(f.name);
+        const normalized = productLabel(key);
+        const row = { id: f.id, original, normalized, key };
+        const mapKey = `${normalizeText(original)}|${key}`;
+        if (!seenProducts.has(mapKey)) {
+          seenProducts.set(mapKey, { original, normalized, key, examples: [] });
+        }
+        const existing = seenProducts.get(mapKey);
+        if (existing.examples.length < 6) existing.examples.push(cleanLabel(theme.name));
+        return row;
+      })
+      .sort((a,b)=>productOrder(a.key)-productOrder(b.key) || a.original.localeCompare(b.original,"pt-BR"));
+
+    themes.push({
+      id: theme.id,
+      theme: cleanLabel(theme.name),
+      rawTheme: theme.name,
+      products: productFolders
+    });
+  }
+
+  for (const value of seenProducts.values()) allProducts.push(value);
+  allProducts.sort((a,b)=>productOrder(a.key)-productOrder(b.key) || a.original.localeCompare(b.original,"pt-BR"));
+  return { themesCount: themes.length, productsCount: allProducts.length, products: allProducts, themes };
 }
 
 async function listChildren(folderId, apiKey) {
@@ -115,6 +166,7 @@ async function searchByCode(code, apiKey) {
       const rootId = themeFolder && themeFolder.parents && themeFolder.parents[0];
       if (rootId && rootId !== ROOT_FOLDER_ID) continue;
     } catch (_) {}
+    const rawProductName = productFolder ? cleanLabel(productFolder.name) : "Produto";
     const product = normalizeProduct(productFolder ? productFolder.name : "produto");
     const image = `https://drive.google.com/thumbnail?id=${encodeURIComponent(f.id)}&sz=w1200`;
     out.push({
@@ -124,7 +176,7 @@ async function searchByCode(code, apiKey) {
       theme: themeFolder ? cleanLabel(themeFolder.name) : "Tema",
       themeId: themeFolder ? themeFolder.id : "",
       product,
-      productName: productLabel(product),
+      productName: rawProductName,
       productFolderId,
       image,
       thumbnail: image,
@@ -143,11 +195,18 @@ async function getFile(fileId, apiKey) {
 }
 
 function normalizeProduct(value) {
-  const s = normalizeText(value);
+  const s = normalizeDimensionText(normalizeText(value));
   for (const [key, aliases] of PRODUCT_ALIASES) {
-    if (aliases.some(alias => s.includes(normalizeText(alias)))) return key;
+    if (aliases.some(alias => s.includes(normalizeDimensionText(normalizeText(alias))))) return key;
   }
   return "produto";
+}
+function normalizeDimensionText(value) {
+  return String(value || "")
+    .replace(/1[,.]50/g, "150")
+    .replace(/1[,.]5/g, "150")
+    .replace(/150\s*[x×]\s*150/g, "150")
+    .replace(/159\s*[x×]\s*150/g, "159");
 }
 function productLabel(key) {
   return ({"50x50":"Bolinhas 50x50","painel-150":"Painel 150x150","cenario":"Cenário","lateral":"Lateral","sacolinha":"Sacolinha de Festa","cilindros":"Cilindros","romano":"Romano","kit-romano":"Kit + Romano","kit-painel-cilindros":"Kit Painel + Cilindros"})[key] || cleanLabel(key || "Produto");
