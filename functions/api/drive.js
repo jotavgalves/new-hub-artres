@@ -1,16 +1,27 @@
 const ROOT_FOLDER_ID = "193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae";
 const DRIVE_API = "https://www.googleapis.com/drive/v3/files";
 const FOLDER_MIME = "application/vnd.google-apps.folder";
+
+// Configuração central do novo Drive de Bolinhas.
+// Para alterar preço/nome depois, mexa aqui e no BOLINHAS_CONFIG do functions/_middleware.js.
+const BOLINHAS_LABEL = "Bolinhas";
+const BOLINHAS_PRODUCT_KEY = "50x50";
+const BOLINHAS_UNIT_PRICE = 9.75;
+const BOLINHAS_PRICE_LABEL = "R$ 9,75 cada";
+
 const BOLINHAS_PRODUCT = {
   id: "bolinhas",
-  name: "Bolinhas",
-  rawName: "Bolinhas",
+  name: BOLINHAS_LABEL,
+  rawName: BOLINHAS_LABEL,
   kind: "product",
-  product: "50x50",
-  productName: "Bolinhas",
-  label: "Bolinhas",
-  unitPrice: 9.75,
-  price: 9.75,
+  product: BOLINHAS_PRODUCT_KEY,
+  productName: BOLINHAS_LABEL,
+  label: BOLINHAS_LABEL,
+  unitPrice: BOLINHAS_UNIT_PRICE,
+  price: BOLINHAS_UNIT_PRICE,
+  priceLabel: BOLINHAS_PRICE_LABEL,
+  directItems: true,
+  skipProductsStep: true,
   disableCustomization: true,
   customizationDisabled: true,
   allowCustomSize: false,
@@ -63,7 +74,7 @@ export async function onRequestGet(context) {
         .map(f => itemFromFile(f, { folderId, theme }))
         .filter(i => i.code)
         .sort((a,b)=>(Number(b.sortId)||0)-(Number(a.sortId)||0));
-      return json({ ok:true, mode, theme, product:"50x50", productName:"Bolinhas", total:items.length, items }, 200, 120);
+      return json({ ok:true, mode, theme, product:BOLINHAS_PRODUCT_KEY, productName:BOLINHAS_LABEL, total:items.length, items }, 200, 120);
     }
 
     if (mode === "search") {
@@ -192,9 +203,9 @@ function itemFromFile(file, { folderId, theme }) {
     code:parsed.code,
     sortId:Number(parsed.code)||0,
     theme:parsed.theme || theme || "Sem tema",
-    product:"50x50",
-    productName:"Bolinhas",
-    productLabel:"Bolinhas",
+    product:BOLINHAS_PRODUCT_KEY,
+    productName:BOLINHAS_LABEL,
+    productLabel:BOLINHAS_LABEL,
     size:parsed.dimension || "50x50",
     dimension:parsed.dimension || "50x50",
     embeddedTheme:parsed.theme,
@@ -205,9 +216,9 @@ function itemFromFile(file, { folderId, theme }) {
     image,
     thumbnail:image,
     driveUrl:file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`,
-    unitPrice:9.75,
-    price:9.75,
-    priceLabel:"R$ 9,75 cada",
+    unitPrice:BOLINHAS_UNIT_PRICE,
+    price:BOLINHAS_UNIT_PRICE,
+    priceLabel:BOLINHAS_PRICE_LABEL,
     disableCustomization:true,
     customizationDisabled:true,
     allowCustomSize:false,
