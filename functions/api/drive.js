@@ -1,6 +1,21 @@
-const ROOT_FOLDER_ID = "11cU5yMWafopC0JfMHotRxThpkgbQl-RW";
+const ROOT_FOLDER_ID = "193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae";
 const DRIVE_API = "https://www.googleapis.com/drive/v3/files";
 const FOLDER_MIME = "application/vnd.google-apps.folder";
+const BOLINHAS_PRODUCT = {
+  id: "bolinhas",
+  name: "Bolinhas",
+  rawName: "Bolinhas",
+  kind: "product",
+  product: "50x50",
+  productName: "Bolinhas",
+  label: "Bolinhas",
+  unitPrice: 9.75,
+  price: 9.75,
+  disableCustomization: true,
+  customizationDisabled: true,
+  allowCustomSize: false,
+  canCustomize: false
+};
 
 export async function onRequestGet(context) {
   try {
@@ -11,7 +26,6 @@ export async function onRequestGet(context) {
     const mode = String(url.searchParams.get("mode") || "themes");
     const folderId = sanitizeId(url.searchParams.get("folderId")) || ROOT_FOLDER_ID;
     const theme = cleanLabel(url.searchParams.get("theme") || "");
-    const productRaw = cleanLabel(url.searchParams.get("product") || "");
     const searchCode = String(url.searchParams.get("code") || "").replace(/\D/g, "").slice(0, 20);
 
     if (mode === "themes") {
@@ -23,60 +37,33 @@ export async function onRequestGet(context) {
     }
 
     if (mode === "products") {
-      const children = (await listChildren(folderId, apiKey)).filter(f => f.mimeType === FOLDER_MIME);
-      const folders = children.map(f => {
-        const info = normalizeProductInfo(f.name);
-        if (info.key === "folder") {
-          return {
-            id:f.id,
-            name:cleanLabel(f.name),
-            rawName:f.name,
-            kind:"folder",
-            product:"",
-            productName:"",
-            label:cleanLabel(f.name)
-          };
-        }
-        return {
+      const children = await listChildren(folderId, apiKey);
+      const folders = children
+        .filter(f => f.mimeType === FOLDER_MIME)
+        .map(f => ({
           id:f.id,
           name:cleanLabel(f.name),
           rawName:f.name,
-          kind:"product",
-          product:info.key,
-          productName:info.label,
-          label:info.label
-        };
-      });
-      folders.sort((a,b)=>{
-        if (a.kind !== b.kind) return a.kind === "folder" ? -1 : 1;
-        return productOrder(a.product)-productOrder(b.product) || a.name.localeCompare(b.name,"pt-BR", { numeric:true });
-      });
+          kind:"folder",
+          product:"",
+          productName:"",
+          label:cleanLabel(f.name)
+        }))
+        .sort((a,b)=>a.name.localeCompare(b.name,"pt-BR", { numeric:true }));
+
+      const hasImagesHere = children.some(f => String(f.mimeType || "").startsWith("image/"));
+      if (hasImagesHere) folders.push({ ...BOLINHAS_PRODUCT, id:folderId });
+
       return json({ ok:true, mode, theme, folders }, 200, 180);
     }
 
     if (mode === "items") {
       const files = (await listChildren(folderId, apiKey)).filter(f => String(f.mimeType||"").startsWith("image/"));
-      const productInfo = normalizeProductInfo(productRaw);
-      const product = productInfo.key === "folder" ? "produto" : productInfo.key;
-      const productName = productInfo.key === "folder" ? cleanLabel(productRaw || "Produto") : productInfo.label;
-      const items = files.map(f => {
-        const code = cleanCode(f.name);
-        const image = `https://drive.google.com/thumbnail?id=${encodeURIComponent(f.id)}&sz=w1200`;
-        return {
-          id:f.id,
-          code,
-          sortId:Number(code)||0,
-          theme: theme || "Sem tema",
-          product,
-          productName,
-          themeId:"",
-          productFolderId:folderId,
-          image,
-          thumbnail:image,
-          driveUrl:f.webViewLink || `https://drive.google.com/file/d/${f.id}/view`
-        };
-      }).filter(i=>i.code).sort((a,b)=>(Number(b.sortId)||0)-(Number(a.sortId)||0));
-      return json({ ok:true, mode, theme, product, productName, total:items.length, items }, 200, 120);
+      const items = files
+        .map(f => itemFromFile(f, { folderId, theme }))
+        .filter(i => i.code)
+        .sort((a,b)=>(Number(b.sortId)||0)-(Number(a.sortId)||0));
+      return json({ ok:true, mode, theme, product:"50x50", productName:"Bolinhas", total:items.length, items }, 200, 120);
     }
 
     if (mode === "search") {
@@ -141,18 +128,15 @@ async function searchFolders(query, apiKey) {
       const belowRoot = ancestry.slice(rootIndex + 1);
       if (!belowRoot.length) continue;
       const themeFolder = belowRoot[0];
-      const selfInfo = normalizeProductInfo(f.name);
-      const kind = selfInfo.key === "folder" ? "folder" : "product";
       const parentTrail = belowRoot.slice(1, Math.max(1, belowRoot.length - 1)).map(x => ({ id:x.id, name:cleanLabel(x.name), kind:"folder" }));
-      const label = kind === "product" ? selfInfo.label : cleanLabel(f.name);
       out.push({
         id:f.id,
         name:cleanLabel(f.name),
         rawName:f.name,
-        label,
-        kind,
-        product: kind === "product" ? selfInfo.key : "",
-        productName: kind === "product" ? selfInfo.label : "",
+        label:cleanLabel(f.name),
+        kind:"folder",
+        product:"",
+        productName:"",
         theme: cleanLabel(themeFolder.name),
         themeId: themeFolder.id,
         trail: parentTrail,
@@ -162,10 +146,7 @@ async function searchFolders(query, apiKey) {
     if (out.length >= 30) break;
   }
 
-  return out.sort((a,b)=>{
-    if (a.kind !== b.kind) return a.kind === "folder" ? -1 : 1;
-    return a.path.localeCompare(b.path, "pt-BR", { numeric:true });
-  });
+  return out.sort((a,b)=>a.path.localeCompare(b.path, "pt-BR", { numeric:true }));
 }
 
 async function searchByCode(code, apiKey) {
@@ -175,58 +156,77 @@ async function searchByCode(code, apiKey) {
     key: apiKey,
     q: `name contains '${safeCode}' and trashed = false and mimeType contains 'image/'`,
     fields: "files(id,name,mimeType,webViewLink,parents)",
-    pageSize: "24",
+    pageSize: "40",
     orderBy: "name_natural"
   });
   const response = await fetch(`${DRIVE_API}?${params.toString()}`, { headers: { Accept: "application/json" } });
   if (!response.ok) throw new Error(`Drive API ${response.status}`);
   const data = await response.json();
-  const files = data.files || [];
   const out = [];
 
-  for (const f of files) {
-    const artCode = cleanCode(f.name);
-    if (!artCode.includes(safeCode)) continue;
+  for (const f of (data.files || [])) {
+    const parsed = parseArtFilename(f.name);
+    const artCode = parsed.code;
+    if (!artCode || !artCode.includes(safeCode)) continue;
 
-    const ancestry = await buildAncestry((f.parents && f.parents[0]) || "", apiKey);
+    const parentId = (f.parents && f.parents[0]) || "";
+    const ancestry = await buildAncestry(parentId, apiKey);
     const rootIndex = ancestry.findIndex(a => a.id === ROOT_FOLDER_ID);
     if (rootIndex === -1) continue;
 
     const belowRoot = ancestry.slice(rootIndex + 1);
     if (!belowRoot.length) continue;
+    const themeLabel = parsed.theme || belowRoot.map(x => cleanLabel(x.name)).join(" / ") || "Sem tema";
 
-    let productFolder = null;
-    for (let i = belowRoot.length - 1; i >= 0; i--) {
-      const info = normalizeProductInfo(belowRoot[i].name);
-      if (info.key !== "folder") {
-        productFolder = { ...belowRoot[i], info };
-        break;
-      }
-    }
-    if (!productFolder) continue;
-
-    const themeFolder = belowRoot[0];
-    const productIndex = belowRoot.findIndex(x => x.id === productFolder.id);
-    const pathParts = belowRoot.slice(0, Math.max(productIndex, 1)).map(x => cleanLabel(x.name));
-    const themeLabel = pathParts.length ? pathParts.join(" / ") : cleanLabel(themeFolder.name);
-
-    const image = `https://drive.google.com/thumbnail?id=${encodeURIComponent(f.id)}&sz=w1200`;
-    out.push({
-      id: f.id,
-      code: artCode,
-      sortId: Number(artCode) || 0,
-      theme: themeLabel,
-      themeId: themeFolder.id,
-      product: productFolder.info.key,
-      productName: productFolder.info.label,
-      productFolderId: productFolder.id,
-      image,
-      thumbnail: image,
-      driveUrl: f.webViewLink || `https://drive.google.com/file/d/${f.id}/view`
-    });
+    out.push(itemFromFile(f, { folderId: parentId, theme: themeLabel }));
     if (out.length >= 24) break;
   }
   return out.sort((a,b)=>(Number(b.sortId)||0)-(Number(a.sortId)||0));
+}
+
+function itemFromFile(file, { folderId, theme }) {
+  const parsed = parseArtFilename(file.name);
+  const image = `https://drive.google.com/thumbnail?id=${encodeURIComponent(file.id)}&sz=w1200`;
+  return {
+    id:file.id,
+    code:parsed.code,
+    sortId:Number(parsed.code)||0,
+    theme:parsed.theme || theme || "Sem tema",
+    product:"50x50",
+    productName:"Bolinhas",
+    productLabel:"Bolinhas",
+    size:parsed.dimension || "50x50",
+    dimension:parsed.dimension || "50x50",
+    embeddedTheme:parsed.theme,
+    embeddedProduct:parsed.productRaw,
+    originalName:file.name,
+    themeId:"",
+    productFolderId:folderId,
+    image,
+    thumbnail:image,
+    driveUrl:file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`,
+    unitPrice:9.75,
+    price:9.75,
+    priceLabel:"R$ 9,75 cada",
+    disableCustomization:true,
+    customizationDisabled:true,
+    allowCustomSize:false,
+    canCustomize:false,
+    measureDisabled:true
+  };
+}
+
+function parseArtFilename(value) {
+  const base = String(value || "").replace(/\.[^.]+$/, "").trim();
+  const parts = base.split("_").map(part => part.trim()).filter(Boolean);
+  const leadingId = base.match(/^\s*(\d{1,20})(?:[_\-\s]|$)/);
+  const code = leadingId ? leadingId[1] : cleanCode(base);
+  return {
+    code,
+    theme: cleanLabel(parts[1] || ""),
+    productRaw: cleanLabel(parts[2] || ""),
+    dimension: normalizeDimension(parts.slice(3).join(" "))
+  };
 }
 
 async function buildAncestry(startFolderId, apiKey) {
@@ -249,85 +249,38 @@ async function getFile(fileId, apiKey) {
   return response.json();
 }
 
-function normalizeProductInfo(value) {
-  const raw = String(value || "").trim();
-  const s0 = normalizeText(raw);
-  const s = s0
-    .replaceAll("ciclindros", "cilindros")
-    .replaceAll("cilnidros", "cilindros")
-    .replaceAll("cilindos", "cilindros")
-    .replaceAll("cilidros", "cilindros")
-    .replaceAll("cilidro", "cilindro")
-    .replaceAll("rendondo", "redondo")
-    .replaceAll("redond ", "redondo ")
-    .replaceAll("redonodo", "redondo")
-    .replaceAll("rerdondo", "redondo")
-    .replaceAll("reatngular", "retangular")
-    .replaceAll("sacoclinhas", "sacolinhas")
-    .replaceAll("sacolnhas", "sacolinhas")
-    .replaceAll("kir", "kit")
-    .replace(/\s*\+\s*/g, " + ");
-
-  const hasRomano = s.includes("romano") || s.includes("arco romano");
-  const hasCilindros = s.includes("cilindro");
-  const hasKit = s.includes("kit");
-  const hasLateral = s.includes("lateral");
-  const hasRedondo = s.includes("redondo") || s.includes("painel redondo");
-  const hasRetangular = s.includes("retangular");
-  const is50 = /\b0[\.,]50\b/.test(s) || /\b50\s*x\s*50\b/.test(s) || /\b50x50\b/.test(s) || s.includes("painel 50") || s === "50";
-  const is150 = /\b1[\.,]5\b/.test(s) || /\b1[\.,]50\b/.test(s) || /\b150\s*x\s*150\b/.test(s) || /\b150x150\b/.test(s) || /\b150\b/.test(s) || s.includes("painel 150") || /\b159\s*x\s*150\b/.test(s) || /\b159\b/.test(s);
-
-  if (hasKit && hasRomano) return { key:"kit-romano", label:"Kit + Romano" };
-  if ((hasKit && hasCilindros) || (hasRedondo && hasCilindros)) return { key:"kit-painel-cilindros", label:"Kit Painel + Cilindros" };
-  if (hasCilindros && hasRomano) return { key:"kit-romano", label:"Kit + Romano" };
-  if (hasCilindros && hasLateral) return { key:"kit-painel-cilindros", label:"Kit Painel + Cilindros" };
-  if (hasRomano && hasLateral) return { key:"romano-lateral", label:"Romano + Lateral" };
-  if (is50 && (hasRedondo || s.includes("bolinha") || s.includes("painel"))) return { key:"50x50", label:"Bolinhas 50x50" };
-  if (is150 && (hasRedondo || s.includes("painel") || s === "150" || s === "1,50" || s === "1.50")) return { key:"painel-150", label:"Painel 150x150" };
-  if (hasCilindros) return { key:"cilindros", label:"Cilindros" };
-  if (hasRomano) return { key:"romano", label:"Romano" };
-  if (hasLateral) return { key:"lateral", label:"Lateral" };
-  if (s.includes("cenario") || s.includes("paisagem") || s.includes("horizontal")) return { key:"cenario", label:"Cenário" };
-  if (hasRetangular || s.includes("vertical") || s.includes("retrato")) return { key:"lateral", label:"Lateral" };
-  if (s.includes("sacolinha") || s.includes("sacolinhas") || s.includes("sacola") || s.includes("sacolas")) return { key:"sacolinha", label:"Sacolinha de Festa" };
-  if (hasRedondo && is150) return { key:"painel-150", label:"Painel 150x150" };
-  if (hasRedondo && is50) return { key:"50x50", label:"Bolinhas 50x50" };
-  if (hasRedondo) return { key:"painel-150", label:"Painel 150x150" };
-  return { key:"folder", label:cleanLabel(raw || "Pasta") };
-}
-
-function productOrder(key){
-  return ({
-    "50x50":1,
-    "painel-150":2,
-    "cenario":3,
-    "lateral":4,
-    "sacolinha":5,
-    "cilindros":6,
-    "kit-painel-cilindros":7,
-    "romano":8,
-    "romano-lateral":9,
-    "kit-romano":10
-  })[key] || 99;
-}
-
 function cleanCode(value) {
-  const base = String(value || "").replace(/\.[^.]+$/, "");
+  const base = String(value || "").replace(/\.[^.]+$/, "").trim();
+  const leadingId = base.match(/^\s*(\d{1,20})(?:[_\-\s]|$)/);
+  if (leadingId) return leadingId[1];
   const arteMatch = base.match(/(?:arte|art)[^\d]*(\d+)/i);
   if (arteMatch) return arteMatch[1];
   const nums = base.match(/\d+/g);
-  return nums ? nums[nums.length - 1] : base.replace(/[^\w-]/g, "").toUpperCase();
+  return nums ? nums[0] : base.replace(/[^\w-]/g, "").toUpperCase();
 }
+
 function cleanLabel(value) {
   return String(value || "").replace(/[_-]+/g," ").replace(/\s+/g," ").trim().replace(/\b\w/g, m => m.toLocaleUpperCase("pt-BR"));
 }
+
+function normalizeDimension(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  const compact = text.replace(/\s+/g, "").replace(/×/g, "x").toLowerCase();
+  const sizeMatch = compact.match(/(\d+(?:[\.,]\d+)?)[xX](\d+(?:[\.,]\d+)?)/);
+  if (sizeMatch) return `${sizeMatch[1]}x${sizeMatch[2]}`.replace(/,/g, ".");
+  return cleanLabel(text);
+}
+
 function normalizeText(value) {
   return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 }
+
 function sanitizeId(value) {
   const id = String(value || "").trim();
   return /^[A-Za-z0-9_-]{10,}$/.test(id) ? id : "";
 }
+
 function json(payload, status=200, cache=0) {
   return new Response(JSON.stringify(payload), {
     status,
