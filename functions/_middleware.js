@@ -3,20 +3,24 @@ const BOLINHAS_CONFIG = {
   product: "50x50",
   unitPrice: 9.75,
   priceLabel: "R$ 9,75 cada",
-  minQty: 1,
-  step: 1,
+  minQty: 6,
+  step: 2,
   disableCustomization: true,
   skipProductsStep: true
 };
+
+function bolinhasRuleCode() {
+  return 'function rule50(){const q=cart.filter(i=>i.product==="50x50").reduce((s,i)=>s+i.qty,0);if(q===0)return null;if(q<6){const falta=6-q;return{type:"bad",title:"Bolinhas 50x50",msg:`Faltam ${falta} para fechar o mínimo de 6.`}}if(q>6&&q%2!==0)return{type:"warn",title:"Bolinhas 50x50",msg:`Adicione mais 1 bolinha para fechar ${q+1}. Depois de 6, seguimos sempre em pares.`};return{type:"ok",title:"Bolinhas 50x50",msg:q===6?"Mínimo fechado. Se quiser, acrescente de 2 em 2.":`Quantidade certinha em par.`}}\nfunction hasCustomizedItems()';
+}
 
 function rewriteHtml(html) {
   return html
     .replaceAll('R$ 9,90 cada', BOLINHAS_CONFIG.priceLabel)
     .replaceAll('R$ 9,90', 'R$ 9,75')
-    .replaceAll('unitPrice:9.90,baseQty:6,basePrice:58.90,afterStep:2', 'unitPrice:9.75,baseQty:1,basePrice:9.75,afterStep:1,disableCustomization:true')
+    .replaceAll('unitPrice:9.90,baseQty:6,basePrice:58.90,afterStep:2', 'unitPrice:9.75,baseQty:6,basePrice:58.50,afterStep:2,disableCustomization:true')
     .replaceAll('if(product==="50x50")return qty>=6?58.90+Math.max(0,qty-6)*9.90:qty*9.90;', 'if(product==="50x50")return qty*9.75;')
-    .replace(/function rule50\(\)\{[\s\S]*?function hasCustomizedItems\(\)/, 'function rule50(){return null}\nfunction hasCustomizedItems()')
-    .replace('if(cfg.type==="bag")return `<button type="button" class="bagSizeMiniBtn" data-edit-size="${esc(i.id)}">Trocar tamanho</button>`;\n   return `<button type="button" class="iconMeasureBtn" data-customize="${esc(i.id)}" aria-label="Personalizar medidas" title="Personalizar medidas">Personalizar tamanho</button>`;', 'if(i.product==="50x50")return "";\n   if(cfg.type==="bag")return `<button type="button" class="bagSizeMiniBtn" data-edit-size="${esc(i.id)}">Trocar tamanho</button>`;\n   return `<button type="button" class="iconMeasureBtn" data-customize="${esc(i.id)}" aria-label="Personalizar medidas" title="Personalizar medidas">Personalizar tamanho</button`;')
+    .replace(/function rule50\(\)\{[\s\S]*?function hasCustomizedItems\(\)/, bolinhasRuleCode())
+    .replace('if(cfg.type==="bag")return `<button type="button" class="bagSizeMiniBtn" data-edit-size="${esc(i.id)}">Trocar tamanho</button>`;\n   return `<button type="button" class="iconMeasureBtn" data-customize="${esc(i.id)}" aria-label="Personalizar medidas" title="Personalizar medidas">Personalizar tamanho</button>`;', 'if(i.product==="50x50")return "";\n   if(cfg.type==="bag")return `<button type="button" class="bagSizeMiniBtn" data-edit-size="${esc(i.id)}">Trocar tamanho</button>`;\n   return `<button type="button" class="iconMeasureBtn" data-customize="${esc(i.id)}" aria-label="Personalizar medidas" title="Personalizar medidas">Personalizar tamanho</button>`;')
     .replace('if(cfg.type==="bag")return bagFields(item);\n   if(!item.details.customizing){', 'if(item.product==="50x50")return "";\n   if(cfg.type==="bag")return bagFields(item);\n   if(!item.details.customizing){')
     .replace('if(view==="products" || view==="bagSizes" || view==="items"){\n     add("Produtos",()=>showProducts(),"products");\n   }', 'if((view==="products" || view==="bagSizes" || view==="items") && !(view==="items" && selectedProduct && selectedProduct.__directBolinhas)){\n     add("Produtos",()=>showProducts(),"products");\n   }')
     .replace('if(view==="items" && selectedProduct){\n     const productName = selectedProduct.product==="sacolinha" && selectedProduct.bagSize', 'if(view==="items" && selectedProduct && !selectedProduct.__directBolinhas){\n     const productName = selectedProduct.product==="sacolinha" && selectedProduct.bagSize')
@@ -47,9 +51,6 @@ const STYLE_PATCH = `
     padding:8px 12px!important;
   }
   .iconMeasureBtn[data-customize]{display:none!important;}
-  .ruleCard.bad b,
-  .ruleCard.bad,
-  .ruleCard.warn{display:none!important;}
   @media(max-width:560px){
     #breadcrumbs .pathPill,
     .breadcrumbs .pathPill,
@@ -75,6 +76,20 @@ function patchScript(){
     return itemOrProduct.product === BOLINHAS.product || itemOrProduct.productName === BOLINHAS.label || itemOrProduct.label === BOLINHAS.label;
   }
 
+  function bolinhasRule(){
+    const q = Array.isArray(cart) ? cart.filter(i=>i.product===BOLINHAS.product).reduce((s,i)=>s+(Number(i.qty)||0),0) : 0;
+    if(q===0) return null;
+    if(q<BOLINHAS.minQty){
+      const falta=BOLINHAS.minQty-q;
+      return {type:"bad", title:"Bolinhas 50x50", msg:`Faltam ${falta} para fechar o mínimo de ${BOLINHAS.minQty}.`};
+    }
+    if(q>BOLINHAS.minQty && q % BOLINHAS.step !== 0){
+      const next=q+1;
+      return {type:"warn", title:"Bolinhas 50x50", msg:`Adicione mais 1 bolinha para fechar ${next}. Depois de 6, seguimos sempre em pares.`};
+    }
+    return {type:"ok", title:"Bolinhas 50x50", msg:q===BOLINHAS.minQty?"Mínimo fechado. Se quiser, acrescente de 2 em 2.":"Quantidade certinha em par."};
+  }
+
   let refreshing = false;
   function refreshViews(){
     if(refreshing) return;
@@ -92,7 +107,7 @@ function patchScript(){
         window.__bolinhasOriginalProductConfig = productConfig;
         productConfig = function(product){
           if(product === BOLINHAS.product){
-            return { label:BOLINHAS.label, type:"bolinhas", unitPrice:BOLINHAS.unitPrice, minQty:BOLINHAS.minQty, step:BOLINHAS.step, disableCustomization:true };
+            return { label:BOLINHAS.label, type:"bolinhas", unitPrice:BOLINHAS.unitPrice, baseQty:BOLINHAS.minQty, basePrice:BOLINHAS.minQty*BOLINHAS.unitPrice, afterStep:BOLINHAS.step, disableCustomization:true };
           }
           return window.__bolinhasOriginalProductConfig(product);
         };
@@ -124,7 +139,7 @@ function patchScript(){
 
       if(typeof rule50 === "function" && !window.__bolinhasOriginalRule50){
         window.__bolinhasOriginalRule50 = rule50;
-        rule50 = function(){ return null; };
+        rule50 = bolinhasRule;
       }
 
       if(typeof ensureDetails === "function" && !window.__bolinhasOriginalEnsureDetails){
