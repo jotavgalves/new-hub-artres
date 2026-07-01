@@ -11,6 +11,7 @@
     return d;
   }
 
+  function panel(){ return $('ordersPanelV2') || $('ordersPanel'); }
   function toast(msg, type='ok'){
     const el = $('status');
     if (!el) return;
@@ -24,9 +25,9 @@
   function formatDate(value){ try { return new Date(value).toLocaleString('pt-BR'); } catch(e) { return value || ''; } }
 
   function renderShell(){
-    const panel = $('ordersPanelV2');
-    if (!panel) return;
-    panel.innerHTML = '<div class="card span-12"><div class="sectionHead"><div><h3>Pedidos</h3><p>Pedidos salvos com dados do cliente antes de abrir o WhatsApp. Sem status.</p></div><button id="reloadOrdersV2" class="btn secondary" type="button">Atualizar</button></div><div class="grid"><div class="field span-4"><label>Buscar</label><input id="orderSearch" placeholder="Nome, telefone, código, vendedora..."></div><div class="field span-3"><label>Vendedora</label><select id="sellerFilter"><option value="">Todas</option></select></div><div class="field span-3"><label>Data</label><input id="dateFilter" type="date"></div><div class="field span-2"><label>Limpar</label><button id="clearOrderFilters" class="btn secondary" type="button">Limpar filtros</button></div></div><div id="ordersListV2"><p class="hint">Carregando pedidos...</p></div></div>';
+    const target = panel();
+    if (!target) return;
+    target.innerHTML = '<div class="card span-12"><div class="sectionHead"><div><h3>Pedidos</h3><p>Pedidos salvos com dados do cliente antes de abrir o WhatsApp. Sem status.</p></div><button id="reloadOrdersV2" class="btn secondary" type="button">Atualizar</button></div><div class="grid"><div class="field span-4"><label>Buscar</label><input id="orderSearch" placeholder="Nome, telefone, código, vendedora..."></div><div class="field span-3"><label>Vendedora</label><select id="sellerFilter"><option value="">Todas</option></select></div><div class="field span-3"><label>Data</label><input id="dateFilter" type="date"></div><div class="field span-2"><label>Limpar</label><button id="clearOrderFilters" class="btn secondary" type="button">Limpar filtros</button></div></div><div id="ordersListV2"><p class="hint">Carregando pedidos...</p></div></div>';
     $('reloadOrdersV2').onclick = () => load(true);
     $('orderSearch').oninput = renderList;
     $('sellerFilter').onchange = renderList;
@@ -116,6 +117,7 @@
   }
 
   function activeOrders(){ return document.querySelector('[data-tab="ordersView"]')?.classList.contains('active') || !$('ordersView')?.classList.contains('hidden'); }
-  document.addEventListener('click', e => { if (e.target && e.target.closest('[data-tab="ordersView"]')) setTimeout(renderShell, 250); });
-  setTimeout(() => { injectStyle(); if (activeOrders()) renderShell(); }, 1200);
+  document.addEventListener('click', e => { if (e.target && e.target.closest('[data-tab="ordersView"]')) setTimeout(renderShell, 450); });
+  injectStyle();
+  setTimeout(() => { if (activeOrders()) renderShell(); }, 1400);
 })();
