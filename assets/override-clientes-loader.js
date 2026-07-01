@@ -1,0 +1,1 @@
+(()=>{let old=document.querySelector('[data-tab="clientesView"]');if(old)old.remove();let v=document.getElementById('clientesView');if(v)v.remove();let s=document.createElement('script');s.src='/assets/clientes-sub.js?v=1';s.defer=true;document.body.appendChild(s);})();
