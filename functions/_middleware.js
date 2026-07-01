@@ -10,7 +10,7 @@ const BOLINHAS_CONFIG = {
 };
 
 function bolinhasRuleCode() {
-  return 'function rule50(){const q=cart.filter(i=>i.product==="50x50").reduce((s,i)=>s+i.qty,0);if(q===0)return null;if(q<6){const falta=6-q;return{type:"bad",title:"Bolinhas 50x50",msg:`Faltam ${falta} para fechar o mínimo de 6.`}}if(q>6&&q%2!==0)return{type:"warn",title:"Bolinhas 50x50",msg:`Adicione mais 1 bolinha para fechar ${q+1}. Depois de 6, seguimos sempre em pares.`};return{type:"ok",title:"Bolinhas 50x50",msg:q===6?"Mínimo fechado. Se quiser, acrescente de 2 em 2.":`Quantidade certinha em par.`}}\nfunction hasCustomizedItems()';
+  return 'function rule50(){const q=cart.filter(i=>i.product==="50x50").reduce((s,i)=>s+i.qty,0);if(q===0)return null;if(q<6){const falta=6-q;return{type:"bad",title:"Bolinhas 50x50",msg:"Faltam "+falta+" para fechar o mínimo de 6."}}if(q>6&&q%2!==0)return{type:"warn",title:"Bolinhas 50x50",msg:"Adicione mais 1 bolinha para fechar "+(q+1)+". Depois de 6, seguimos sempre em pares."};return{type:"ok",title:"Bolinhas 50x50",msg:q===6?"Mínimo fechado. Se quiser, acrescente de 2 em 2.":"Quantidade certinha em par."}}\nfunction hasCustomizedItems()';
 }
 
 function rewriteHtml(html) {
@@ -62,178 +62,6 @@ const STYLE_PATCH = `
   }
 </style>`;
 
-function patchScript(){
-  const cfg = JSON.stringify(BOLINHAS_CONFIG);
-  return `
-<script id="bolinhas-drive-patch">
-(function(){
-  const BOLINHAS = ${cfg};
-  window.ARMAZEM_BOLINHAS_CONFIG = BOLINHAS;
-
-  function isBolinhas(itemOrProduct){
-    if(!itemOrProduct) return false;
-    if(typeof itemOrProduct === "string") return itemOrProduct === BOLINHAS.product;
-    return itemOrProduct.product === BOLINHAS.product || itemOrProduct.productName === BOLINHAS.label || itemOrProduct.label === BOLINHAS.label;
-  }
-
-  function bolinhasRule(){
-    const q = Array.isArray(cart) ? cart.filter(i=>i.product===BOLINHAS.product).reduce((s,i)=>s+(Number(i.qty)||0),0) : 0;
-    if(q===0) return null;
-    if(q<BOLINHAS.minQty){
-      const falta=BOLINHAS.minQty-q;
-      return {type:"bad", title:"Bolinhas 50x50", msg:`Faltam ${falta} para fechar o mínimo de ${BOLINHAS.minQty}.`};
-    }
-    if(q>BOLINHAS.minQty && q % BOLINHAS.step !== 0){
-      const next=q+1;
-      return {type:"warn", title:"Bolinhas 50x50", msg:`Adicione mais 1 bolinha para fechar ${next}. Depois de 6, seguimos sempre em pares.`};
-    }
-    return {type:"ok", title:"Bolinhas 50x50", msg:q===BOLINHAS.minQty?"Mínimo fechado. Se quiser, acrescente de 2 em 2.":"Quantidade certinha em par."};
-  }
-
-  let refreshing = false;
-  function refreshViews(){
-    if(refreshing) return;
-    refreshing = true;
-    try{
-      if(typeof renderCart === "function") renderCart();
-      if((view === "items" || view === "search") && typeof renderItems === "function") renderItems();
-    }catch(e){}
-    refreshing = false;
-  }
-
-  function patchGlobals(){
-    try{
-      if(typeof productConfig === "function" && !window.__bolinhasOriginalProductConfig){
-        window.__bolinhasOriginalProductConfig = productConfig;
-        productConfig = function(product){
-          if(product === BOLINHAS.product){
-            return { label:BOLINHAS.label, type:"bolinhas", unitPrice:BOLINHAS.unitPrice, baseQty:BOLINHAS.minQty, basePrice:BOLINHAS.minQty*BOLINHAS.unitPrice, afterStep:BOLINHAS.step, disableCustomization:true };
-          }
-          return window.__bolinhasOriginalProductConfig(product);
-        };
-      }
-
-      if(typeof priceTextFor === "function" && !window.__bolinhasOriginalPriceTextFor){
-        window.__bolinhasOriginalPriceTextFor = priceTextFor;
-        priceTextFor = function(p){
-          if(isBolinhas(p)) return BOLINHAS.priceLabel;
-          return window.__bolinhasOriginalPriceTextFor(p);
-        };
-      }
-
-      if(typeof artPriceText === "function" && !window.__bolinhasOriginalArtPriceText){
-        window.__bolinhasOriginalArtPriceText = artPriceText;
-        artPriceText = function(item){
-          if(isBolinhas(item)) return BOLINHAS.priceLabel;
-          return window.__bolinhasOriginalArtPriceText(item);
-        };
-      }
-
-      if(typeof price === "function" && !window.__bolinhasOriginalPrice){
-        window.__bolinhasOriginalPrice = price;
-        price = function(product, qty, item){
-          if(product === BOLINHAS.product) return Number(qty || 0) * BOLINHAS.unitPrice;
-          return window.__bolinhasOriginalPrice(product, qty, item);
-        };
-      }
-
-      if(typeof rule50 === "function" && !window.__bolinhasOriginalRule50){
-        window.__bolinhasOriginalRule50 = rule50;
-        rule50 = bolinhasRule;
-      }
-
-      if(typeof ensureDetails === "function" && !window.__bolinhasOriginalEnsureDetails){
-        window.__bolinhasOriginalEnsureDetails = ensureDetails;
-        ensureDetails = function(item){
-          if(isBolinhas(item)){
-            if(!item.details) item.details = {};
-            item.details.customizing = false;
-            item.details.customized = false;
-            item.details.unknown = false;
-            return item.details;
-          }
-          return window.__bolinhasOriginalEnsureDetails(item);
-        };
-      }
-
-      if(typeof itemActionButton === "function" && !window.__bolinhasOriginalItemActionButton){
-        window.__bolinhasOriginalItemActionButton = itemActionButton;
-        itemActionButton = function(item){
-          if(isBolinhas(item)) return "";
-          return window.__bolinhasOriginalItemActionButton(item);
-        };
-      }
-
-      if(typeof measureFields === "function" && !window.__bolinhasOriginalMeasureFields){
-        window.__bolinhasOriginalMeasureFields = measureFields;
-        measureFields = function(item){
-          if(isBolinhas(item)) return "";
-          return window.__bolinhasOriginalMeasureFields(item);
-        };
-      }
-
-      if(typeof hasCustomizedItems === "function" && !window.__bolinhasOriginalHasCustomizedItems){
-        window.__bolinhasOriginalHasCustomizedItems = hasCustomizedItems;
-        hasCustomizedItems = function(){
-          return Array.isArray(cart) && cart.some(i => !isBolinhas(i) && productConfig(i.product).type !== "bag" && i.details && (i.details.customized || i.details.unknown));
-        };
-      }
-
-      if(typeof renderCrumbs === "function" && !window.__bolinhasOriginalRenderCrumbs){
-        window.__bolinhasOriginalRenderCrumbs = renderCrumbs;
-        renderCrumbs = function(){
-          const directBolinhas = view === "items" && selectedProduct && selectedProduct.__directBolinhas;
-          if(!directBolinhas) return window.__bolinhasOriginalRenderCrumbs();
-          const b = document.getElementById("breadcrumbs");
-          if(!b) return;
-          const pills=[];
-          const sanitize=value=>String(value||"").replace(/[←‹❮›]/g,"").replace(/^Voltar para\s+/i,"").replace(/\s+/g," ").trim();
-          const add=(label,fn)=>{ label=sanitize(label); if(label) pills.push({label,fn}); };
-          add("Temas",()=>showThemes());
-          if(selectedTheme) add(selectedTheme.name,()=>loadProducts(selectedTheme,"root"));
-          if(Array.isArray(folderTrail) && folderTrail.length){folderTrail.forEach((folder,index)=>add(folder.name,()=>goToFolder(index)));}
-          const currentIndex = pills.length - 1;
-          b.innerHTML = pills.map((p,index)=>'<button type="button" class="pathPill '+(index===currentIndex?'current':'')+'" data-path-index="'+index+'">'+esc(p.label)+'</button>').join("");
-          b.querySelectorAll("[data-path-index]").forEach(btn=>{
-            const idx = Number(btn.dataset.pathIndex);
-            btn.onclick = () => { if(idx !== currentIndex && pills[idx] && typeof pills[idx].fn === "function") pills[idx].fn(); };
-          });
-        };
-      }
-
-      if(Array.isArray(cart)){
-        cart.forEach(i=>{
-          if(isBolinhas(i)){
-            i.productName = BOLINHAS.label;
-            i.price = BOLINHAS.unitPrice;
-            i.unitPrice = BOLINHAS.unitPrice;
-            i.disableCustomization = true;
-            if(i.details){i.details.customizing=false;i.details.customized=false;i.details.unknown=false;}
-          }
-        });
-      }
-      if(Array.isArray(items)){
-        items.forEach(i=>{
-          if(isBolinhas(i)){
-            i.productName = BOLINHAS.label;
-            i.price = BOLINHAS.unitPrice;
-            i.unitPrice = BOLINHAS.unitPrice;
-            i.disableCustomization = true;
-          }
-        });
-      }
-      refreshViews();
-    }catch(err){ console.warn("Patch Bolinhas não aplicado completamente", err); }
-  }
-
-  patchGlobals();
-  document.addEventListener("DOMContentLoaded", patchGlobals);
-  setTimeout(patchGlobals, 0);
-  setTimeout(patchGlobals, 500);
-})();
-</script>`;
-}
-
 export async function onRequest(context) {
   const response = await context.next();
   const contentType = response.headers.get("content-type") || "";
@@ -242,7 +70,6 @@ export async function onRequest(context) {
   let html = await response.text();
   html = rewriteHtml(html);
   if (!html.includes("bolinhas-drive-patch-style")) html = html.replace("</head>", `${STYLE_PATCH}</head>`);
-  if (!html.includes("bolinhas-drive-patch")) html = html.replace("</body>", `${patchScript()}</body>`);
 
   const headers = new Headers(response.headers);
   headers.delete("content-length");
