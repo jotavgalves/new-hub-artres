@@ -1,41 +1,22 @@
-const ROOT_FOLDER_ID = "193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae";
+import { loadConfig, getActiveDrive, getBolinhas } from "./_config.js";
+
+const DEFAULT_ROOT_FOLDER_ID = "193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae";
 const DRIVE_API = "https://www.googleapis.com/drive/v3/files";
 const FOLDER_MIME = "application/vnd.google-apps.folder";
-
-// Configuração central do novo Drive de Bolinhas.
-// Para alterar preço/nome depois, mexa aqui e no BOLINHAS_CONFIG do functions/_middleware.js.
-const BOLINHAS_LABEL = "Bolinhas";
-const BOLINHAS_PRODUCT_KEY = "50x50";
-const BOLINHAS_UNIT_PRICE = 9.75;
-const BOLINHAS_PRICE_LABEL = "R$ 9,75 cada";
-
-const BOLINHAS_PRODUCT = {
-  id: "bolinhas",
-  name: BOLINHAS_LABEL,
-  rawName: BOLINHAS_LABEL,
-  kind: "product",
-  product: BOLINHAS_PRODUCT_KEY,
-  productName: BOLINHAS_LABEL,
-  label: BOLINHAS_LABEL,
-  unitPrice: BOLINHAS_UNIT_PRICE,
-  price: BOLINHAS_UNIT_PRICE,
-  priceLabel: BOLINHAS_PRICE_LABEL,
-  directItems: true,
-  skipProductsStep: true,
-  disableCustomization: true,
-  customizationDisabled: true,
-  allowCustomSize: false,
-  canCustomize: false
-};
 
 export async function onRequestGet(context) {
   try {
     const apiKey = context.env.GOOGLE_API_KEY || context.env.GOOGLE_DRIVE_API_KEY || context.env.DRIVE_API_KEY;
     if (!apiKey) return json({ ok:false, error:"GOOGLE_API_KEY_NAO_CONFIGURADA" }, 500);
 
+    const { config } = await loadConfig(context.env);
+    const drive = getActiveDrive(config, "bolinhas");
+    const bolinhas = getBolinhas(config);
+    const rootFolderId = sanitizeId(drive && drive.folderId) || DEFAULT_ROOT_FOLDER_ID;
+
     const url = new URL(context.request.url);
     const mode = String(url.searchParams.get("mode") || "themes");
-    const folderId = sanitizeId(url.searchParams.get("folderId")) || ROOT_FOLDER_ID;
+    const folderId = sanitizeId(url.searchParams.get("folderId")) || rootFolderId;
     const theme = cleanLabel(url.searchParams.get("theme") || "");
     const searchCode = String(url.searchParams.get("code") || "").replace(/\D/g, "").slice(0, 20);
 
@@ -44,7 +25,7 @@ export async function onRequestGet(context) {
         .filter(f => f.mimeType === FOLDER_MIME)
         .map(f => ({ id:f.id, name:cleanLabel(f.name), rawName:f.name, kind:"theme" }));
       folders.sort((a,b)=>a.name.localeCompare(b.name,"pt-BR", { numeric:true }));
-      return json({ ok:true, mode, folders }, 200, 180);
+      return json({ ok:true, mode, folders, configVersion: config.version || 1 }, 200, 180);
     }
 
     if (mode === "products") {
@@ -63,7 +44,7 @@ export async function onRequestGet(context) {
         .sort((a,b)=>a.name.localeCompare(b.name,"pt-BR", { numeric:true }));
 
       const hasImagesHere = children.some(f => String(f.mimeType || "").startsWith("image/"));
-      if (hasImagesHere) folders.push({ ...BOLINHAS_PRODUCT, id:folderId });
+      if (hasImagesHere) folders.push(makeBolinhasProduct(folderId, bolinhas));
 
       return json({ ok:true, mode, theme, folders }, 200, 180);
     }
@@ -71,22 +52,22 @@ export async function onRequestGet(context) {
     if (mode === "items") {
       const files = (await listChildren(folderId, apiKey)).filter(f => String(f.mimeType||"").startsWith("image/"));
       const items = files
-        .map(f => itemFromFile(f, { folderId, theme }))
+        .map(f => itemFromFile(f, { folderId, theme, bolinhas }))
         .filter(i => i.code)
         .sort((a,b)=>(Number(b.sortId)||0)-(Number(a.sortId)||0));
-      return json({ ok:true, mode, theme, product:BOLINHAS_PRODUCT_KEY, productName:BOLINHAS_LABEL, total:items.length, items }, 200, 120);
+      return json({ ok:true, mode, theme, product:bolinhas.productKey, productName:bolinhas.label, total:items.length, items }, 200, 120);
     }
 
     if (mode === "search") {
       if (!searchCode || searchCode.length < 2) return json({ ok:true, mode, items:[] }, 200, 30);
-      const items = await searchByCode(searchCode, apiKey);
+      const items = await searchByCode(searchCode, apiKey, rootFolderId, bolinhas);
       return json({ ok:true, mode, total:items.length, items }, 200, 45);
     }
 
     if (mode === "folderSearch") {
       const query = cleanLabel(url.searchParams.get("q") || "");
       if (!query || normalizeText(query).length < 2) return json({ ok:true, mode, results:[] }, 200, 30);
-      const results = await searchFolders(query, apiKey);
+      const results = await searchFolders(query, apiKey, rootFolderId);
       return json({ ok:true, mode, total:results.length, results }, 200, 60);
     }
 
@@ -94,6 +75,29 @@ export async function onRequestGet(context) {
   } catch (error) {
     return json({ ok:false, error:"FALHA_AO_LER_DRIVE", detail:String(error && error.message || error) }, 500);
   }
+}
+
+function makeBolinhasProduct(folderId, bolinhas) {
+  return {
+    id: folderId,
+    name: bolinhas.label,
+    rawName: bolinhas.label,
+    kind: "product",
+    product: bolinhas.productKey,
+    productName: bolinhas.label,
+    label: bolinhas.label,
+    unitPrice: bolinhas.unitPrice,
+    price: bolinhas.unitPrice,
+    priceLabel: bolinhas.priceLabel,
+    minQty: bolinhas.minQty,
+    step: bolinhas.step,
+    directItems: true,
+    skipProductsStep: bolinhas.skipProductsStep,
+    disableCustomization: bolinhas.disableCustomization,
+    customizationDisabled: bolinhas.disableCustomization,
+    allowCustomSize: !bolinhas.disableCustomization,
+    canCustomize: !bolinhas.disableCustomization
+  };
 }
 
 async function listChildren(folderId, apiKey) {
@@ -117,7 +121,7 @@ async function listChildren(folderId, apiKey) {
   return out;
 }
 
-async function searchFolders(query, apiKey) {
+async function searchFolders(query, apiKey, rootFolderId) {
   const q = String(query || "").replace(/'/g, "\\'").trim();
   const params = new URLSearchParams({
     key: apiKey,
@@ -134,7 +138,7 @@ async function searchFolders(query, apiKey) {
   for (const f of (data.files || [])) {
     try {
       const ancestry = await buildAncestry(f.id, apiKey);
-      const rootIndex = ancestry.findIndex(a => a.id === ROOT_FOLDER_ID);
+      const rootIndex = ancestry.findIndex(a => a.id === rootFolderId);
       if (rootIndex === -1) continue;
       const belowRoot = ancestry.slice(rootIndex + 1);
       if (!belowRoot.length) continue;
@@ -160,7 +164,7 @@ async function searchFolders(query, apiKey) {
   return out.sort((a,b)=>a.path.localeCompare(b.path, "pt-BR", { numeric:true }));
 }
 
-async function searchByCode(code, apiKey) {
+async function searchByCode(code, apiKey, rootFolderId, bolinhas) {
   const safeCode = String(code || "").replace(/[^0-9]/g, "");
   if (!safeCode || safeCode.length < 2) return [];
   const params = new URLSearchParams({
@@ -182,20 +186,20 @@ async function searchByCode(code, apiKey) {
 
     const parentId = (f.parents && f.parents[0]) || "";
     const ancestry = await buildAncestry(parentId, apiKey);
-    const rootIndex = ancestry.findIndex(a => a.id === ROOT_FOLDER_ID);
+    const rootIndex = ancestry.findIndex(a => a.id === rootFolderId);
     if (rootIndex === -1) continue;
 
     const belowRoot = ancestry.slice(rootIndex + 1);
     if (!belowRoot.length) continue;
     const themeLabel = parsed.theme || belowRoot.map(x => cleanLabel(x.name)).join(" / ") || "Sem tema";
 
-    out.push(itemFromFile(f, { folderId: parentId, theme: themeLabel }));
+    out.push(itemFromFile(f, { folderId: parentId, theme: themeLabel, bolinhas }));
     if (out.length >= 24) break;
   }
   return out.sort((a,b)=>(Number(b.sortId)||0)-(Number(a.sortId)||0));
 }
 
-function itemFromFile(file, { folderId, theme }) {
+function itemFromFile(file, { folderId, theme, bolinhas }) {
   const parsed = parseArtFilename(file.name);
   const image = `https://drive.google.com/thumbnail?id=${encodeURIComponent(file.id)}&sz=w1200`;
   return {
@@ -203,9 +207,9 @@ function itemFromFile(file, { folderId, theme }) {
     code:parsed.code,
     sortId:Number(parsed.code)||0,
     theme:parsed.theme || theme || "Sem tema",
-    product:BOLINHAS_PRODUCT_KEY,
-    productName:BOLINHAS_LABEL,
-    productLabel:BOLINHAS_LABEL,
+    product:bolinhas.productKey,
+    productName:bolinhas.label,
+    productLabel:bolinhas.label,
     size:parsed.dimension || "50x50",
     dimension:parsed.dimension || "50x50",
     embeddedTheme:parsed.theme,
@@ -216,14 +220,16 @@ function itemFromFile(file, { folderId, theme }) {
     image,
     thumbnail:image,
     driveUrl:file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`,
-    unitPrice:BOLINHAS_UNIT_PRICE,
-    price:BOLINHAS_UNIT_PRICE,
-    priceLabel:BOLINHAS_PRICE_LABEL,
-    disableCustomization:true,
-    customizationDisabled:true,
-    allowCustomSize:false,
-    canCustomize:false,
-    measureDisabled:true
+    unitPrice:bolinhas.unitPrice,
+    price:bolinhas.unitPrice,
+    priceLabel:bolinhas.priceLabel,
+    minQty:bolinhas.minQty,
+    step:bolinhas.step,
+    disableCustomization:bolinhas.disableCustomization,
+    customizationDisabled:bolinhas.disableCustomization,
+    allowCustomSize:!bolinhas.disableCustomization,
+    canCustomize:!bolinhas.disableCustomization,
+    measureDisabled:bolinhas.disableCustomization
   };
 }
 
