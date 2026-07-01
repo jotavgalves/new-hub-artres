@@ -870,13 +870,13 @@ function money(v){return Number(v||0).toLocaleString("pt-BR",{style:"currency",c
 function priceTextFor(p){
   const key=p.product||p.key||"";
   const cfg=productConfig(key);
-  if(key==="50x50")return "R$ 9,90 cada";
+  if(key==="50x50")return "R$ 9,75 cada";
   if(cfg.type==="bag")return "Escolha o tamanho";
   if(cfg.unitPrice)return `R$ ${money(cfg.unitPrice)} antes do desconto`;
   return "toque para ver as opções";
 }
 function artPriceText(item){
-  if(item.product==="50x50")return "R$ 9,90 cada";
+  if(item.product==="50x50")return "R$ 9,75 cada";
   const cfg=productConfig(item.product);
   if(cfg.type==="bag"){
     const size=(item.details&&item.details.size)||cfg.defaultSize||"P";
