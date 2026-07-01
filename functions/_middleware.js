@@ -95,8 +95,9 @@ function rewriteHtml(html, config) {
 const STYLE_PATCH = `<style id="bolinhas-drive-patch-style">#breadcrumbs,.breadcrumbs{min-width:0!important;align-items:center!important}#breadcrumbs .pathPill,.breadcrumbs .pathPill,.pathLine .pathChip{max-width:min(46vw,360px)!important;min-width:0!important;width:auto!important;height:auto!important;min-height:38px!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere!important;word-break:break-word!important;line-height:1.12!important;padding:8px 12px!important}.iconMeasureBtn[data-customize]{display:none!important}.campaignNotice{margin:0 auto 14px;width:min(100%,1280px);border-radius:20px;padding:13px 16px;background:#fff1f6;color:#b61f55;border:1px solid #ffd6e5;font-weight:900;box-shadow:0 14px 30px rgba(239,85,133,.10)}@media(max-width:560px){#breadcrumbs .pathPill,.breadcrumbs .pathPill,.pathLine .pathChip{max-width:72vw!important;min-width:auto!important;white-space:normal!important}}</style>`;
 const CONFIRM_MODAL_SCRIPT = '<script src="/assets/confirm-modal.js?v=2" defer></script>';
 const ORDER_CAPTURE_SCRIPT = '<script src="/assets/order-capture.js?v=1" defer></script>';
+const CATALOG_CACHE_BUST_SCRIPT = '<script src="/assets/catalog-cache-bust.js?v=1"></script>';
 
-function escapeHtml(value){return String(value||"").replace(/[&<>'"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;","\"":"&quot;"}[m]));}
+function escapeHtml(value){return String(value||"").replace(/[&<> '\"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;","\"":"&quot;"," ":" "}[m]));}
 function maintenanceResponse(config){const m=config.maintenance||{};const html=`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapeHtml(m.title||"Manutenção")}</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;font-family:Arial,sans-serif;background:#fffaf6;color:#222}.box{width:min(520px,92vw);background:#fff;border-radius:28px;padding:30px;box-shadow:0 24px 70px rgba(31,27,35,.12);text-align:center}h1{margin:0 0 10px;font-size:30px}p{color:#6f6872;line-height:1.55}</style></head><body><main class="box"><h1>${escapeHtml(m.title||"Estamos atualizando o catálogo")}</h1><p>${escapeHtml(m.text||"Volte em instantes.")}</p></main></body></html>`;return new Response(html,{status:503,headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store"}})}
 function injectCampaign(html, config){const c=config.campaign||{};if(!c.noticeActive||!c.noticeText)return html;const notice=`<div class="campaignNotice">${escapeHtml(applyTokens(c.noticeText,config))}</div>`;return html.replace('<div class="app">', `<div class="app">${notice}`);}
 function redirect(to){return Response.redirect(to,302)}
@@ -124,6 +125,7 @@ export async function onRequest(context) {
   let html = await response.text();
   html = rewriteHtml(html, config);
   html = injectCampaign(html, config);
+  if (!html.includes("/assets/catalog-cache-bust.js")) html = html.replace("</head>", `${CATALOG_CACHE_BUST_SCRIPT}</head>`);
   if (!html.includes("bolinhas-drive-patch-style")) html = html.replace("</head>", `${STYLE_PATCH}</head>`);
   if (config.ui.confirmModal !== false && !html.includes("/assets/confirm-modal.js")) html = html.replace("</body>", `${CONFIRM_MODAL_SCRIPT}</body>`);
   if (config.orderSettings && config.orderSettings.saveOrders !== false && !html.includes("/assets/order-capture.js")) html = html.replace("</body>", `${ORDER_CAPTURE_SCRIPT}</body>`);
