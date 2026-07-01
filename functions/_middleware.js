@@ -23,7 +23,8 @@ function rewriteHtml(html, config) {
   const bolinhas = getBolinhas(config);
   const unitPrice = Number(bolinhas.unitPrice || 9.75);
   const basePrice = Number((unitPrice * Number(bolinhas.minQty || 6)).toFixed(2));
-  const discountPercent = Number(config && config.ui && config.ui.discountPercent ?? 10);
+  const discountPercentRaw = config && config.ui ? config.ui.discountPercent : 10;
+  const discountPercent = Number(discountPercentRaw == null ? 10 : discountPercentRaw);
   const discountFactor = Number((discountPercent / 100).toFixed(4));
 
   return html
