@@ -21,6 +21,14 @@
     `;
     document.head.appendChild(style);
   }
+  function loadOrdersModule(){
+    if (document.getElementById('adminOrdersUnifiedScript')) return;
+    var script = document.createElement('script');
+    script.id = 'adminOrdersUnifiedScript';
+    script.src = '/assets/admin-orders-unified.js?v=1';
+    script.defer = true;
+    document.body.appendChild(script);
+  }
   function setTab(tab){
     document.body.dataset.adminTab = tab || 'overviewView';
   }
@@ -32,6 +40,7 @@
     if (!document.body.dataset.adminTab) setTab('overviewView');
   }
   injectStyle();
+  loadOrdersModule();
   bindTabs();
   new MutationObserver(bindTabs).observe(document.body,{childList:true,subtree:true});
 })();
