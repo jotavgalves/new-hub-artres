@@ -1,7 +1,7 @@
-const CACHE_BUST_SCRIPT = '<script src="/assets/catalog-cache-bust.js?v=1"></script>';
+const CACHE_BUST_SCRIPT = '<script src="/assets/catalog-cache-bust.js?v=2"></script>';
 
 export async function onRequest(context) {
-  const assetResponse = await context.next();
+  const assetResponse = await context.env.ASSETS.fetch(context.request);
   const contentType = assetResponse.headers.get('content-type') || '';
   if (!contentType.includes('text/html')) return assetResponse;
 
@@ -17,9 +17,5 @@ export async function onRequest(context) {
   headers.set('pragma', 'no-cache');
   headers.set('expires', '0');
 
-  return new Response(html, {
-    status: assetResponse.status,
-    statusText: assetResponse.statusText,
-    headers
-  });
+  return new Response(html, { status: assetResponse.status, statusText: assetResponse.statusText, headers });
 }
