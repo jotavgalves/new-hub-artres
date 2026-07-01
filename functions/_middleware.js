@@ -62,6 +62,8 @@ const STYLE_PATCH = `
   }
 </style>`;
 
+const CONFIRM_MODAL_SCRIPT = '<script src="/assets/confirm-modal.js?v=1" defer></script>';
+
 export async function onRequest(context) {
   const response = await context.next();
   const contentType = response.headers.get("content-type") || "";
@@ -70,6 +72,7 @@ export async function onRequest(context) {
   let html = await response.text();
   html = rewriteHtml(html);
   if (!html.includes("bolinhas-drive-patch-style")) html = html.replace("</head>", `${STYLE_PATCH}</head>`);
+  if (!html.includes("/assets/confirm-modal.js")) html = html.replace("</body>", `${CONFIRM_MODAL_SCRIPT}</body>`);
 
   const headers = new Headers(response.headers);
   headers.delete("content-length");
