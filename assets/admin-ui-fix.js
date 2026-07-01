@@ -44,6 +44,7 @@
   injectStyle();
   loadScript('adminOrdersUnifiedScript','/assets/admin-orders-unified.js?v=1');
   loadScript('adminClientesScript','/assets/clientes.js?v=1');
+  loadScript('adminCampaignDiscountScript','/assets/admin-campaign-discount.js?v=1');
   bindTabs();
   new MutationObserver(bindTabs).observe(document.body,{childList:true,subtree:true});
 })();
