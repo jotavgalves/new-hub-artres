@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800;900&family=Plus+Jakarta+Sans:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/admin.css?v=2">
+  <link rel="stylesheet" href="/assets/admin.css?v=3">
 </head>
 <body>
   <section id="loginView" class="loginPage hidden">
@@ -34,40 +34,38 @@
         <button data-tab="toolsView">Ferramentas <small>07</small></button>
         <button data-tab="textsView">Textos do site <small>08</small></button>
         <button data-tab="whatsappView">WhatsApp e modal <small>09</small></button>
-        <button data-tab="appearanceView">Aparência <small>10</small></button>
-        <button data-tab="permissionsView">Permissões <small>11</small></button>
-        <button data-tab="advancedView">Avançado <small>12</small></button>
-        <button data-tab="jsonView">JSON <small>13</small></button>
+        <button data-tab="linksView">Links e rotas <small>10</small></button>
+        <button data-tab="appearanceView">Aparência <small>11</small></button>
+        <button data-tab="permissionsView">Permissões <small>12</small></button>
+        <button data-tab="advancedView">Avançado <small>13</small></button>
+        <button data-tab="jsonView">JSON <small>14</small></button>
       </nav>
       <div class="sideFoot"><a class="btn secondary" href="/">Ver site</a><button id="logoutBtn" class="btn danger" type="button">Sair</button></div>
     </aside>
 
     <main class="main">
-      <header class="topbar"><div><h2 id="adminTitle">Admin do Hub de Artes</h2><p id="adminSubtitle">Controle textos, vendedoras, preços, regras e Drives sem mexer no código.</p></div><div class="actions"><button id="reloadBtn" class="btn secondary" type="button">Recarregar</button><button id="saveBtnTop" class="btn green" type="button" onclick="document.getElementById('saveBtn').click()">Salvar</button></div></header>
+      <header class="topbar"><div><h2 id="adminTitle">Admin do Hub de Artes</h2><p id="adminSubtitle">Controle textos, vendedoras, preços, regras e Drives sem mexer no código.</p></div><div class="actions"><button id="reloadBtn" class="btn secondary" type="button">Recarregar</button><button id="saveBtnTop" class="btn green" type="button">Salvar</button></div></header>
       <div id="status" class="status hidden"></div>
 
       <section id="overviewView" data-view class="grid"><div id="overview" class="grid span-12"></div></section>
       <section id="ordersView" data-view class="grid hidden"><div id="ordersPanel" class="grid span-12"></div></section>
-
-      <section id="sellersView" data-view class="grid hidden"><div class="card span-12"><div class="sectionHead"><div><h3>Vendedoras</h3><p>Cadastre quem aparece no carrinho para receber o pedido pelo WhatsApp.</p></div><button id="addSeller" class="btn secondary" type="button">Adicionar vendedora</button></div><div id="sellersList"></div></div></section>
-      <section id="productsView" data-view class="grid hidden"><div id="productsPanel" class="grid span-12"></div><div id="productCatalogPanel" class="grid span-12"></div></section>
+      <section id="sellersView" data-view class="grid hidden"><div id="sellersPanel" class="grid span-12"></div></section>
+      <section id="productsView" data-view class="grid hidden"><div id="productsPanel" class="grid span-12"></div></section>
       <section id="campaignsView" data-view class="grid hidden"><div id="campaignsPanel" class="grid span-12"></div></section>
-
-      <section id="drivesView" data-view class="grid hidden"><div class="card span-12"><div class="sectionHead"><div><h3>Drives</h3><p>Cadastre uma ou mais pastas do Google Drive e escolha qual fica ativa.</p></div><button id="addDrive" class="btn secondary" type="button">Adicionar Drive</button></div><div id="drivesList"></div></div></section>
+      <section id="drivesView" data-view class="grid hidden"><div id="drivesPanel" class="grid span-12"></div></section>
       <section id="toolsView" data-view class="grid hidden"><div id="toolsPanel" class="grid span-12"></div></section>
-
-      <section id="textsView" data-view class="grid hidden"><div class="card span-12"><div class="sectionHead"><div><h3>Textos do site</h3><p>Edite os textos comerciais da primeira tela, catálogo, carrinho, botões e validações.</p></div></div><p class="hint">Você pode usar tokens como {desconto}, {preco}, {minimo} e {passo}. Eles serão preenchidos automaticamente pelo sistema.</p></div><div id="textsPanel" class="grid span-12"></div></section>
-      <section id="whatsappView" data-view class="grid hidden"><div class="card span-12"><div class="sectionHead"><div><h3>WhatsApp e modal</h3><p>Controle a mensagem enviada, os textos do modal de confirmação e os textos do próprio painel.</p></div></div></div><div id="whatsappPanel" class="grid span-12"></div></section>
+      <section id="textsView" data-view class="grid hidden"><div id="textsPanel" class="grid span-12"></div></section>
+      <section id="whatsappView" data-view class="grid hidden"><div id="whatsappPanel" class="grid span-12"></div></section>
+      <section id="linksView" data-view class="grid hidden"><div id="linksPanel" class="grid span-12"></div></section>
       <section id="appearanceView" data-view class="grid hidden"><div id="appearancePanel" class="grid span-12"></div></section>
       <section id="permissionsView" data-view class="grid hidden"><div id="permissionsPanel" class="grid span-12"></div></section>
       <section id="advancedView" data-view class="grid hidden"><div id="advancedPanel" class="grid span-12"></div></section>
       <section id="jsonView" data-view class="grid hidden"><div class="card span-12"><div class="sectionHead"><div><h3>JSON completo</h3><p>Visualização técnica do que será salvo no Cloudflare KV.</p></div></div><pre id="jsonPreview" class="jsonBox"></pre></div></section>
     </main>
 
-    <footer class="saveBar"><div class="actions"><button id="saveBtn" class="btn green" type="button">Salvar alterações</button><button id="reloadBtnBottom" class="btn secondary" type="button" onclick="document.getElementById('reloadBtn').click()">Recarregar</button><span id="saveHint" class="hint"></span></div></footer>
+    <footer class="saveBar"><div class="actions"><button id="saveBtn" class="btn green" type="button">Salvar alterações</button><button id="reloadBtnBottom" class="btn secondary" type="button">Recarregar</button><span id="saveHint" class="hint"></span></div></footer>
   </section>
 
-  <script src="/assets/admin.js?v=2" defer></script>
-  <script src="/assets/admin-plus.js?v=1" defer></script>
+  <script src="/assets/admin.js?v=4" defer></script>
 </body>
 </html>
