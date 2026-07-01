@@ -1,7 +1,7 @@
 export const CONFIG_KEY = "APP_CONFIG";
 
 export const DEFAULT_CONFIG = {
-  version: 2,
+  version: 3,
   sellers: [
     { id: "ana", label: "Ana", phone: "5581996763982", active: true },
     { id: "dayane", label: "Dayane", phone: "5581983383002", active: true }
@@ -18,6 +18,9 @@ export const DEFAULT_CONFIG = {
       skipProductsStep: true
     }
   },
+  productCatalog: [
+    { id: "bolinhas", label: "Bolinhas", productKey: "50x50", active: true, editable: true }
+  ],
   drives: [
     {
       id: "bolinhas",
@@ -32,7 +35,38 @@ export const DEFAULT_CONFIG = {
   ],
   ui: {
     discountPercent: 10,
-    confirmModal: true
+    confirmModal: true,
+    cacheVersion: 1
+  },
+  campaign: {
+    active: true,
+    name: "10% OFF por aqui",
+    discountPercent: 10,
+    startsAt: "",
+    endsAt: "",
+    applyTo: "all",
+    noticeActive: false,
+    noticeText: "Pedidos feitos por aqui chegam organizados para a vendedora.",
+    noticePosition: "hero",
+    noticeTone: "pink"
+  },
+  maintenance: {
+    active: false,
+    title: "Estamos atualizando o catálogo",
+    text: "Volte em instantes para escolher suas artes.",
+    allowAdmin: true
+  },
+  orderSettings: {
+    saveOrders: true,
+    defaultStatus: "Novo",
+    statuses: ["Novo", "Em atendimento", "Fechado", "Cancelado"],
+    keepLast: 300
+  },
+  themeOverrides: [],
+  permissions: {
+    mode: "single-admin-secret",
+    roles: ["admin", "vendedora", "editor", "visualizador"],
+    users: []
   },
   content: {
     hero: {
@@ -106,9 +140,14 @@ export const DEFAULT_CONFIG = {
   },
   appearance: {
     adminTheme: "clean",
+    siteName: "Armazém Festas e Eventos",
+    logoUrl: "",
     primaryColor: "#ef5585",
     accentColor: "#38bae3",
-    background: "soft"
+    buttonColor: "#25d366",
+    bannerColor: "#ef5585",
+    background: "soft",
+    radius: 28
   }
 };
 
@@ -129,11 +168,10 @@ export function moneyBR(value) {
 }
 
 export function normalizeConfig(input = {}) {
-  const merged = structuredClone(DEFAULT_CONFIG);
   const src = input && typeof input === "object" ? input : {};
+  const merged = deepMerge(DEFAULT_CONFIG, src);
 
-  const sellers = Array.isArray(src.sellers) ? src.sellers : merged.sellers;
-  merged.sellers = sellers
+  merged.sellers = (Array.isArray(src.sellers) ? src.sellers : DEFAULT_CONFIG.sellers)
     .map((seller, index) => ({
       id: sanitizeId(seller.id || seller.label || `vendedora-${index + 1}`),
       label: cleanText(seller.label || seller.name || `Vendedora ${index + 1}`),
@@ -141,28 +179,25 @@ export function normalizeConfig(input = {}) {
       active: seller.active !== false
     }))
     .filter(seller => seller.id && seller.label && seller.phone);
+  if (!merged.sellers.length) merged.sellers = clone(DEFAULT_CONFIG.sellers);
 
-  if (!merged.sellers.length) merged.sellers = structuredClone(DEFAULT_CONFIG.sellers);
-
-  const bolinhasInput = src.products && src.products.bolinhas ? src.products.bolinhas : {};
-  const unitPrice = Number(String(valueOr(bolinhasInput.unitPrice, merged.products.bolinhas.unitPrice)).replace(",", "."));
-  const minQty = parseInt(valueOr(bolinhasInput.minQty, merged.products.bolinhas.minQty), 10);
-  const step = parseInt(valueOr(bolinhasInput.step, merged.products.bolinhas.step), 10);
-  const label = cleanText(bolinhasInput.label || merged.products.bolinhas.label);
-  const productKey = cleanText(bolinhasInput.productKey || merged.products.bolinhas.productKey);
-
+  const b = (src.products && src.products.bolinhas) || {};
+  const oldB = DEFAULT_CONFIG.products.bolinhas;
+  const unitPrice = Number(String(valueOr(b.unitPrice, oldB.unitPrice)).replace(",", "."));
+  const minQty = parseInt(valueOr(b.minQty, oldB.minQty), 10);
+  const step = parseInt(valueOr(b.step, oldB.step), 10);
   merged.products.bolinhas = {
-    label: label || "Bolinhas",
-    productKey: productKey || "50x50",
-    unitPrice: Number.isFinite(unitPrice) && unitPrice > 0 ? unitPrice : DEFAULT_CONFIG.products.bolinhas.unitPrice,
-    priceLabel: moneyBR(Number.isFinite(unitPrice) && unitPrice > 0 ? unitPrice : DEFAULT_CONFIG.products.bolinhas.unitPrice) + " cada",
-    minQty: Number.isFinite(minQty) && minQty > 0 ? minQty : DEFAULT_CONFIG.products.bolinhas.minQty,
-    step: Number.isFinite(step) && step > 0 ? step : DEFAULT_CONFIG.products.bolinhas.step,
-    disableCustomization: bolinhasInput.disableCustomization !== false,
-    skipProductsStep: bolinhasInput.skipProductsStep !== false
+    label: cleanText(b.label || oldB.label),
+    productKey: cleanText(b.productKey || oldB.productKey),
+    unitPrice: Number.isFinite(unitPrice) && unitPrice > 0 ? unitPrice : oldB.unitPrice,
+    priceLabel: moneyBR(Number.isFinite(unitPrice) && unitPrice > 0 ? unitPrice : oldB.unitPrice) + " cada",
+    minQty: Number.isFinite(minQty) && minQty > 0 ? minQty : oldB.minQty,
+    step: Number.isFinite(step) && step > 0 ? step : oldB.step,
+    disableCustomization: b.disableCustomization !== false,
+    skipProductsStep: b.skipProductsStep !== false
   };
 
-  const drives = Array.isArray(src.drives) ? src.drives : merged.drives;
+  const drives = Array.isArray(src.drives) ? src.drives : DEFAULT_CONFIG.drives;
   merged.drives = drives
     .map((drive, index) => ({
       id: sanitizeId(drive.id || drive.name || `drive-${index + 1}`),
@@ -175,38 +210,34 @@ export function normalizeConfig(input = {}) {
       filenamePattern: cleanText(drive.filenamePattern || "ID_TEMA_PRODUTO_DIMENSAO")
     }))
     .filter(drive => drive.id && drive.name && drive.folderId);
-
-  if (!merged.drives.length) merged.drives = structuredClone(DEFAULT_CONFIG.drives);
+  if (!merged.drives.length) merged.drives = clone(DEFAULT_CONFIG.drives);
 
   const ui = src.ui && typeof src.ui === "object" ? src.ui : {};
   const discountPercent = Number(String(valueOr(ui.discountPercent, merged.ui.discountPercent)).replace(",", "."));
-  merged.ui = {
-    discountPercent: Number.isFinite(discountPercent) && discountPercent >= 0 ? discountPercent : DEFAULT_CONFIG.ui.discountPercent,
-    confirmModal: ui.confirmModal !== false
-  };
+  merged.ui.discountPercent = Number.isFinite(discountPercent) && discountPercent >= 0 ? discountPercent : DEFAULT_CONFIG.ui.discountPercent;
+  merged.ui.confirmModal = ui.confirmModal !== false;
+  merged.ui.cacheVersion = parseInt(valueOr(ui.cacheVersion, merged.ui.cacheVersion || 1), 10) || 1;
 
   merged.content = normalizeContent(src.content || {});
-  merged.appearance = {
-    ...DEFAULT_CONFIG.appearance,
-    ...(src.appearance && typeof src.appearance === "object" ? src.appearance : {})
-  };
-
-  merged.version = 2;
+  merged.productCatalog = Array.isArray(src.productCatalog) ? src.productCatalog : clone(DEFAULT_CONFIG.productCatalog);
+  merged.themeOverrides = Array.isArray(src.themeOverrides) ? src.themeOverrides : [];
+  merged.permissions = deepMerge(DEFAULT_CONFIG.permissions, src.permissions || {});
+  merged.campaign = deepMerge(DEFAULT_CONFIG.campaign, src.campaign || {});
+  merged.maintenance = deepMerge(DEFAULT_CONFIG.maintenance, src.maintenance || {});
+  merged.orderSettings = deepMerge(DEFAULT_CONFIG.orderSettings, src.orderSettings || {});
+  merged.appearance = deepMerge(DEFAULT_CONFIG.appearance, src.appearance || {});
+  merged.version = 3;
   return merged;
 }
 
 export async function loadConfig(env) {
   const fallback = normalizeConfig(DEFAULT_CONFIG);
-  if (!env || !env.CONFIG_KV) {
-    return { config: fallback, source: "default", storageReady: false };
-  }
-
+  if (!env || !env.CONFIG_KV) return { config: fallback, source: "default", storageReady: false };
   const raw = await env.CONFIG_KV.get(CONFIG_KEY);
   if (!raw) {
     await env.CONFIG_KV.put(CONFIG_KEY, JSON.stringify(fallback, null, 2));
     return { config: fallback, source: "default-created", storageReady: true };
   }
-
   try {
     return { config: normalizeConfig(JSON.parse(raw)), source: "kv", storageReady: true };
   } catch (error) {
@@ -215,9 +246,7 @@ export async function loadConfig(env) {
 }
 
 export async function saveConfig(env, config) {
-  if (!env || !env.CONFIG_KV) {
-    throw new Error("CONFIG_KV_NAO_CONFIGURADO");
-  }
+  if (!env || !env.CONFIG_KV) throw new Error("CONFIG_KV_NAO_CONFIGURADO");
   const normalized = normalizeConfig(config);
   await env.CONFIG_KV.put(CONFIG_KEY, JSON.stringify(normalized, null, 2));
   return normalized;
@@ -236,7 +265,7 @@ export function getContent(config) {
   return normalizeConfig(config).content;
 }
 
-export function applyTokens(value, config = {}) {
+export function applyTokens(value, config = {}, extra = {}) {
   const normalized = normalizeConfig(config);
   const bolinhas = normalized.products.bolinhas;
   const tokens = {
@@ -244,23 +273,23 @@ export function applyTokens(value, config = {}) {
     produto: bolinhas.label,
     preco: bolinhas.priceLabel,
     minimo: bolinhas.minQty,
-    passo: bolinhas.step
+    passo: bolinhas.step,
+    quantidade: extra.quantidade,
+    proxima: extra.proxima,
+    plural: extra.plural,
+    valor: extra.valor,
+    vendedora: extra.vendedora,
+    codigo: extra.codigo,
+    tema: extra.tema,
+    total: extra.total
   };
-  return String(value || "").replace(/\{(desconto|produto|preco|minimo|passo)\}/g, (_, key) => String(tokens[key] || ""));
+  return String(value || "").replace(/\{(desconto|produto|preco|minimo|passo|quantidade|proxima|plural|valor|vendedora|codigo|tema|total)\}/g, (_, key) => String(tokens[key] === undefined || tokens[key] === null ? "" : tokens[key]));
 }
 
 function normalizeContent(content) {
-  const base = structuredClone(DEFAULT_CONFIG.content);
+  const base = clone(DEFAULT_CONFIG.content);
   const src = content && typeof content === "object" ? content : {};
-  mergeTextObject(base.hero, src.hero);
-  mergeTextObject(base.promo, src.promo);
-  mergeTextObject(base.catalog, src.catalog);
-  mergeTextObject(base.cart, src.cart);
-  mergeTextObject(base.validation, src.validation);
-  mergeTextObject(base.modal, src.modal);
-  mergeTextObject(base.whatsapp, src.whatsapp);
-  mergeTextObject(base.admin, src.admin);
-
+  ["hero", "promo", "catalog", "cart", "validation", "modal", "whatsapp", "admin"].forEach(key => mergeTextObject(base[key], src[key]));
   if (Array.isArray(src.steps)) {
     base.steps = [0, 1, 2, 3].map(index => ({
       title: cleanText(src.steps[index] && src.steps[index].title || base.steps[index].title),
@@ -277,27 +306,25 @@ function mergeTextObject(target, source) {
   });
 }
 
-function valueOr(value, fallback) {
-  return value === undefined || value === null || value === "" ? fallback : value;
-}
-
-function cleanText(value) {
-  return String(value || "").replace(/\s+/g, " ").trim();
-}
-
+function clone(value) { return JSON.parse(JSON.stringify(value)); }
+function valueOr(value, fallback) { return value === undefined || value === null || value === "" ? fallback : value; }
+function cleanText(value) { return String(value || "").replace(/\s+/g, " ").trim(); }
 function sanitizeId(value) {
-  return cleanText(value)
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 60);
+  return cleanText(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
 }
-
 function sanitizeDriveId(value) {
   const direct = cleanText(value);
   const folderMatch = direct.match(/folders\/([A-Za-z0-9_-]+)/);
   const id = folderMatch ? folderMatch[1] : direct;
   return /^[A-Za-z0-9_-]{10,}$/.test(id) ? id : "";
+}
+function deepMerge(target, source) {
+  const out = clone(target || {});
+  const src = source && typeof source === "object" ? source : {};
+  Object.keys(src).forEach(key => {
+    if (Array.isArray(src[key])) out[key] = clone(src[key]);
+    else if (src[key] && typeof src[key] === "object" && out[key] && typeof out[key] === "object" && !Array.isArray(out[key])) out[key] = deepMerge(out[key], src[key]);
+    else out[key] = src[key];
+  });
+  return out;
 }
