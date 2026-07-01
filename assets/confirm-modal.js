@@ -1,13 +1,17 @@
 (function(){
-  var state={open:false,zoomIndex:-1,waHref:"#"};
+  var state={open:false,zoomIndex:-1,waHref:"#",config:null};
+  var fallbackModal={title:"Confira suas artes antes de enviar",subtitle:"Dê uma última olhada nas imagens escolhidas. Toque em qualquer arte para ampliar.",countText:"Você selecionou {quantidade} arte(s).",backButton:"Voltar e ajustar",confirmButton:"Confirmar e enviar",previousButton:"Anterior",nextButton:"Próxima",closeButton:"Fechar"};
 
   function byId(id){return document.getElementById(id)}
   function esc(v){return String(v==null?"":v).replace(/[&<>'"]/g,function(m){return {"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;","\"":"&quot;"}[m]})}
   function getCart(){try{return Array.isArray(cart)?cart:[]}catch(e){return []}}
-  function getRule(){try{return typeof cartRule==="function"?cartRule():{ok:false,msg:"Revise seu carrinho antes de enviar."}}catch(e){return {ok:false,msg:"Revise seu carrinho antes de enviar."}}
-  }
+  function getRule(){try{return typeof cartRule==="function"?cartRule():{ok:false,msg:"Revise seu carrinho antes de enviar."}}catch(e){return {ok:false,msg:"Revise seu carrinho antes de enviar."}}}
   function getWaUrl(){try{return typeof waUrl==="function"?waUrl():"#"}catch(e){return "#"}}
   function getQty(){try{return typeof cartQty==="function"?cartQty():getCart().reduce(function(s,i){return s+(Number(i.qty)||0)},0)}catch(e){return 0}}
+  function modalText(){return state.config&&state.config.content&&state.config.content.modal?state.config.content.modal:fallbackModal}
+  function fmt(text,map){return String(text||"").replace(/\{(quantidade)\}/g,function(_,key){return map[key]||""})}
+
+  fetch("/api/config",{credentials:"same-origin"}).then(function(r){return r.json()}).then(function(d){if(d&&d.config)state.config=d.config}).catch(function(){});
 
   function ensureStyles(){
     if(byId("confirmArtsStyles"))return;
@@ -52,9 +56,10 @@
 
   function ensureModal(){
     ensureStyles();
-    if(byId("confirmArtsBg"))return;
+    var t=modalText();
+    if(byId("confirmArtsBg")){applyTexts();return;}
     var root=document.createElement("div");
-    root.innerHTML='<div class="confirmArtsBg" id="confirmArtsBg" aria-hidden="true"><section class="confirmArtsModal" role="dialog" aria-modal="true" aria-labelledby="confirmArtsTitle"><header class="confirmArtsHead"><div><h3 id="confirmArtsTitle">Confira suas artes antes de enviar</h3><p>Dê uma última olhada nas imagens escolhidas. Toque em qualquer arte para ampliar.</p></div><button class="confirmArtsClose" id="confirmArtsClose" type="button">×</button></header><div class="confirmArtsBody"><span class="confirmArtsCount" id="confirmArtsCount"></span><div class="confirmArtsGrid" id="confirmArtsGrid"></div></div><footer class="confirmArtsFoot"><button class="confirmBackBtn" id="confirmBackBtn" type="button">Voltar e ajustar</button><button class="confirmSendBtn" id="confirmSendBtn" type="button">Confirmar e enviar</button></footer></section></div><div class="confirmZoomBg" id="confirmZoomBg" aria-hidden="true"><div class="confirmZoomBox"><div class="confirmZoomImage"><img id="confirmZoomImg" src="" alt="Arte ampliada"></div><div class="confirmZoomInfo"><b id="confirmZoomTitle">Código</b><div class="confirmZoomControls"><button type="button" id="confirmZoomPrev">Anterior</button><button type="button" id="confirmZoomNext">Próxima</button><button type="button" id="confirmZoomClose">Fechar</button></div></div></div></div>';
+    root.innerHTML='<div class="confirmArtsBg" id="confirmArtsBg" aria-hidden="true"><section class="confirmArtsModal" role="dialog" aria-modal="true" aria-labelledby="confirmArtsTitle"><header class="confirmArtsHead"><div><h3 id="confirmArtsTitle"></h3><p id="confirmArtsSubtitle"></p></div><button class="confirmArtsClose" id="confirmArtsClose" type="button">×</button></header><div class="confirmArtsBody"><span class="confirmArtsCount" id="confirmArtsCount"></span><div class="confirmArtsGrid" id="confirmArtsGrid"></div></div><footer class="confirmArtsFoot"><button class="confirmBackBtn" id="confirmBackBtn" type="button"></button><button class="confirmSendBtn" id="confirmSendBtn" type="button"></button></footer></section></div><div class="confirmZoomBg" id="confirmZoomBg" aria-hidden="true"><div class="confirmZoomBox"><div class="confirmZoomImage"><img id="confirmZoomImg" src="" alt="Arte ampliada"></div><div class="confirmZoomInfo"><b id="confirmZoomTitle">Código</b><div class="confirmZoomControls"><button type="button" id="confirmZoomPrev"></button><button type="button" id="confirmZoomNext"></button><button type="button" id="confirmZoomClose"></button></div></div></div></div>';
     document.body.appendChild(root);
     byId("confirmArtsClose").onclick=closeModal;
     byId("confirmBackBtn").onclick=closeModal;
@@ -65,11 +70,15 @@
     byId("confirmZoomPrev").onclick=function(){moveZoom(-1)};
     byId("confirmZoomNext").onclick=function(){moveZoom(1)};
     document.addEventListener("keydown",function(e){if(e.key==="Escape"){closeZoom();closeModal()} if(byId("confirmZoomBg")&&byId("confirmZoomBg").classList.contains("show")){if(e.key==="ArrowLeft")moveZoom(-1);if(e.key==="ArrowRight")moveZoom(1);}});
+    applyTexts();
   }
+
+  function applyTexts(){var t=modalText();byId("confirmArtsTitle").textContent=t.title||fallbackModal.title;byId("confirmArtsSubtitle").textContent=t.subtitle||fallbackModal.subtitle;byId("confirmBackBtn").textContent=t.backButton||fallbackModal.backButton;byId("confirmSendBtn").textContent=t.confirmButton||fallbackModal.confirmButton;byId("confirmZoomPrev").textContent=t.previousButton||fallbackModal.previousButton;byId("confirmZoomNext").textContent=t.nextButton||fallbackModal.nextButton;byId("confirmZoomClose").textContent=t.closeButton||fallbackModal.closeButton;}
 
   function renderModal(){
     var list=getCart();
-    byId("confirmArtsCount").textContent="Você selecionou "+getQty()+" arte(s).";
+    var t=modalText();
+    byId("confirmArtsCount").textContent=fmt(t.countText||fallbackModal.countText,{quantidade:getQty()});
     var html=list.map(function(i,idx){
       var qty=Number(i.qty)||1;
       return '<article class="confirmArtCard"><div class="confirmArtImgWrap" data-confirm-zoom="'+idx+'"><img src="'+esc(i.image||"")+'" alt="Arte código '+esc(i.code||"")+'"><span class="confirmArtCode">#'+esc(i.code||"")+'</span>'+(qty>1?'<span class="confirmArtQty">'+qty+' un.</span>':'')+'</div><div class="confirmArtInfo"><b>Código #'+esc(i.code||"")+'</b><span>'+esc(i.theme||"")+'</span></div></article>';
