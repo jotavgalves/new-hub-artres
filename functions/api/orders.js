@@ -2,6 +2,7 @@ import { json, loadConfig } from "./_config.js";
 import { requireAdmin } from "./admin/_auth.js";
 
 const ORDER_PREFIX = "ORDER:";
+const DELETED_ORDER_PREFIX = "ORDER_DELETED:";
 
 export async function onRequestGet(context) {
   const auth = await requireAdmin(context.request, context.env);
@@ -51,6 +52,30 @@ export async function onRequestPatch(context) {
   return json({ ok: true, order });
 }
 
+export async function onRequestDelete(context) {
+  const auth = await requireAdmin(context.request, context.env);
+  if (!auth.ok) return json({ ok: false, error: auth.error }, auth.status);
+  if (!context.env.CONFIG_KV) return json({ ok: false, error: "CONFIG_KV_NAO_CONFIGURADO" }, 500);
+
+  const url = new URL(context.request.url);
+  let id = String(url.searchParams.get("id") || "").trim();
+  if (!id) {
+    const body = await context.request.json().catch(() => ({}));
+    id = String(body.id || "").trim();
+  }
+  if (!id) return json({ ok: false, error: "ID_OBRIGATORIO" }, 400);
+
+  const key = `${ORDER_PREFIX}${id}`;
+  const raw = await context.env.CONFIG_KV.get(key);
+  if (!raw) return json({ ok: false, error: "PEDIDO_NAO_ENCONTRADO" }, 404);
+
+  const order = JSON.parse(raw);
+  order.deletedAt = new Date().toISOString();
+  await context.env.CONFIG_KV.put(`${DELETED_ORDER_PREFIX}${id}`, JSON.stringify(order, null, 2));
+  await context.env.CONFIG_KV.delete(key);
+  return json({ ok: true, deleted: true, id });
+}
+
 function normalizeOrder(body, config) {
   const createdAt = new Date().toISOString();
   const id = `${createdAt.replace(/[^0-9]/g, "")}-${crypto.randomUUID().slice(0, 8)}`;
@@ -68,6 +93,7 @@ function normalizeOrder(body, config) {
     updatedAt: createdAt,
     status: config.orderSettings && config.orderSettings.defaultStatus || "Novo",
     seller: body.seller || null,
+    customer: body.customer || null,
     totals: body.totals || {},
     items,
     qty: Number(body.qty || items.reduce((s,i)=>s+(Number(i.qty)||0),0)),
