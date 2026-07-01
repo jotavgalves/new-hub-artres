@@ -98,14 +98,17 @@ function replaceContent(html, config) {
 
 function rewriteHtml(html, config) {
   const viewConfig = publicConfig(config);
+  const activeDiscount = discountEnabled(viewConfig);
   const bolinhas = getBolinhas(viewConfig);
   const content = getContent(viewConfig);
   const unitPrice = Number(bolinhas.unitPrice || 9.75);
   const basePrice = Number((unitPrice * Number(bolinhas.minQty || 6)).toFixed(2));
   const discountPercentRaw = viewConfig && viewConfig.ui ? viewConfig.ui.discountPercent : 0;
   const discountPercent = Number(discountPercentRaw == null ? 0 : discountPercentRaw);
-  const discountFactor = discountEnabled(viewConfig) ? Number((discountPercent / 100).toFixed(4)) : 0;
+  const discountFactor = activeDiscount ? Number((discountPercent / 100).toFixed(4)) : 0;
   return replaceContent(html, viewConfig)
+    .replaceAll('Olá, gostaria de fazer esse pedido com 10% de desconto:', activeDiscount ? `Olá, gostaria de fazer esse pedido com ${discountPercent}% de desconto:` : 'Olá, gostaria de enviar esta seleção de artes:')
+    .replaceAll('Total com desconto:', activeDiscount ? 'Total com desconto:' : 'Total:')
     .replaceAll('R$ 9,90 cada', bolinhas.priceLabel)
     .replaceAll('R$ 9,90', bolinhas.priceLabel.replace(' cada', ''))
     .replaceAll('unitPrice:9.90,baseQty:6,basePrice:58.90,afterStep:2', `unitPrice:${unitPrice},baseQty:${bolinhas.minQty},basePrice:${basePrice},afterStep:${bolinhas.step},disableCustomization:${bolinhas.disableCustomization !== false}`)
@@ -115,11 +118,11 @@ function rewriteHtml(html, config) {
     .replace(/function rule50\(\)\{[\s\S]*?function hasCustomizedItems\(\)/, bolinhasRuleCode(bolinhas, content))
     .replace(/const SELLERS=\{[\s\S]*?\};\nfunction getLockedSellerFromUrl/, sellersCode(viewConfig))
     .replace('function discount(){return gross()*0.10}', `function discount(){return gross()*${discountFactor}}`)
-    .replaceAll('10% OFF por aqui', discountEnabled(viewConfig) ? `${discountPercent}% OFF por aqui` : 'Pedido organizado')
-    .replaceAll('10% de desconto', discountEnabled(viewConfig) ? `${discountPercent}% de desconto` : 'envio organizado')
-    .replaceAll('desconto de 10%', discountEnabled(viewConfig) ? `desconto de ${discountPercent}%` : 'pedido organizado')
-    .replaceAll('com 10% de desconto', discountEnabled(viewConfig) ? `com ${discountPercent}% de desconto` : 'organizada')
-    .replaceAll('Desconto por aqui 10%', discountEnabled(viewConfig) ? `Desconto por aqui ${discountPercent}%` : 'Pedido organizado')
+    .replaceAll('10% OFF por aqui', activeDiscount ? `${discountPercent}% OFF por aqui` : 'Pedido organizado')
+    .replaceAll('10% de desconto', activeDiscount ? `${discountPercent}% de desconto` : 'pedido organizado')
+    .replaceAll('desconto de 10%', activeDiscount ? `desconto de ${discountPercent}%` : 'pedido organizado')
+    .replaceAll('com 10% de desconto', activeDiscount ? `com ${discountPercent}% de desconto` : 'organizada')
+    .replaceAll('Desconto por aqui 10%', activeDiscount ? `Desconto por aqui ${discountPercent}%` : 'Pedido organizado')
     .replace('if(cfg.type==="bag")return `<button type="button" class="bagSizeMiniBtn" data-edit-size="${esc(i.id)}">Trocar tamanho</button>`;\n   return `<button type="button" class="iconMeasureBtn" data-customize="${esc(i.id)}" aria-label="Personalizar medidas" title="Personalizar medidas">Personalizar tamanho</button>`;', 'if(i.product==="50x50")return "";\n   if(cfg.type==="bag")return `<button type="button" class="bagSizeMiniBtn" data-edit-size="${esc(i.id)}">Trocar tamanho</button>`;\n   return `<button type="button" class="iconMeasureBtn" data-customize="${esc(i.id)}" aria-label="Personalizar medidas" title="Personalizar medidas">Personalizar tamanho</button>`;')
     .replace('if(cfg.type==="bag")return bagFields(item);\n   if(!item.details.customizing){', 'if(item.product==="50x50")return "";\n   if(cfg.type==="bag")return bagFields(item);\n   if(!item.details.customizing){')
     .replace('if(view==="products" || view==="bagSizes" || view==="items"){\n     add("Produtos",()=>showProducts(),"products");\n   }', 'if((view==="products" || view==="bagSizes" || view==="items") && !(view==="items" && selectedProduct && selectedProduct.__directBolinhas)){\n     add("Produtos",()=>showProducts(),"products");\n   }')
