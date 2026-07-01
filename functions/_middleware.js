@@ -10,7 +10,8 @@ function bolinhasRuleCode(bolinhas, content) {
   const stepTpl = JSON.stringify(v.stepQty || "Adicione mais {quantidade} bolinha{plural} para fechar {proxima}. Depois de {minimo}, seguimos sempre em pares.");
   const minOkTpl = JSON.stringify(v.minOk || "Mínimo fechado. Se quiser, acrescente de {passo} em {passo}.");
   const okTpl = JSON.stringify(v.qtyOk || "Quantidade certinha.");
-  return `function rule50(){function fmt(t,m){return String(t||"").replace(/\\{(quantidade|plural|proxima|minimo|passo)\\}/g,function(_,k){return m[k]!==undefined?m[k]:""})}const q=cart.filter(i=>i.product===${product}).reduce((s,i)=>s+i.qty,0);if(q===0)return null;if(q<${minQty}){const falta=${minQty}-q;return{type:"bad",title:${title},msg:fmt(${minTpl},{quantidade:falta,minimo:${minQty},passo:${step},plural:falta>1?"s":""})}}if(q>${minQty}&&((q-${minQty})%${step})!==0){const add=${step}-((q-${minQty})%${step});const next=q+add;return{type:"warn",title:${title},msg:fmt(${stepTpl},{quantidade:add,plural:add>1?"s":"",proxima:next,minimo:${minQty},passo:${step}})}}return{type:"ok",title:${title},msg:q===${minQty}?fmt(${minOkTpl},{minimo:${minQty},passo:${step}}):fmt(${okTpl},{minimo:${minQty},passo:${step}})}}\nfunction hasCustomizedItems()`;
+  return `function rule50(){function fmt(t,m){return String(t||"").replace(/\\{(quantidade|plural|proxima|minimo|passo)\\}/g,function(_,k){return m[k]!==undefined?m[k]:""})}const q=cart.filter(i=>i.product===${product}).reduce((s,i)=>s+i.qty,0);if(q===0)return null;if(q<${minQty}){const falta=${minQty}-q;return{type:"bad",title:${title},msg:fmt(${minTpl},{quantidade:falta,minimo:${minQty},passo:${step},plural:falta>1?"s":""})}}if(q>${minQty}&&((q-${minQty})%${step})!==0){const add=${step}-((q-${minQty})%${step});const next=q+add;return{type:"warn",title:${title},msg:fmt(${stepTpl},{quantidade:add,plural:add>1?"s":"",proxima:next,minimo:${minQty},passo:${step}})}}return{type:"ok",title:${title},msg:q===${minQty}?fmt(${minOkTpl},{minimo:${minQty},passo:${step}}):fmt(${okTpl},{minimo:${minQty},passo:${step}})}}
+function hasCustomizedItems()`;
 }
 
 function sellersCode(config) {
@@ -22,6 +23,39 @@ function sellersCode(config) {
     }, {});
   if (!Object.keys(active).length) active.ana = { label: "Ana", phone: "5581996763982" };
   return `const SELLERS=${JSON.stringify(active)};\nfunction getLockedSellerFromUrl`;
+}
+
+function discountEnabled(config) {
+  const pct = Number(config && config.ui ? config.ui.discountPercent : 0);
+  return !!(config && config.campaign && config.campaign.active !== false && Number.isFinite(pct) && pct > 0);
+}
+
+function publicConfig(config) {
+  const out = JSON.parse(JSON.stringify(config || {}));
+  out.ui = out.ui || {};
+  out.campaign = out.campaign || {};
+  out.content = out.content || {};
+  out.content.hero = out.content.hero || {};
+  out.content.promo = out.content.promo || {};
+  out.content.catalog = out.content.catalog || {};
+  out.content.cart = out.content.cart || {};
+  out.content.whatsapp = out.content.whatsapp || {};
+  if (!discountEnabled(out)) {
+    out.ui.discountPercent = 0;
+    out.campaign.active = false;
+    out.content.hero.subtitle = "Escolha o tema, veja os produtos disponíveis e selecione as artes que mais combinam com a sua comemoração. Envie sua seleção pelo WhatsApp com tudo organizado para a vendedora.";
+    out.content.promo.pill = "PEDIDO ORGANIZADO";
+    out.content.promo.title = "Escolha suas artes com calma e envie tudo pronto";
+    out.content.promo.text = "Sua seleção chega no WhatsApp da vendedora com os códigos, quantidades e dados do cliente organizados para agilizar o atendimento.";
+    out.content.catalog.caption = "Toque na arte para ver melhor e selecione suas favoritas para montar sua solicitação.";
+    out.content.cart.savingsBadge = "SELEÇÃO ORGANIZADA";
+    out.content.cart.savingsTitle = "Seu pedido vai pronto para a vendedora";
+    out.content.cart.savingsText = "Ao finalizar, enviamos os códigos escolhidos, quantidades e seus dados de contato em uma solicitação organizada.";
+    out.content.cart.sendButton = "Enviar";
+    out.content.whatsapp.intro = "Olá, gostaria de enviar esta seleção de artes:";
+    out.content.whatsapp.totalLine = "Total: {total}";
+  }
+  return out;
 }
 
 function replaceContent(html, config) {
@@ -63,14 +97,15 @@ function replaceContent(html, config) {
 }
 
 function rewriteHtml(html, config) {
-  const bolinhas = getBolinhas(config);
-  const content = getContent(config);
+  const viewConfig = publicConfig(config);
+  const bolinhas = getBolinhas(viewConfig);
+  const content = getContent(viewConfig);
   const unitPrice = Number(bolinhas.unitPrice || 9.75);
   const basePrice = Number((unitPrice * Number(bolinhas.minQty || 6)).toFixed(2));
-  const discountPercentRaw = config && config.ui ? config.ui.discountPercent : 10;
-  const discountPercent = Number(discountPercentRaw == null ? 10 : discountPercentRaw);
-  const discountFactor = Number((discountPercent / 100).toFixed(4));
-  return replaceContent(html, config)
+  const discountPercentRaw = viewConfig && viewConfig.ui ? viewConfig.ui.discountPercent : 0;
+  const discountPercent = Number(discountPercentRaw == null ? 0 : discountPercentRaw);
+  const discountFactor = discountEnabled(viewConfig) ? Number((discountPercent / 100).toFixed(4)) : 0;
+  return replaceContent(html, viewConfig)
     .replaceAll('R$ 9,90 cada', bolinhas.priceLabel)
     .replaceAll('R$ 9,90', bolinhas.priceLabel.replace(' cada', ''))
     .replaceAll('unitPrice:9.90,baseQty:6,basePrice:58.90,afterStep:2', `unitPrice:${unitPrice},baseQty:${bolinhas.minQty},basePrice:${basePrice},afterStep:${bolinhas.step},disableCustomization:${bolinhas.disableCustomization !== false}`)
@@ -78,13 +113,13 @@ function rewriteHtml(html, config) {
     .replaceAll('if(item.product==="50x50")return "R$ 9,90 cada";', `if(item.product==="50x50")return ${JSON.stringify(bolinhas.priceLabel)};`)
     .replaceAll('if(product==="50x50")return qty>=6?58.90+Math.max(0,qty-6)*9.90:qty*9.90;', `if(product==="50x50")return qty*${unitPrice};`)
     .replace(/function rule50\(\)\{[\s\S]*?function hasCustomizedItems\(\)/, bolinhasRuleCode(bolinhas, content))
-    .replace(/const SELLERS=\{[\s\S]*?\};\nfunction getLockedSellerFromUrl/, sellersCode(config))
+    .replace(/const SELLERS=\{[\s\S]*?\};\nfunction getLockedSellerFromUrl/, sellersCode(viewConfig))
     .replace('function discount(){return gross()*0.10}', `function discount(){return gross()*${discountFactor}}`)
-    .replaceAll('10% OFF por aqui', `${discountPercent}% OFF por aqui`)
-    .replaceAll('10% de desconto', `${discountPercent}% de desconto`)
-    .replaceAll('desconto de 10%', `desconto de ${discountPercent}%`)
-    .replaceAll('com 10% de desconto', `com ${discountPercent}% de desconto`)
-    .replaceAll('Desconto por aqui 10%', `Desconto por aqui ${discountPercent}%`)
+    .replaceAll('10% OFF por aqui', discountEnabled(viewConfig) ? `${discountPercent}% OFF por aqui` : 'Pedido organizado')
+    .replaceAll('10% de desconto', discountEnabled(viewConfig) ? `${discountPercent}% de desconto` : 'envio organizado')
+    .replaceAll('desconto de 10%', discountEnabled(viewConfig) ? `desconto de ${discountPercent}%` : 'pedido organizado')
+    .replaceAll('com 10% de desconto', discountEnabled(viewConfig) ? `com ${discountPercent}% de desconto` : 'organizada')
+    .replaceAll('Desconto por aqui 10%', discountEnabled(viewConfig) ? `Desconto por aqui ${discountPercent}%` : 'Pedido organizado')
     .replace('if(cfg.type==="bag")return `<button type="button" class="bagSizeMiniBtn" data-edit-size="${esc(i.id)}">Trocar tamanho</button>`;\n   return `<button type="button" class="iconMeasureBtn" data-customize="${esc(i.id)}" aria-label="Personalizar medidas" title="Personalizar medidas">Personalizar tamanho</button>`;', 'if(i.product==="50x50")return "";\n   if(cfg.type==="bag")return `<button type="button" class="bagSizeMiniBtn" data-edit-size="${esc(i.id)}">Trocar tamanho</button>`;\n   return `<button type="button" class="iconMeasureBtn" data-customize="${esc(i.id)}" aria-label="Personalizar medidas" title="Personalizar medidas">Personalizar tamanho</button>`;')
     .replace('if(cfg.type==="bag")return bagFields(item);\n   if(!item.details.customizing){', 'if(item.product==="50x50")return "";\n   if(cfg.type==="bag")return bagFields(item);\n   if(!item.details.customizing){')
     .replace('if(view==="products" || view==="bagSizes" || view==="items"){\n     add("Produtos",()=>showProducts(),"products");\n   }', 'if((view==="products" || view==="bagSizes" || view==="items") && !(view==="items" && selectedProduct && selectedProduct.__directBolinhas)){\n     add("Produtos",()=>showProducts(),"products");\n   }')
@@ -107,6 +142,7 @@ export async function onRequest(context) {
   const url = new URL(context.request.url);
   if (url.pathname.startsWith("/api/")) return context.next();
   const { config } = await loadConfig(context.env);
+  const viewConfig = publicConfig(config);
   const routing = config.routing || {};
   const adminAlias = routing.adminAlias || "/adm";
 
@@ -124,10 +160,10 @@ export async function onRequest(context) {
 
   let html = await response.text();
   html = rewriteHtml(html, config);
-  html = injectCampaign(html, config);
+  html = injectCampaign(html, viewConfig);
   if (!html.includes("/assets/catalog-cache-bust.js")) html = html.replace("</head>", `${CATALOG_CACHE_BUST_SCRIPT}</head>`);
   if (!html.includes("bolinhas-drive-patch-style")) html = html.replace("</head>", `${STYLE_PATCH}</head>`);
-  if (config.ui.confirmModal !== false && !html.includes("/assets/confirm-modal.js")) html = html.replace("</body>", `${CONFIRM_MODAL_SCRIPT}</body>`);
+  if (viewConfig.ui && viewConfig.ui.confirmModal !== false && !html.includes("/assets/confirm-modal.js")) html = html.replace("</body>", `${CONFIRM_MODAL_SCRIPT}</body>`);
   if (config.orderSettings && config.orderSettings.saveOrders !== false && !html.includes("/assets/order-capture.js")) html = html.replace("</body>", `${ORDER_CAPTURE_SCRIPT}</body>`);
 
   const headers = new Headers(response.headers);
