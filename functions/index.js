@@ -1,4 +1,5 @@
 const CACHE_BUST_SCRIPT = '<script src="/assets/catalog-cache-bust.js?v=4"></script>';
+const CUSTOMER_CHECKOUT_SCRIPT = '<script src="/assets/customer-checkout.js?v=1" defer></script>';
 
 export async function onRequest(context) {
   const assetResponse = await context.env.ASSETS.fetch(context.request);
@@ -10,7 +11,8 @@ export async function onRequest(context) {
   html = html.replace('<script src="/assets/catalog-cache-bust.js?v=2"></script>', '');
   html = html.replace('<script src="/assets/catalog-cache-bust.js?v=3"></script>', '');
   html = html.replace('<script src="/assets/catalog-cache-bust.js?v=4"></script>', '');
-  html = html.replace('</head>', `${CACHE_BUST_SCRIPT}</head>`);
+  html = html.replace('<script src="/assets/customer-checkout.js?v=1" defer></script>', '');
+  html = html.replace('</head>', `${CACHE_BUST_SCRIPT}${CUSTOMER_CHECKOUT_SCRIPT}</head>`);
 
   const headers = new Headers(assetResponse.headers);
   headers.delete('content-length');
