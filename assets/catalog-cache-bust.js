@@ -1,14 +1,45 @@
 (function(){
-  if (window.__CATALOG_CACHE_BUST__) return;
-  window.__CATALOG_CACHE_BUST__ = true;
+  if (window.__CATALOG_VERSIONED_CACHE__) return;
+  window.__CATALOG_VERSIONED_CACHE__ = true;
+
+  var META_KEY = 'catalog-meta-version';
+  var version = localStorage.getItem(META_KEY) || 'boot';
+  var metaPromise = null;
 
   function isDriveCacheKey(key){ return String(key || '').indexOf('drive-cache:') === 0; }
+  function isVersionedKey(key){ return String(key || '').indexOf('drive-cache:v') === 0; }
+  function baseKey(key){ return String(key || '').replace(/^drive-cache:v[^:]+:/, 'drive-cache:'); }
+  function versionedKey(key){
+    var raw = baseKey(key);
+    return 'drive-cache:v' + version + ':' + raw;
+  }
+  function purgeOldCaches(currentVersion){
+    try {
+      Object.keys(localStorage).forEach(function(key){
+        if (!isDriveCacheKey(key)) return;
+        if (key.indexOf('drive-cache:v' + currentVersion + ':') === 0) return;
+        localStorage.removeItem(key);
+      });
+    } catch (_) {}
+  }
+  async function loadMeta(){
+    if (metaPromise) return metaPromise;
+    metaPromise = fetch('/api/catalog-meta?_ts=' + Date.now(), { cache:'no-store', headers:{ 'Cache-Control':'no-store' } })
+      .then(function(r){ return r.json(); })
+      .then(function(meta){
+        var next = String(meta.catalogVersion || meta.version || '1');
+        if (next !== version) {
+          version = next;
+          localStorage.setItem(META_KEY, version);
+          purgeOldCaches(version);
+        }
+        return meta;
+      })
+      .catch(function(){ return { catalogVersion: version }; });
+    return metaPromise;
+  }
 
-  try {
-    Object.keys(localStorage).forEach(function(key){
-      if (isDriveCacheKey(key)) localStorage.removeItem(key);
-    });
-  } catch (_) {}
+  loadMeta();
 
   try {
     var originalGetItem = Storage.prototype.getItem;
@@ -16,16 +47,27 @@
     var originalRemoveItem = Storage.prototype.removeItem;
 
     Storage.prototype.getItem = function(key){
-      if (this === localStorage && isDriveCacheKey(key)) return null;
+      if (this === localStorage && isDriveCacheKey(key)) {
+        var direct = originalGetItem.call(this, versionedKey(key));
+        if (direct) return direct;
+        return null;
+      }
       return originalGetItem.apply(this, arguments);
     };
 
     Storage.prototype.setItem = function(key, value){
-      if (this === localStorage && isDriveCacheKey(key)) return undefined;
+      if (this === localStorage && isDriveCacheKey(key)) {
+        return originalSetItem.call(this, versionedKey(key), value);
+      }
       return originalSetItem.apply(this, arguments);
     };
 
     Storage.prototype.removeItem = function(key){
+      if (this === localStorage && isDriveCacheKey(key)) {
+        originalRemoveItem.call(this, key);
+        originalRemoveItem.call(this, versionedKey(key));
+        return undefined;
+      }
       return originalRemoveItem.apply(this, arguments);
     };
   } catch (_) {}
@@ -35,12 +77,8 @@
     try {
       var url = typeof input === 'string' ? new URL(input, location.origin) : new URL(input.url, location.origin);
       if (url.pathname === '/api/drive') {
-        url.searchParams.set('_ts', String(Date.now()));
-        init = Object.assign({}, init || {}, { cache: 'no-store' });
-        var headers = new Headers(init.headers || (input && input.headers) || {});
-        headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
-        headers.set('Pragma', 'no-cache');
-        init.headers = headers;
+        url.searchParams.set('cv', version);
+        init = Object.assign({}, init || {}, { cache: 'default' });
         input = url.toString();
       }
     } catch (_) {}
