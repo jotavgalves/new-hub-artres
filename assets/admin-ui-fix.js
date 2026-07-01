@@ -9,11 +9,13 @@
       body[data-admin-tab="catalogView"] .saveBar,
       body[data-admin-tab="permissionsView"] .saveBar,
       body[data-admin-tab="toolsView"] .saveBar,
-      body[data-admin-tab="ordersView"] .saveBar{display:none!important}
+      body[data-admin-tab="ordersView"] .saveBar,
+      body[data-admin-tab="clientesView"] .saveBar{display:none!important}
       body[data-admin-tab="catalogView"] .main,
       body[data-admin-tab="permissionsView"] .main,
       body[data-admin-tab="toolsView"] .main,
-      body[data-admin-tab="ordersView"] .main{padding-bottom:36px!important}
+      body[data-admin-tab="ordersView"] .main,
+      body[data-admin-tab="clientesView"] .main{padding-bottom:36px!important}
       #catalogPanel .card:first-child .sectionHead,
       #usersPanel .card:first-child .sectionHead{align-items:center}
       #saveCatalogControl,#saveUsers{min-width:220px}
@@ -21,11 +23,11 @@
     `;
     document.head.appendChild(style);
   }
-  function loadOrdersModule(){
-    if (document.getElementById('adminOrdersUnifiedScript')) return;
+  function loadScript(id, src){
+    if (document.getElementById(id)) return;
     var script = document.createElement('script');
-    script.id = 'adminOrdersUnifiedScript';
-    script.src = '/assets/admin-orders-unified.js?v=1';
+    script.id = id;
+    script.src = src;
     script.defer = true;
     document.body.appendChild(script);
   }
@@ -40,7 +42,8 @@
     if (!document.body.dataset.adminTab) setTab('overviewView');
   }
   injectStyle();
-  loadOrdersModule();
+  loadScript('adminOrdersUnifiedScript','/assets/admin-orders-unified.js?v=1');
+  loadScript('adminClientesScript','/assets/clientes.js?v=1');
   bindTabs();
   new MutationObserver(bindTabs).observe(document.body,{childList:true,subtree:true});
 })();
