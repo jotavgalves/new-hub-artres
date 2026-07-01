@@ -6,9 +6,12 @@
   function safe(fn, fallback){ try { return fn(); } catch(e) { return fallback; } }
   function esc(v){ return String(v == null ? '' : v).replace(/[&<>'"]/g, function(m){ return {'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]; }); }
   function digits(v){ return String(v || '').replace(/\D/g, ''); }
+  function normPhone(v){ var d = digits(v); return d.indexOf('55') === 0 ? d.slice(2) : d; }
   function fullName(v){ return String(v || '').replace(/\s+/g, ' ').trim().toLocaleUpperCase('pt-BR'); }
   function getCart(){ return safe(function(){ return Array.isArray(cart) ? cart : []; }, []); }
-  function getSeller(){ return safe(function(){ return selectedSeller && SELLERS[selectedSeller] ? { id:selectedSeller, label:SELLERS[selectedSeller].label, phone:SELLERS[selectedSeller].phone } : null; }, null); }
+  function getSeller(){ return safe(function(){ if (typeof selectedSeller !== 'undefined' && selectedSeller && SELLERS && SELLERS[selectedSeller]) { var s = SELLERS[selectedSeller]; return { id:selectedSeller, label:s.label, phone:digits(s.phone) }; } var phone = phoneFromHref(state.href || (typeof waUrl === 'function' ? waUrl() : '')); var found = sellerByPhone(phone); return found || null; }, null); }
+  function phoneFromHref(href){ try { var u = new URL(href, location.href); return digits(u.searchParams.get('phone') || u.pathname); } catch(e) { return digits(href); } }
+  function sellerByPhone(phone){ var want = normPhone(phone); if (!want) return null; try { for (var id in SELLERS) { var s = SELLERS[id]; if (normPhone(s.phone) === want) return { id:id, label:s.label, phone:digits(s.phone) }; } } catch(e) {} return null; }
   function getTotals(){ return safe(function(){ return { gross:gross(), discount:discount(), net:net(), qty:cartQty() }; }, {}); }
   function getQty(){ return safe(function(){ return cartQty(); }, getCart().reduce(function(s,i){ return s + (Number(i.qty)||0); }, 0)); }
 
