@@ -9,9 +9,22 @@ const BOLINHAS_CONFIG = {
   skipProductsStep: true
 };
 
+function rewriteHtml(html) {
+  return html
+    .replaceAll('R$ 9,90 cada', BOLINHAS_CONFIG.priceLabel)
+    .replaceAll('R$ 9,90', 'R$ 9,75')
+    .replaceAll('unitPrice:9.90,baseQty:6,basePrice:58.90,afterStep:2', 'unitPrice:9.75,baseQty:1,basePrice:9.75,afterStep:1,disableCustomization:true')
+    .replaceAll('if(product==="50x50")return qty>=6?58.90+Math.max(0,qty-6)*9.90:qty*9.90;', 'if(product==="50x50")return qty*9.75;')
+    .replace(/function rule50\(\)\{[\s\S]*?function hasCustomizedItems\(\)/, 'function rule50(){return null}\nfunction hasCustomizedItems()')
+    .replace('if(cfg.type==="bag")return `<button type="button" class="bagSizeMiniBtn" data-edit-size="${esc(i.id)}">Trocar tamanho</button>`;\n   return `<button type="button" class="iconMeasureBtn" data-customize="${esc(i.id)}" aria-label="Personalizar medidas" title="Personalizar medidas">Personalizar tamanho</button>`;', 'if(i.product==="50x50")return "";\n   if(cfg.type==="bag")return `<button type="button" class="bagSizeMiniBtn" data-edit-size="${esc(i.id)}">Trocar tamanho</button>`;\n   return `<button type="button" class="iconMeasureBtn" data-customize="${esc(i.id)}" aria-label="Personalizar medidas" title="Personalizar medidas">Personalizar tamanho</button`;')
+    .replace('if(cfg.type==="bag")return bagFields(item);\n   if(!item.details.customizing){', 'if(item.product==="50x50")return "";\n   if(cfg.type==="bag")return bagFields(item);\n   if(!item.details.customizing){')
+    .replace('if(view==="products" || view==="bagSizes" || view==="items"){\n     add("Produtos",()=>showProducts(),"products");\n   }', 'if((view==="products" || view==="bagSizes" || view==="items") && !(view==="items" && selectedProduct && selectedProduct.__directBolinhas)){\n     add("Produtos",()=>showProducts(),"products");\n   }')
+    .replace('if(view==="items" && selectedProduct){\n     const productName = selectedProduct.product==="sacolinha" && selectedProduct.bagSize', 'if(view==="items" && selectedProduct && !selectedProduct.__directBolinhas){\n     const productName = selectedProduct.product==="sacolinha" && selectedProduct.bagSize')
+    .replace('products=d.folders||[];showProducts()', 'products=d.folders||[];const onlyDirectBolinhas=products.length===1&&products[0].product==="50x50"&&products[0].kind!=="folder";if(onlyDirectBolinhas){await loadItems({...products[0],id:folder.id,name:"Bolinhas",rawName:"Bolinhas",product:"50x50",productName:"Bolinhas",__directBolinhas:true});return}showProducts()');
+}
+
 const STYLE_PATCH = `
 <style id="bolinhas-drive-patch-style">
-  /* Evita que nomes grandes de temas/subtemas sejam comidos nas pílulas */
   #breadcrumbs,
   .breadcrumbs{
     min-width:0!important;
@@ -33,6 +46,10 @@ const STYLE_PATCH = `
     line-height:1.12!important;
     padding:8px 12px!important;
   }
+  .iconMeasureBtn[data-customize]{display:none!important;}
+  .ruleCard.bad b,
+  .ruleCard.bad,
+  .ruleCard.warn{display:none!important;}
   @media(max-width:560px){
     #breadcrumbs .pathPill,
     .breadcrumbs .pathPill,
@@ -52,12 +69,21 @@ function patchScript(){
   const BOLINHAS = ${cfg};
   window.ARMAZEM_BOLINHAS_CONFIG = BOLINHAS;
 
-  const brl = value => Number(value || 0).toLocaleString("pt-BR", { style:"currency", currency:"BRL" });
-
   function isBolinhas(itemOrProduct){
     if(!itemOrProduct) return false;
     if(typeof itemOrProduct === "string") return itemOrProduct === BOLINHAS.product;
     return itemOrProduct.product === BOLINHAS.product || itemOrProduct.productName === BOLINHAS.label || itemOrProduct.label === BOLINHAS.label;
+  }
+
+  let refreshing = false;
+  function refreshViews(){
+    if(refreshing) return;
+    refreshing = true;
+    try{
+      if(typeof renderCart === "function") renderCart();
+      if((view === "items" || view === "search") && typeof renderItems === "function") renderItems();
+    }catch(e){}
+    refreshing = false;
   }
 
   function patchGlobals(){
@@ -141,69 +167,37 @@ function patchScript(){
       if(typeof renderCrumbs === "function" && !window.__bolinhasOriginalRenderCrumbs){
         window.__bolinhasOriginalRenderCrumbs = renderCrumbs;
         renderCrumbs = function(){
-          const b = document.getElementById("breadcrumbs");
-          if(!b) return;
           const directBolinhas = view === "items" && selectedProduct && selectedProduct.__directBolinhas;
           if(!directBolinhas) return window.__bolinhasOriginalRenderCrumbs();
-
+          const b = document.getElementById("breadcrumbs");
+          if(!b) return;
           const pills=[];
           const sanitize=value=>String(value||"").replace(/[←‹❮›]/g,"").replace(/^Voltar para\s+/i,"").replace(/\s+/g," ").trim();
           const add=(label,fn)=>{ label=sanitize(label); if(label) pills.push({label,fn}); };
-
           add("Temas",()=>showThemes());
           if(selectedTheme) add(selectedTheme.name,()=>loadProducts(selectedTheme,"root"));
-          if(Array.isArray(folderTrail) && folderTrail.length){
-            folderTrail.forEach((folder,index)=>add(folder.name,()=>goToFolder(index)));
-          }
-
+          if(Array.isArray(folderTrail) && folderTrail.length){folderTrail.forEach((folder,index)=>add(folder.name,()=>goToFolder(index)));}
           const currentIndex = pills.length - 1;
           b.innerHTML = pills.map((p,index)=>'<button type="button" class="pathPill '+(index===currentIndex?'current':'')+'" data-path-index="'+index+'">'+esc(p.label)+'</button>').join("");
           b.querySelectorAll("[data-path-index]").forEach(btn=>{
             const idx = Number(btn.dataset.pathIndex);
-            btn.onclick = () => {
-              if(idx === currentIndex) return;
-              const pill = pills[idx];
-              if(pill && typeof pill.fn === "function") pill.fn();
-            };
+            btn.onclick = () => { if(idx !== currentIndex && pills[idx] && typeof pills[idx].fn === "function") pills[idx].fn(); };
           });
         };
       }
 
-      if(typeof loadProducts === "function" && !window.__bolinhasOriginalLoadProducts){
-        window.__bolinhasOriginalLoadProducts = loadProducts;
-        loadProducts = async function(folder, navMode){
-          await window.__bolinhasOriginalLoadProducts(folder, navMode);
-          const onlyDirectBolinhas = Array.isArray(products) && products.length === 1 && isBolinhas(products[0]) && products[0].kind !== "folder";
-          if(onlyDirectBolinhas && BOLINHAS.skipProductsStep){
-            const p = Object.assign({}, products[0], {
-              id: folder && folder.id ? folder.id : products[0].id,
-              name: BOLINHAS.label,
-              rawName: BOLINHAS.label,
-              product: BOLINHAS.product,
-              productName: BOLINHAS.label,
-              __directBolinhas: true
-            });
-            await loadItems(p);
+      if(Array.isArray(cart)){
+        cart.forEach(i=>{
+          if(isBolinhas(i)){
+            i.productName = BOLINHAS.label;
+            i.price = BOLINHAS.unitPrice;
+            i.unitPrice = BOLINHAS.unitPrice;
+            i.disableCustomization = true;
+            if(i.details){i.details.customizing=false;i.details.customized=false;i.details.unknown=false;}
           }
-        };
+        });
       }
-
-      if(typeof smartBack === "function" && !window.__bolinhasOriginalSmartBack){
-        window.__bolinhasOriginalSmartBack = smartBack;
-        smartBack = function(){
-          if(view === "items" && selectedProduct && selectedProduct.__directBolinhas){
-            if(folderTrail && folderTrail.length){
-              goToFolder(folderTrail.length - 2);
-              return;
-            }
-            showThemes();
-            return;
-          }
-          return window.__bolinhasOriginalSmartBack();
-        };
-      }
-
-      if(typeof renderItems === "function" && Array.isArray(items)){
+      if(Array.isArray(items)){
         items.forEach(i=>{
           if(isBolinhas(i)){
             i.productName = BOLINHAS.label;
@@ -213,14 +207,14 @@ function patchScript(){
           }
         });
       }
-    }catch(err){
-      console.warn("Patch Bolinhas não aplicado completamente", err);
-    }
+      refreshViews();
+    }catch(err){ console.warn("Patch Bolinhas não aplicado completamente", err); }
   }
 
   patchGlobals();
   document.addEventListener("DOMContentLoaded", patchGlobals);
   setTimeout(patchGlobals, 0);
+  setTimeout(patchGlobals, 500);
 })();
 </script>`;
 }
@@ -231,19 +225,13 @@ export async function onRequest(context) {
   if (!contentType.includes("text/html")) return response;
 
   let html = await response.text();
-  if (!html.includes("bolinhas-drive-patch-style")) {
-    html = html.replace("</head>", `${STYLE_PATCH}</head>`);
-  }
-  if (!html.includes("bolinhas-drive-patch")) {
-    html = html.replace("</body>", `${patchScript()}</body>`);
-  }
+  html = rewriteHtml(html);
+  if (!html.includes("bolinhas-drive-patch-style")) html = html.replace("</head>", `${STYLE_PATCH}</head>`);
+  if (!html.includes("bolinhas-drive-patch")) html = html.replace("</body>", `${patchScript()}</body>`);
 
   const headers = new Headers(response.headers);
   headers.delete("content-length");
   headers.set("content-type", "text/html; charset=utf-8");
-  return new Response(html, {
-    status: response.status,
-    statusText: response.statusText,
-    headers
-  });
+  headers.set("cache-control", "no-store, max-age=0");
+  return new Response(html, { status: response.status, statusText: response.statusText, headers });
 }
