@@ -91,6 +91,11 @@ export async function onRequest(context) {
   const contentType = response.headers.get("content-type") || "";
   if (!contentType.includes("text/html")) return response;
 
+  const url = new URL(context.request.url);
+  if (url.pathname === "/adm" || url.pathname.startsWith("/adm/")) {
+    return response;
+  }
+
   const { config } = await loadConfig(context.env);
   let html = await response.text();
   html = rewriteHtml(html, config);
