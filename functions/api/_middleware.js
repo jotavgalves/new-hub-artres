@@ -20,13 +20,14 @@ export async function onRequest(context) {
   const response = await context.next();
   const text = await response.text();
   let data;
-  try { data = JSON.parse(text); } catch (_) { return new Response(text, response); }
+  try { data = JSON.parse(text); } catch (_) { return new Response(text, { status: response.status, statusText: response.statusText, headers: response.headers }); }
 
   try {
     if (data && data.ok !== false) {
       if (mode === 'themes') data = await shapeThemes(data, config);
       if (mode === 'products') data = await shapeProducts(data, config, apiKey, rawFolderId);
       if (mode === 'items') data = await shapeItems(data, config, apiKey, rawFolderId);
+      if (mode === 'search') data = shapeSearch(data, config);
     }
   } catch (error) {
     data.editorialWarning = String(error && error.message || error);
@@ -124,6 +125,17 @@ async function shapeItems(data, config, apiKey, folderId) {
   }
   items.sort((a,b)=>(Number(b.sortId)||0)-(Number(a.sortId)||0));
   return { ...data, items, total: items.length };
+}
+
+function shapeSearch(data, config) {
+  const rules = activeTransplants(structure(config)).filter(t => t.hideSource !== false);
+  if (!rules.length || !Array.isArray(data.items)) return data;
+  const items = data.items.map(item => {
+    const r = rules.find(t => norm(t.from) === norm(item.theme || item.embeddedTheme));
+    if (!r) return item;
+    return { ...item, theme: displayName(r.to, config), sourceTheme: item.theme, transplanted: true };
+  });
+  return { ...data, items };
 }
 
 function structure(config){const s=config.catalogStructure||{};return {collections:s.collections||[],transplants:s.transplants||[]};}
