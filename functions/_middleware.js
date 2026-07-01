@@ -52,6 +52,7 @@ function publicConfig(config) {
     out.content.cart.savingsTitle = "Seu pedido vai pronto para a vendedora";
     out.content.cart.savingsText = "Ao finalizar, enviamos os códigos escolhidos, quantidades e seus dados de contato em uma solicitação organizada.";
     out.content.cart.sendButton = "Enviar";
+    out.content.cart.emptyCart = "Sua seleção ainda está vazia.";
     out.content.whatsapp.intro = "Olá, gostaria de enviar esta seleção de artes:";
     out.content.whatsapp.totalLine = "Total: {total}";
   }
@@ -96,6 +97,26 @@ function replaceContent(html, config) {
   return out;
 }
 
+function applyCampaignLogic(html, activeDiscount, discountPercent, discountFactor) {
+  const campaignRuntime = `function gross(){return groups().reduce((s,g)=>s+g.subtotal,0)}function campaignActive(){return ${activeDiscount}}function campaignPercent(){return ${discountPercent}}function discount(){return campaignActive()?gross()*${discountFactor}:0}function total(){return campaignActive()?Math.max(0,gross()-discount()):gross()}`;
+  let out = html
+    .replace('function gross(){return groups().reduce((s,g)=>s+g.subtotal,0)}function discount(){return gross()*0.10}function total(){return Math.max(0,gross()-discount())}', campaignRuntime)
+    .replace('if(cartQty()===0)return{ok:false,msg:"Seu pedido ainda está vazio. Escolha o tema da festa e adicione as artes que mais gostar. O desconto de 10% entra automaticamente."};', 'if(cartQty()===0)return{ok:false,msg:campaignActive()?`Seu pedido ainda está vazio. Escolha o tema da festa e adicione as artes que mais gostar. O desconto de ${campaignPercent()}% entra automaticamente.`:"Sua seleção ainda está vazia. Escolha o tema da festa e adicione as artes que mais gostar."};')
+    .replace('return{ok:true,msg:"Perfeito. Sua seleção está pronta para enviar com 10% de desconto por aqui."};', 'return{ok:true,msg:campaignActive()?`Perfeito. Sua seleção está pronta para enviar com ${campaignPercent()}% de desconto por aqui.`:"Perfeito. Sua seleção está pronta para enviar."};');
+
+  const itemLineFn = 'function itemLine(i){return `#${i.code}${i.qty>1?` (${i.qty} un.)`:""}`}';
+  const campaignCardFn = itemLineFn + 'function campaignCardHtml(){return campaignActive()?`<div class="discountCard"><span>${campaignPercent()}% OFF por aqui</span><strong>Você economiza ${money(discount())}</strong><small>O desconto já entra automaticamente no total antes de enviar para a vendedora. Quanto mais você escolhe por aqui, mais fácil fica finalizar seu pedido.</small></div>`:`<div class="discountCard organizedCard"><span>SELEÇÃO ORGANIZADA</span><strong>Seu pedido vai pronto para a vendedora</strong><small>Ao finalizar, enviamos os códigos escolhidos, quantidades e seus dados de contato em uma solicitação organizada.</small></div>`}';
+  out = out.replace(itemLineFn, campaignCardFn);
+
+  out = out
+    .replace('${cartQty()?`<div class="discountCard"><span>10% OFF por aqui</span><strong>Você economiza ${money(discount())}</strong><small>O desconto já entra automaticamente no total antes de enviar para a vendedora. Quanto mais você escolhe por aqui, mais fácil fica finalizar seu pedido.</small></div>`:""}', '${cartQty()?campaignCardHtml():""}')
+    .replace('Escolha um tema que combine com sua festa e adicione as artes que mais gostar. O desconto de 10% será aplicado automaticamente no final.', '${campaignActive()?`Escolha um tema que combine com sua festa e adicione as artes que mais gostar. O desconto de ${campaignPercent()}% será aplicado automaticamente no final.`:"Escolha um tema que combine com sua festa e adicione as artes que mais gostar."}')
+    .replace('<div class="totalLine"><span>Desconto por aqui 10%</span><strong>- ${money(discount())}</strong></div>', '${campaignActive()?`<div class="totalLine"><span>Desconto por aqui ${campaignPercent()}%</span><strong>- ${money(discount())}</strong></div>`:""}')
+    .replace('<div class="total"><span>Total com desconto</span><strong>${money(total())}</strong></div>', '<div class="total"><span>${campaignActive()?"Total com desconto":"Total"}</span><strong>${money(total())}</strong></div>')
+    .replace('Enviar pedido com 10% OFF', '${campaignActive()?`Enviar pedido com ${campaignPercent()}% OFF`:"Enviar"}');
+  return out;
+}
+
 function rewriteHtml(html, config) {
   const viewConfig = publicConfig(config);
   const activeDiscount = discountEnabled(viewConfig);
@@ -106,7 +127,7 @@ function rewriteHtml(html, config) {
   const discountPercentRaw = viewConfig && viewConfig.ui ? viewConfig.ui.discountPercent : 0;
   const discountPercent = Number(discountPercentRaw == null ? 0 : discountPercentRaw);
   const discountFactor = activeDiscount ? Number((discountPercent / 100).toFixed(4)) : 0;
-  return replaceContent(html, viewConfig)
+  let out = replaceContent(html, viewConfig)
     .replaceAll('Olá, gostaria de fazer esse pedido com 10% de desconto:', activeDiscount ? `Olá, gostaria de fazer esse pedido com ${discountPercent}% de desconto:` : 'Olá, gostaria de enviar esta seleção de artes:')
     .replaceAll('Total com desconto:', activeDiscount ? 'Total com desconto:' : 'Total:')
     .replaceAll('R$ 9,90 cada', bolinhas.priceLabel)
@@ -117,7 +138,6 @@ function rewriteHtml(html, config) {
     .replaceAll('if(product==="50x50")return qty>=6?58.90+Math.max(0,qty-6)*9.90:qty*9.90;', `if(product==="50x50")return qty*${unitPrice};`)
     .replace(/function rule50\(\)\{[\s\S]*?function hasCustomizedItems\(\)/, bolinhasRuleCode(bolinhas, content))
     .replace(/const SELLERS=\{[\s\S]*?\};\nfunction getLockedSellerFromUrl/, sellersCode(viewConfig))
-    .replace('function discount(){return gross()*0.10}', `function discount(){return gross()*${discountFactor}}`)
     .replaceAll('10% OFF por aqui', activeDiscount ? `${discountPercent}% OFF por aqui` : 'Pedido organizado')
     .replaceAll('10% de desconto', activeDiscount ? `${discountPercent}% de desconto` : 'pedido organizado')
     .replaceAll('desconto de 10%', activeDiscount ? `desconto de ${discountPercent}%` : 'pedido organizado')
@@ -128,6 +148,7 @@ function rewriteHtml(html, config) {
     .replace('if(view==="products" || view==="bagSizes" || view==="items"){\n     add("Produtos",()=>showProducts(),"products");\n   }', 'if((view==="products" || view==="bagSizes" || view==="items") && !(view==="items" && selectedProduct && selectedProduct.__directBolinhas)){\n     add("Produtos",()=>showProducts(),"products");\n   }')
     .replace('if(view==="items" && selectedProduct){\n     const productName = selectedProduct.product==="sacolinha" && selectedProduct.bagSize', 'if(view==="items" && selectedProduct && !selectedProduct.__directBolinhas){\n     const productName = selectedProduct.product==="sacolinha" && selectedProduct.bagSize')
     .replace('products=d.folders||[];showProducts()', 'products=d.folders||[];const onlyDirectBolinhas=products.length===1&&products[0].product==="50x50"&&products[0].kind!=="folder";if(onlyDirectBolinhas){await loadItems({...products[0],id:folder.id,name:"Bolinhas",rawName:"Bolinhas",product:"50x50",productName:"Bolinhas",__directBolinhas:true});return}showProducts()');
+  return applyCampaignLogic(out, activeDiscount, discountPercent, discountFactor);
 }
 
 const STYLE_PATCH = `<style id="bolinhas-drive-patch-style">#breadcrumbs,.breadcrumbs{min-width:0!important;align-items:center!important}#breadcrumbs .pathPill,.breadcrumbs .pathPill,.pathLine .pathChip{max-width:min(46vw,360px)!important;min-width:0!important;width:auto!important;height:auto!important;min-height:38px!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere!important;word-break:break-word!important;line-height:1.12!important;padding:8px 12px!important}.iconMeasureBtn[data-customize]{display:none!important}.campaignNotice{margin:0 auto 14px;width:min(100%,1280px);border-radius:20px;padding:13px 16px;background:#fff1f6;color:#b61f55;border:1px solid #ffd6e5;font-weight:900;box-shadow:0 14px 30px rgba(239,85,133,.10)}@media(max-width:560px){#breadcrumbs .pathPill,.breadcrumbs .pathPill,.pathLine .pathChip{max-width:72vw!important;min-width:auto!important;white-space:normal!important}}</style>`;
