@@ -29,16 +29,17 @@
         <button data-tab="ordersView">Pedidos <small>02</small></button>
         <button data-tab="sellersView">Vendedoras <small>03</small></button>
         <button data-tab="productsView">Produtos e regras <small>04</small></button>
-        <button data-tab="campaignsView">Campanhas <small>05</small></button>
-        <button data-tab="drivesView">Drives <small>06</small></button>
-        <button data-tab="toolsView">Ferramentas <small>07</small></button>
-        <button data-tab="textsView">Textos do site <small>08</small></button>
-        <button data-tab="whatsappView">WhatsApp e modal <small>09</small></button>
-        <button data-tab="linksView">Links e rotas <small>10</small></button>
-        <button data-tab="appearanceView">Aparência <small>11</small></button>
-        <button data-tab="permissionsView">Permissões <small>12</small></button>
-        <button data-tab="advancedView">Avançado <small>13</small></button>
-        <button data-tab="jsonView">JSON <small>14</small></button>
+        <button data-tab="catalogView">Temas e artes <small>05</small></button>
+        <button data-tab="campaignsView">Campanhas <small>06</small></button>
+        <button data-tab="drivesView">Drives <small>07</small></button>
+        <button data-tab="toolsView">Ferramentas <small>08</small></button>
+        <button data-tab="textsView">Textos do site <small>09</small></button>
+        <button data-tab="whatsappView">WhatsApp e modal <small>10</small></button>
+        <button data-tab="linksView">Links e rotas <small>11</small></button>
+        <button data-tab="appearanceView">Aparência <small>12</small></button>
+        <button data-tab="permissionsView">Permissões <small>13</small></button>
+        <button data-tab="advancedView">Avançado <small>14</small></button>
+        <button data-tab="jsonView">JSON <small>15</small></button>
       </nav>
       <div class="sideFoot"><a class="btn secondary" href="/">Ver site</a><button id="logoutBtn" class="btn danger" type="button">Sair</button></div>
     </aside>
@@ -51,6 +52,7 @@
       <section id="ordersView" data-view class="grid hidden"><div id="ordersPanel" class="grid span-12"></div></section>
       <section id="sellersView" data-view class="grid hidden"><div id="sellersPanel" class="grid span-12"></div></section>
       <section id="productsView" data-view class="grid hidden"><div id="productsPanel" class="grid span-12"></div></section>
+      <section id="catalogView" data-view class="grid hidden"><div id="catalogPanel" class="grid span-12"></div></section>
       <section id="campaignsView" data-view class="grid hidden"><div id="campaignsPanel" class="grid span-12"></div></section>
       <section id="drivesView" data-view class="grid hidden"><div id="drivesPanel" class="grid span-12"></div></section>
       <section id="toolsView" data-view class="grid hidden"><div id="toolsPanel" class="grid span-12"></div></section>
@@ -58,7 +60,7 @@
       <section id="whatsappView" data-view class="grid hidden"><div id="whatsappPanel" class="grid span-12"></div></section>
       <section id="linksView" data-view class="grid hidden"><div id="linksPanel" class="grid span-12"></div></section>
       <section id="appearanceView" data-view class="grid hidden"><div id="appearancePanel" class="grid span-12"></div></section>
-      <section id="permissionsView" data-view class="grid hidden"><div id="permissionsPanel" class="grid span-12"></div></section>
+      <section id="permissionsView" data-view class="grid hidden"><div id="permissionsPanel" class="grid span-12"></div><div id="usersPanel" class="grid span-12"></div></section>
       <section id="advancedView" data-view class="grid hidden"><div id="advancedPanel" class="grid span-12"></div></section>
       <section id="jsonView" data-view class="grid hidden"><div class="card span-12"><div class="sectionHead"><div><h3>JSON completo</h3><p>Visualização técnica do que será salvo no Cloudflare KV.</p></div></div><pre id="jsonPreview" class="jsonBox"></pre></div></section>
     </main>
@@ -67,5 +69,6 @@
   </section>
 
   <script src="/assets/admin.js?v=4" defer></script>
+  <script src="/assets/admin-catalog.js?v=1" defer></script>
 </body>
 </html>
