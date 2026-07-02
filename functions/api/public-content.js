@@ -58,7 +58,6 @@ function cleanGroup(defaults, raw = {}) {
     const value = String(raw && raw[key] || "").trim();
     if (value) out[key] = value;
   });
-  out.hero = undefined;
   return out;
 }
 function normalizeSteps(steps) {
