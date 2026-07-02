@@ -2,6 +2,7 @@
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>'"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]));
   let config = null;
+  let toastTimer = null;
 
   async function api(url, opts = {}) {
     const r = await fetch(url, { credentials:'include', cache:'no-store', headers:{ 'Content-Type':'application/json', 'Cache-Control':'no-store', ...(opts.headers || {}) }, ...opts });
@@ -13,9 +14,13 @@
   function toast(msg, type = 'ok') {
     const el = $('status');
     if (!el) return;
+    clearTimeout(toastTimer);
     el.textContent = msg;
     el.className = 'status ' + type;
     el.classList.remove('hidden');
+    toastTimer = setTimeout(() => {
+      if (el.textContent === msg) el.classList.add('hidden');
+    }, type === 'err' ? 6500 : 3500);
   }
   function busy(btn, text = 'Salvando...') {
     if (!btn) return () => {};
