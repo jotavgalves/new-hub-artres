@@ -12,7 +12,7 @@
   function getSeller(){ return safe(function(){ if (typeof selectedSeller !== 'undefined' && selectedSeller && SELLERS && SELLERS[selectedSeller]) { var s = SELLERS[selectedSeller]; return { id:selectedSeller, label:s.label, phone:digits(s.phone) }; } var phone = phoneFromHref(state.href || (typeof waUrl === 'function' ? waUrl() : '')); var found = sellerByPhone(phone); return found || null; }, null); }
   function phoneFromHref(href){ try { var u = new URL(href, location.href); return digits(u.searchParams.get('phone') || u.pathname); } catch(e) { return digits(href); } }
   function sellerByPhone(phone){ var want = normPhone(phone); if (!want) return null; try { for (var id in SELLERS) { var s = SELLERS[id]; if (normPhone(s.phone) === want) return { id:id, label:s.label, phone:digits(s.phone) }; } } catch(e) {} return null; }
-  function getTotals(){ return safe(function(){ return { gross:gross(), discount:discount(), net:net(), qty:cartQty() }; }, {}); }
+  function getTotals(){ return safe(function(){ return { gross:gross(), discount:discount(), net:typeof net === 'function' ? net() : total(), qty:cartQty() }; }, {}); }
   function getQty(){ return safe(function(){ return cartQty(); }, getCart().reduce(function(s,i){ return s + (Number(i.qty)||0); }, 0)); }
 
   function normalizePhone(value){
@@ -69,7 +69,26 @@
 
   async function saveOrder(customer){
     var payload = { seller:getSeller(), customer:customer, totals:getTotals(), qty:getQty(), items:getCart().map(function(i){ return { code:i.code, theme:i.theme, product:i.product, productName:i.productName, qty:i.qty, image:i.image || i.thumbnail || '' }; }), userAgent:navigator.userAgent };
-    await fetch('/api/orders', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload), keepalive:true });
+    var res = await fetch('/api/orders', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload), keepalive:true });
+    var data = await res.json().catch(function(){ return {}; });
+    if (!res.ok || data.ok === false) throw new Error(data.error || 'FALHA_AO_SALVAR_PEDIDO');
+    return data.order || data;
+  }
+
+  function orderNumberFrom(order){ return String(order && (order.orderNumber || order.orderCode || order.displayId || order.id) || '').trim(); }
+  function hrefWithOrderNumber(href, orderNumber){
+    if (!orderNumber) return href;
+    try {
+      var u = new URL(href, location.href);
+      var text = u.searchParams.get('text') || '';
+      if (!text) text = safe(function(){ return typeof waMsg === 'function' ? waMsg() : ''; }, '');
+      if (text.indexOf(orderNumber) === -1) {
+        if (text.indexOf('\n\nMinha seleção:') > -1) text = text.replace('\n\nMinha seleção:', '\n\nPedido: ' + orderNumber + '\n\nMinha seleção:');
+        else text = 'Pedido: ' + orderNumber + (text ? '\n\n' + text : '');
+      }
+      u.searchParams.set('text', text);
+      return u.toString();
+    } catch(e) { return href; }
   }
 
   async function submit(){
@@ -87,9 +106,11 @@
     btn.disabled = true;
     try {
       localStorage.setItem('armazemCustomer', JSON.stringify({ name:customer.name, phone:customer.phone }));
-      await saveOrder(customer);
+      var order = await saveOrder(customer);
+      var orderNumber = orderNumberFrom(order);
+      var href = hrefWithOrderNumber(state.href, orderNumber);
       closeModal();
-      window.open(state.href, '_blank', 'noopener');
+      window.open(href, '_blank', 'noopener');
     } catch(e) {
       showError('Não consegui salvar o pedido agora. Tente novamente.');
     } finally {
