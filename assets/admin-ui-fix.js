@@ -48,6 +48,7 @@
   loadScript('adminClientesScript','/assets/clientes.js?v=1');
   loadScript('adminCampaignDiscountScript','/assets/admin-campaign-discount.js?v=1');
   loadScript('adminProductionScript','/assets/admin-production.js?v=1');
+  loadScript('adminWhatsappOrderLineScript','/assets/admin-whatsapp-orderline.js?v=1');
   bindTabs();
   new MutationObserver(bindTabs).observe(document.body,{childList:true,subtree:true});
 })();
