@@ -1,5 +1,6 @@
 import { json, loadConfig } from "./_config.js";
 import { requireAdmin } from "./admin/_auth.js";
+import { hydrateOrderNumbers, nextOrderNumber } from "./_order_numbers.js";
 
 const ORDER_PREFIX = "ORDER:";
 const DELETED_ORDER_PREFIX = "ORDER_DELETED:";
@@ -10,7 +11,7 @@ export async function onRequestGet(context) {
   if (!context.env.CONFIG_KV) return json({ ok: false, error: "CONFIG_KV_NAO_CONFIGURADO" }, 500);
 
   const url = new URL(context.request.url);
-  const limit = Math.min(parseInt(url.searchParams.get("limit") || "100", 10) || 100, 300);
+  const limit = Math.min(parseInt(url.searchParams.get("limit") || "300", 10) || 300, 500);
   const listed = await context.env.CONFIG_KV.list({ prefix: ORDER_PREFIX, limit });
   const orders = [];
   for (const key of listed.keys) {
@@ -18,6 +19,7 @@ export async function onRequestGet(context) {
     if (!raw) continue;
     try { orders.push(JSON.parse(raw)); } catch (_) {}
   }
+  hydrateOrderNumbers(orders);
   orders.sort((a,b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
   return json({ ok: true, total: orders.length, orders });
 }
@@ -28,7 +30,7 @@ export async function onRequestPost(context) {
   if (config.orderSettings && config.orderSettings.saveOrders === false) return json({ ok: true, saved: false, disabled: true });
 
   const body = await context.request.json().catch(() => ({}));
-  const order = normalizeOrder(body, config);
+  const order = await normalizeOrder(body, config, context.env);
   await context.env.CONFIG_KV.put(`${ORDER_PREFIX}${order.id}`, JSON.stringify(order, null, 2));
   return json({ ok: true, saved: true, order });
 }
@@ -76,9 +78,10 @@ export async function onRequestDelete(context) {
   return json({ ok: true, deleted: true, id });
 }
 
-function normalizeOrder(body, config) {
+async function normalizeOrder(body, config, env) {
   const createdAt = new Date().toISOString();
-  const id = `${createdAt.replace(/[^0-9]/g, "")}-${crypto.randomUUID().slice(0, 8)}`;
+  const orderNumber = await nextOrderNumber(env, createdAt);
+  const legacyId = `${createdAt.replace(/[^0-9]/g, "")}-${crypto.randomUUID().slice(0, 8)}`;
   const items = Array.isArray(body.items) ? body.items.slice(0, 200).map(item => ({
     code: clean(item.code),
     theme: clean(item.theme),
@@ -88,7 +91,11 @@ function normalizeOrder(body, config) {
     image: String(item.image || item.thumbnail || "").slice(0, 1000)
   })) : [];
   return {
-    id,
+    id: orderNumber,
+    orderNumber,
+    orderCode: orderNumber,
+    displayId: orderNumber,
+    legacyId,
     createdAt,
     updatedAt: createdAt,
     status: config.orderSettings && config.orderSettings.defaultStatus || "Novo",
