@@ -80,26 +80,46 @@
     try {
       var r = await fetch('/api/public-whatsapp?ts=' + Date.now(), { cache:'no-store' });
       var d = await r.json().catch(function(){ return {}; });
-      state.whatsappConfig = d.whatsapp || { orderLine:'Pedido: {pedido}' };
-    } catch(e) {
-      state.whatsappConfig = { orderLine:'Pedido: {pedido}' };
-    }
+      state.whatsappConfig = d.whatsapp || null;
+    } catch(e) {}
+    if (!state.whatsappConfig) state.whatsappConfig = { intro:'Oi, {vendedora}! Separei minhas artes por aqui e quero finalizar minha seleção.', orderLine:'Pedido: {pedido}', sellerLine:'Minha seleção:', itemLine:'• Arte #{codigo}{quantidadeTexto}', totalLine:'Observação: há medida personalizada nesta seleção.', footer:'Pode conferir para mim e me ajudar a finalizar?' };
     return state.whatsappConfig;
   }
   function orderNumberFrom(order){ return String(order && (order.orderNumber || order.orderCode || order.displayId || order.id) || '').trim(); }
+  function applyTpl(text, map){ return String(text || '').replace(/\{([^}]+)\}/g, function(all, key){ return map[key] == null ? all : map[key]; }); }
+  function buildConfiguredMessage(cfg, orderNumber){
+    var sellerInfo = getSeller() || { label:'Ana' };
+    var lines = [];
+    lines.push(applyTpl(cfg.intro, { vendedora:sellerInfo.label || 'Ana' }));
+    lines.push('');
+    lines.push(applyTpl(cfg.orderLine, { pedido:orderNumber }));
+    lines.push('');
+    lines.push(applyTpl(cfg.sellerLine, {}));
+    var gs = safe(function(){ return groups(); }, []);
+    if (!gs || !gs.length) gs = [{ label:'Artes', items:getCart() }];
+    gs.forEach(function(g){
+      lines.push('');
+      lines.push(g.label || 'Artes');
+      var themes = Array.from(new Set((g.items || []).map(function(i){ return i.theme; }).filter(Boolean))).join(', ');
+      if (themes) lines.push('Tema(s): ' + themes);
+      (g.items || []).forEach(function(i){
+        var qty = Number(i.qty || 1) || 1;
+        lines.push(applyTpl(cfg.itemLine, { codigo:i.code || '', quantidade:qty, quantidadeTexto: qty > 1 ? ' (' + qty + ' un.)' : '' }));
+        var det = safe(function(){ return typeof detailsForWhatsApp === 'function' ? detailsForWhatsApp(i) : ''; }, '');
+        if (det) lines.push(det);
+      });
+    });
+    var hasCustom = safe(function(){ return typeof hasCustomizedItems === 'function' && hasCustomizedItems(); }, false);
+    if (hasCustom && cfg.totalLine) { lines.push(''); lines.push(cfg.totalLine); }
+    if (cfg.footer) { lines.push(''); lines.push(cfg.footer); }
+    return lines.join('\n');
+  }
   async function hrefWithOrderNumber(href, orderNumber){
     if (!orderNumber) return href;
     try {
       var cfg = await loadWhatsappConfig();
-      var orderLine = String(cfg.orderLine || 'Pedido: {pedido}').replace(/\{pedido\}/g, orderNumber);
       var u = new URL(href, location.href);
-      var text = u.searchParams.get('text') || '';
-      if (!text) text = safe(function(){ return typeof waMsg === 'function' ? waMsg() : ''; }, '');
-      if (text.indexOf(orderNumber) === -1) {
-        if (text.indexOf('\n\nMinha seleção:') > -1) text = text.replace('\n\nMinha seleção:', '\n\n' + orderLine + '\n\nMinha seleção:');
-        else text = orderLine + (text ? '\n\n' + text : '');
-      }
-      u.searchParams.set('text', text);
+      u.searchParams.set('text', buildConfiguredMessage(cfg, orderNumber));
       return u.toString();
     } catch(e) { return href; }
   }
