@@ -88,10 +88,9 @@
     const c = o.customer || {};
     const phone = c.whatsapp || c.phone || '';
     const no = orderNo(o);
-    const legacy = o.legacyId && o.legacyId !== no ? '<span class="legacyOrder">ID antigo: ' + esc(o.legacyId) + '</span>' : '';
     const items = (o.items || []).slice(0, 20).map(i => '#' + esc(i.code) + ' (' + esc(i.qty || 1) + 'x)').join(' · ');
     const phoneLink = wa(phone);
-    return '<div class="item orderCardV2"><div class="itemHead"><div><span class="orderNumberPill">' + esc(no) + '</span><p class="hint">' + esc(formatDate(o.createdAt)) + ' · ' + esc(o.seller && o.seller.label || 'Sem vendedora') + ' · ' + esc(o.qty || 0) + ' item(ns) ' + legacy + '</p></div><div class="actions"><a class="btn secondary" href="' + esc(phoneLink) + '" target="_blank" rel="noopener">Abrir conversa</a><button class="btn secondary" data-copy-customer="' + esc(o.id) + '" type="button">Copiar dados</button><button class="btn danger" data-delete-order-v2="' + esc(o.id) + '" type="button">Excluir</button></div></div><div class="orderCustomer"><b>Cliente:</b> ' + esc(c.name || 'Não informado') + ' · <b>WhatsApp:</b> ' + esc(phone || 'Não informado') + '</div><p class="hint"><b>Total:</b> ' + money(o.totals && o.totals.net) + ' · <b>Desconto:</b> ' + money(o.totals && o.totals.discount) + '</p><p class="hint">' + items + '</p></div>';
+    return '<div class="item orderCardV2"><div class="itemHead"><div><span class="orderNumberPill">' + esc(no) + '</span><p class="hint">' + esc(formatDate(o.createdAt)) + ' · ' + esc(o.seller && o.seller.label || 'Sem vendedora') + ' · ' + esc(o.qty || 0) + ' item(ns)</p></div><div class="actions"><a class="btn secondary" href="' + esc(phoneLink) + '" target="_blank" rel="noopener">Abrir conversa</a><button class="btn secondary" data-copy-customer="' + esc(o.id) + '" type="button">Copiar dados</button><button class="btn danger" data-delete-order-v2="' + esc(o.id) + '" type="button">Excluir</button></div></div><div class="orderCustomer"><b>Cliente:</b> ' + esc(c.name || 'Não informado') + ' · <b>WhatsApp:</b> ' + esc(phone || 'Não informado') + '</div><p class="hint"><b>Total:</b> ' + money(o.totals && o.totals.net) + ' · <b>Desconto:</b> ' + money(o.totals && o.totals.discount) + '</p><p class="hint">' + items + '</p></div>';
   }
 
   function copyCustomer(id){
@@ -116,7 +115,7 @@
     if ($('ordersUnifiedStyle')) return;
     const s = document.createElement('style');
     s.id = 'ordersUnifiedStyle';
-    s.textContent = '.ordersSummary{display:flex;justify-content:space-between;gap:12px;margin:16px 0 10px;flex-wrap:wrap}.ordersSummary b{font-family:Montserrat}.orderCardV2 .actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.orderCustomer{margin:12px 0 6px;padding:10px 12px;background:#fff8fb;border:1px solid #ffd6e5;border-radius:14px;color:#4d454d;font-weight:800}.orderNumberPill{display:inline-flex;align-items:center;border-radius:999px;background:#222124;color:#fff;font-weight:950;letter-spacing:.06em;padding:7px 12px;margin-bottom:6px;font-family:Montserrat,Arial,sans-serif}.legacyOrder{display:inline-block;margin-left:8px;color:#9a8f98;font-size:11px}@media(max-width:720px){.orderCardV2 .itemHead{align-items:flex-start}.orderCardV2 .actions .btn{width:100%;justify-content:center}.orderNumberPill{font-size:13px}}';
+    s.textContent = '.ordersSummary{display:flex;justify-content:space-between;gap:12px;margin:16px 0 10px;flex-wrap:wrap}.ordersSummary b{font-family:Montserrat}.orderCardV2 .actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.orderCustomer{margin:12px 0 6px;padding:10px 12px;background:#fff8fb;border:1px solid #ffd6e5;border-radius:14px;color:#4d454d;font-weight:800}.orderNumberPill{display:inline-flex;align-items:center;border-radius:999px;background:#222124;color:#fff;font-weight:950;letter-spacing:.06em;padding:7px 12px;margin-bottom:6px;font-family:Montserrat,Arial,sans-serif}@media(max-width:720px){.orderCardV2 .itemHead{align-items:flex-start}.orderCardV2 .actions .btn{width:100%;justify-content:center}.orderNumberPill{font-size:13px}}';
     document.head.appendChild(s);
   }
 
