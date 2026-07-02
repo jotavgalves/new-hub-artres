@@ -8,7 +8,7 @@
   function date(v){ try { return new Date(v).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }); } catch(e){ return v || '—'; } }
   function money(v){ return Number(v || 0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' }); }
   function ordersBtn(){ return qs('[data-tab="ordersView"]'); }
-  function panel(){ return $('ordersPanelV2') || $('ordersPanel'); }
+  function panel(){ return $('ordersPanel'); }
 
   function injectStyle(){
     if ($('pedidosSidebarCss')) return;
@@ -46,10 +46,11 @@
   function activateOrders(){ document.querySelectorAll('[data-view]').forEach(function(v){ v.classList.toggle('hidden', v.id !== 'ordersView'); }); document.querySelectorAll('.nav [data-tab]').forEach(function(b){ b.classList.toggle('active', b === ordersBtn()); }); document.body.dataset.adminTab = 'ordersView'; }
 
   function openSolicitacoes(){
+    document.body.dataset.ordersSubtab = 'solicitacoes';
     showSub(); mark('s');
     var btn = ordersBtn();
     if (btn) btn.click();
-    setTimeout(function(){ showSub(); mark('s'); }, 550);
+    setTimeout(function(){ document.body.dataset.ordersSubtab = 'solicitacoes'; showSub(); mark('s'); }, 550);
   }
 
   async function fetchClientes(){
@@ -60,8 +61,10 @@
   }
 
   function openClientes(){
+    document.body.dataset.ordersSubtab = 'clientes';
     activateOrders(); showSub(); mark('c');
     var p = panel(); if (!p) return;
+    p.dataset.ordersOwner = 'clientes';
     p.innerHTML = '<div class="card span-12"><div class="clientesHeader"><div><h3>Clientes</h3><p>Base automática formada pelas solicitações recebidas.</p></div><button id="reloadClientes" class="btn secondary" type="button">Atualizar</button></div><div id="clientesMetrics"></div><input id="clientesBusca" class="clientesSearch" placeholder="Buscar por nome, WhatsApp, código ou vendedora"><div id="clientesLista"><p class="hint">Carregando clientes...</p></div></div>';
     $('reloadClientes').onclick = loadAndRender;
     $('clientesBusca').oninput = renderClientes;
@@ -85,8 +88,9 @@
   document.addEventListener('click', function(e){
     var main = e.target && e.target.closest ? e.target.closest('[data-tab]') : null;
     if (!main) return;
-    if (main.dataset.tab === 'ordersView') { setTimeout(function(){ showSub(); mark('s'); }, 320); }
-    else hideSub();
+    if (main.dataset.tab === 'ordersView') { document.body.dataset.ordersSubtab = 'solicitacoes'; setTimeout(function(){ showSub(); mark('s'); }, 320); }
+    else { delete document.body.dataset.ordersSubtab; hideSub(); }
   });
+  window.openClientesAdmin = openClientes;
   setTimeout(ensureSubnav, 900);
 })();
