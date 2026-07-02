@@ -33,6 +33,7 @@
   }
   function setTab(tab){
     document.body.dataset.adminTab = tab || 'overviewView';
+    if (tab !== 'ordersView') delete document.body.dataset.ordersSubtab;
   }
   function bindTabs(){
     document.querySelectorAll('[data-tab]').forEach(function(btn){
@@ -42,7 +43,8 @@
     if (!document.body.dataset.adminTab) setTab('overviewView');
   }
   injectStyle();
-  loadScript('adminOrdersUnifiedScript','/assets/admin-orders-unified.js?v=1');
+  loadScript('adminPedidosSidebarScript','/assets/pedidos-sidebar.js?v=2');
+  loadScript('adminOrdersUnifiedScript','/assets/admin-orders-unified.js?v=2');
   loadScript('adminClientesScript','/assets/clientes.js?v=1');
   loadScript('adminCampaignDiscountScript','/assets/admin-campaign-discount.js?v=1');
   loadScript('adminProductionScript','/assets/admin-production.js?v=1');
