@@ -63,6 +63,15 @@ export const DEFAULT_CONFIG = {
     keepLast: 300
   },
   themeOverrides: [],
+  productionApi: {
+    enabled: true,
+    allowStatusUpdate: true,
+    statusOnFetch: "",
+    statusOnComplete: "Separado",
+    actorName: "Armazem",
+    exposeCustomer: true,
+    exposeTotals: false
+  },
   permissions: {
     mode: "single-admin-secret",
     roles: ["admin", "vendedora", "editor", "visualizador"],
@@ -125,6 +134,7 @@ export const DEFAULT_CONFIG = {
     },
     whatsapp: {
       intro: "Olá, gostaria de fazer esse pedido com {desconto}% de desconto:",
+      orderLine: "Pedido: {pedido}",
       sellerLine: "Vendedora: {vendedora}",
       itemLine: "• Código #{codigo} — {tema} — {quantidade} unidade(s)",
       totalLine: "Total com desconto: {total}",
@@ -225,8 +235,10 @@ export function normalizeConfig(input = {}) {
   merged.campaign = deepMerge(DEFAULT_CONFIG.campaign, src.campaign || {});
   merged.maintenance = deepMerge(DEFAULT_CONFIG.maintenance, src.maintenance || {});
   merged.orderSettings = deepMerge(DEFAULT_CONFIG.orderSettings, src.orderSettings || {});
+  merged.productionApi = deepMerge(DEFAULT_CONFIG.productionApi, src.productionApi || {});
   merged.appearance = deepMerge(DEFAULT_CONFIG.appearance, src.appearance || {});
   merged.version = 3;
+  normalizeAuditActors(merged);
   return merged;
 }
 
@@ -281,9 +293,10 @@ export function applyTokens(value, config = {}, extra = {}) {
     vendedora: extra.vendedora,
     codigo: extra.codigo,
     tema: extra.tema,
-    total: extra.total
+    total: extra.total,
+    pedido: extra.pedido || extra.orderNumber
   };
-  return String(value || "").replace(/\{(desconto|produto|preco|minimo|passo|quantidade|proxima|plural|valor|vendedora|codigo|tema|total)\}/g, (_, key) => String(tokens[key] === undefined || tokens[key] === null ? "" : tokens[key]));
+  return String(value || "").replace(/\{(desconto|produto|preco|minimo|passo|quantidade|proxima|plural|valor|vendedora|codigo|tema|total|pedido)\}/g, (_, key) => String(tokens[key] === undefined || tokens[key] === null ? "" : tokens[key]));
 }
 
 function normalizeContent(content) {
@@ -306,6 +319,25 @@ function mergeTextObject(target, source) {
   });
 }
 
+function normalizeAuditActors(config) {
+  const c = config.catalogControls || {};
+  ["artBlocks", "themeBlocks"].forEach(key => {
+    if (!Array.isArray(c[key])) return;
+    c[key].forEach(item => {
+      if (isHelenaActor(item.blockedBy)) item.blockedBy = "Armazem";
+    });
+  });
+  if (Array.isArray(c.catalogHistory)) {
+    c.catalogHistory.forEach(item => {
+      if (isHelenaActor(item.by)) item.by = "Armazem";
+    });
+  }
+  if (config.productionApi && isHelenaActor(config.productionApi.actorName)) config.productionApi.actorName = "Armazem";
+}
+function isHelenaActor(value) {
+  const v = cleanText(value).toLowerCase();
+  return v === "helena" || v === "helena/admin" || v === "helena admin";
+}
 function clone(value) { return JSON.parse(JSON.stringify(value)); }
 function valueOr(value, fallback) { return value === undefined || value === null || value === "" ? fallback : value; }
 function cleanText(value) { return String(value || "").replace(/\s+/g, " ").trim(); }
