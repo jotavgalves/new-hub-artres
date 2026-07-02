@@ -1,6 +1,6 @@
 (function(){
   window.__ARMAZEM_CUSTOMER_CHECKOUT__ = true;
-  var state = { href: '#', saving: false };
+  var state = { href: '#', saving: false, whatsappConfig: null };
 
   function byId(id){ return document.getElementById(id); }
   function safe(fn, fallback){ try { return fn(); } catch(e) { return fallback; } }
@@ -75,16 +75,29 @@
     return data.order || data;
   }
 
+  async function loadWhatsappConfig(){
+    if (state.whatsappConfig) return state.whatsappConfig;
+    try {
+      var r = await fetch('/api/public-whatsapp?ts=' + Date.now(), { cache:'no-store' });
+      var d = await r.json().catch(function(){ return {}; });
+      state.whatsappConfig = d.whatsapp || { orderLine:'Pedido: {pedido}' };
+    } catch(e) {
+      state.whatsappConfig = { orderLine:'Pedido: {pedido}' };
+    }
+    return state.whatsappConfig;
+  }
   function orderNumberFrom(order){ return String(order && (order.orderNumber || order.orderCode || order.displayId || order.id) || '').trim(); }
-  function hrefWithOrderNumber(href, orderNumber){
+  async function hrefWithOrderNumber(href, orderNumber){
     if (!orderNumber) return href;
     try {
+      var cfg = await loadWhatsappConfig();
+      var orderLine = String(cfg.orderLine || 'Pedido: {pedido}').replace(/\{pedido\}/g, orderNumber);
       var u = new URL(href, location.href);
       var text = u.searchParams.get('text') || '';
       if (!text) text = safe(function(){ return typeof waMsg === 'function' ? waMsg() : ''; }, '');
       if (text.indexOf(orderNumber) === -1) {
-        if (text.indexOf('\n\nMinha seleção:') > -1) text = text.replace('\n\nMinha seleção:', '\n\nPedido: ' + orderNumber + '\n\nMinha seleção:');
-        else text = 'Pedido: ' + orderNumber + (text ? '\n\n' + text : '');
+        if (text.indexOf('\n\nMinha seleção:') > -1) text = text.replace('\n\nMinha seleção:', '\n\n' + orderLine + '\n\nMinha seleção:');
+        else text = orderLine + (text ? '\n\n' + text : '');
       }
       u.searchParams.set('text', text);
       return u.toString();
@@ -108,7 +121,7 @@
       localStorage.setItem('armazemCustomer', JSON.stringify({ name:customer.name, phone:customer.phone }));
       var order = await saveOrder(customer);
       var orderNumber = orderNumberFrom(order);
-      var href = hrefWithOrderNumber(state.href, orderNumber);
+      var href = await hrefWithOrderNumber(state.href, orderNumber);
       closeModal();
       window.open(href, '_blank', 'noopener');
     } catch(e) {
