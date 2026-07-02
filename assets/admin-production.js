@@ -31,16 +31,25 @@
       exposeTotals: !input || input.exposeTotals !== false
     };
   }
+  function ensureOrderStatuses() {
+    config.orderSettings = config.orderSettings || {};
+    const base = Array.isArray(config.orderSettings.statuses) ? config.orderSettings.statuses : ['Novo','Em atendimento','Fechado','Cancelado'];
+    ['Em produção','Separado'].forEach(s => { if (!base.includes(s)) base.push(s); });
+    config.orderSettings.statuses = base;
+  }
   async function load() {
     const cfg = await api('/api/admin/config?ts=' + Date.now());
     const prod = await api('/api/admin/production?ts=' + Date.now());
     config = cfg.config || {};
     config.productionApi = productionDefaults(config.productionApi || prod.production || {});
+    ensureOrderStatuses();
     meta = prod;
     render();
   }
   async function save() {
     if (!config) return;
+    config.productionApi = productionDefaults(config.productionApi || {});
+    ensureOrderStatuses();
     await api('/api/admin/config', { method:'POST', body:JSON.stringify({ config }) });
     toast('Configurações da API de produção salvas.');
     await load();
@@ -62,7 +71,7 @@
       card.className = 'card span-12';
       panel.appendChild(card);
     }
-    const statuses = meta.statuses || ['Novo','Em atendimento','Em produção','Separado','Fechado','Cancelado'];
+    const statuses = meta.statuses || config.orderSettings.statuses || ['Novo','Em atendimento','Em produção','Separado','Fechado','Cancelado'];
     const statusOptions = value => `<option value="" ${!value?'selected':''}>Não alterar automaticamente</option>` + statuses.map(s => `<option value="${esc(s)}" ${value===s?'selected':''}>${esc(s)}</option>`).join('');
     card.innerHTML = `<div class="sectionHead"><div><h3>App desktop / Produção</h3><p>Permite que o app busque um pedido pelo número e receba os códigos das artes para procurar na pasta central do PC.</p></div><span class="pill">${meta.tokenConfigured?'Token configurado':'Token não configurado'}</span></div>
       <div class="grid">
