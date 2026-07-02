@@ -2,6 +2,15 @@
   if (window.__CATALOG_VERSIONED_CACHE__) return;
   window.__CATALOG_VERSIONED_CACHE__ = true;
 
+  function loadScript(id, src){
+    if (document.getElementById(id)) return;
+    var script = document.createElement('script');
+    script.id = id;
+    script.src = src;
+    script.defer = true;
+    document.head.appendChild(script);
+  }
+
   var META_KEY = 'catalog-meta-version';
   var version = localStorage.getItem(META_KEY) || 'boot';
   var metaPromise = null;
@@ -39,6 +48,7 @@
     return metaPromise;
   }
 
+  loadScript('catalogRuntimeScript','/assets/catalog-runtime.js?v=1');
   loadMeta();
 
   try {
