@@ -23,11 +23,12 @@
   function digits(v){ return String(v || '').replace(/\D/g, ''); }
   function wa(phone){ const d = digits(phone); return d ? 'https://wa.me/' + (d.startsWith('55') ? d : '55' + d) : '#'; }
   function formatDate(value){ try { return new Date(value).toLocaleString('pt-BR'); } catch(e) { return value || ''; } }
+  function orderNo(o){ return o.orderNumber || o.orderCode || o.displayId || o.id || ''; }
 
   function renderShell(){
     const target = panel();
     if (!target) return;
-    target.innerHTML = '<div class="card span-12"><div class="sectionHead"><div><h3>Pedidos</h3><p>Pedidos salvos com dados do cliente antes de abrir o WhatsApp. Sem status.</p></div><button id="reloadOrdersV2" class="btn secondary" type="button">Atualizar</button></div><div class="grid"><div class="field span-4"><label>Buscar</label><input id="orderSearch" placeholder="Nome, telefone, código, vendedora..."></div><div class="field span-3"><label>Vendedora</label><select id="sellerFilter"><option value="">Todas</option></select></div><div class="field span-3"><label>Data</label><input id="dateFilter" type="date"></div><div class="field span-2"><label>Limpar</label><button id="clearOrderFilters" class="btn secondary" type="button">Limpar filtros</button></div></div><div id="ordersListV2"><p class="hint">Carregando pedidos...</p></div></div>';
+    target.innerHTML = '<div class="card span-12"><div class="sectionHead"><div><h3>Pedidos</h3><p>Pedidos salvos com número curto no formato PED2600001A.</p></div><button id="reloadOrdersV2" class="btn secondary" type="button">Atualizar</button></div><div class="grid"><div class="field span-4"><label>Buscar pedido</label><input id="orderSearch" placeholder="PED2600001A, nome, telefone, código..."></div><div class="field span-3"><label>Vendedora</label><select id="sellerFilter"><option value="">Todas</option></select></div><div class="field span-3"><label>Data</label><input id="dateFilter" type="date"></div><div class="field span-2"><label>Limpar</label><button id="clearOrderFilters" class="btn secondary" type="button">Limpar filtros</button></div></div><div id="ordersListV2"><p class="hint">Carregando pedidos...</p></div></div>';
     $('reloadOrdersV2').onclick = () => load(true);
     $('orderSearch').oninput = renderList;
     $('sellerFilter').onchange = renderList;
@@ -38,7 +39,7 @@
 
   async function load(showToast){
     try {
-      const d = await api('/api/orders?limit=300');
+      const d = await api('/api/orders?limit=500');
       orders = d.orders || [];
       renderFilters();
       renderList();
@@ -60,11 +61,14 @@
 
   function matches(order){
     const q = ($('orderSearch')?.value || '').toLowerCase().trim();
+    const compactQ = q.replace(/[^a-z0-9]/g, '');
     const seller = $('sellerFilter')?.value || '';
     const date = $('dateFilter')?.value || '';
     const customer = order.customer || {};
-    const hay = [order.id, customer.name, customer.phone, customer.whatsapp, order.seller && order.seller.label, order.partyDate, customer.partyDate, order.notes, customer.notes].concat((order.items || []).map(i => i.code + ' ' + i.theme)).join(' ').toLowerCase();
-    if (q && !hay.includes(q)) return false;
+    const parts = [orderNo(order), order.id, order.legacyId, customer.name, customer.phone, customer.whatsapp, order.seller && order.seller.label, order.partyDate, customer.partyDate, order.notes, customer.notes].concat((order.items || []).map(i => i.code + ' ' + i.theme));
+    const hay = parts.join(' ').toLowerCase();
+    const compactHay = hay.replace(/[^a-z0-9]/g, '');
+    if (q && !hay.includes(q) && !compactHay.includes(compactQ)) return false;
     if (seller && (!order.seller || order.seller.label !== seller)) return false;
     if (date && String(order.createdAt || '').slice(0,10) !== date) return false;
     return true;
@@ -83,18 +87,18 @@
   function orderCard(o){
     const c = o.customer || {};
     const phone = c.whatsapp || c.phone || '';
-    const partyDate = c.partyDate || o.partyDate || '';
-    const notes = c.notes || o.notes || '';
+    const no = orderNo(o);
+    const legacy = o.legacyId && o.legacyId !== no ? '<span class="legacyOrder">ID antigo: ' + esc(o.legacyId) + '</span>' : '';
     const items = (o.items || []).slice(0, 20).map(i => '#' + esc(i.code) + ' (' + esc(i.qty || 1) + 'x)').join(' · ');
     const phoneLink = wa(phone);
-    return '<div class="item orderCardV2"><div class="itemHead"><div><b>Pedido ' + esc(o.id) + '</b><p class="hint">' + esc(formatDate(o.createdAt)) + ' · ' + esc(o.seller && o.seller.label || 'Sem vendedora') + ' · ' + esc(o.qty || 0) + ' item(ns)</p></div><div class="actions"><a class="btn secondary" href="' + esc(phoneLink) + '" target="_blank" rel="noopener">Abrir conversa</a><button class="btn secondary" data-copy-customer="' + esc(o.id) + '" type="button">Copiar dados</button><button class="btn danger" data-delete-order-v2="' + esc(o.id) + '" type="button">Excluir</button></div></div><div class="orderCustomer"><b>Cliente:</b> ' + esc(c.name || 'Não informado') + ' · <b>WhatsApp:</b> ' + esc(phone || 'Não informado') + (partyDate ? ' · <b>Data da festa:</b> ' + esc(partyDate) : '') + '</div><p class="hint"><b>Total:</b> ' + money(o.totals && o.totals.net) + ' · <b>Desconto:</b> ' + money(o.totals && o.totals.discount) + '</p><p class="hint">' + items + '</p>' + (notes ? '<p class="hint"><b>Obs.:</b> ' + esc(notes) + '</p>' : '') + '</div>';
+    return '<div class="item orderCardV2"><div class="itemHead"><div><span class="orderNumberPill">' + esc(no) + '</span><p class="hint">' + esc(formatDate(o.createdAt)) + ' · ' + esc(o.seller && o.seller.label || 'Sem vendedora') + ' · ' + esc(o.qty || 0) + ' item(ns) ' + legacy + '</p></div><div class="actions"><a class="btn secondary" href="' + esc(phoneLink) + '" target="_blank" rel="noopener">Abrir conversa</a><button class="btn secondary" data-copy-customer="' + esc(o.id) + '" type="button">Copiar dados</button><button class="btn danger" data-delete-order-v2="' + esc(o.id) + '" type="button">Excluir</button></div></div><div class="orderCustomer"><b>Cliente:</b> ' + esc(c.name || 'Não informado') + ' · <b>WhatsApp:</b> ' + esc(phone || 'Não informado') + '</div><p class="hint"><b>Total:</b> ' + money(o.totals && o.totals.net) + ' · <b>Desconto:</b> ' + money(o.totals && o.totals.discount) + '</p><p class="hint">' + items + '</p></div>';
   }
 
   function copyCustomer(id){
     const o = orders.find(x => x.id === id);
     if (!o) return;
     const c = o.customer || {};
-    const text = ['Cliente: ' + (c.name || ''), 'WhatsApp: ' + (c.whatsapp || c.phone || ''), 'Pedido: ' + o.id, 'Vendedora: ' + ((o.seller && o.seller.label) || ''), 'Itens: ' + (o.items || []).map(i => '#' + i.code + ' (' + (i.qty || 1) + 'x)').join(', ')].join('\n');
+    const text = ['Pedido: ' + orderNo(o), 'Cliente: ' + (c.name || ''), 'WhatsApp: ' + (c.whatsapp || c.phone || ''), 'Vendedora: ' + ((o.seller && o.seller.label) || ''), 'Itens: ' + (o.items || []).map(i => '#' + i.code + ' (' + (i.qty || 1) + 'x)').join(', ')].join('\n');
     navigator.clipboard?.writeText(text).then(() => toast('Dados copiados.')).catch(() => toast('Não consegui copiar.', 'err'));
   }
 
@@ -112,7 +116,7 @@
     if ($('ordersUnifiedStyle')) return;
     const s = document.createElement('style');
     s.id = 'ordersUnifiedStyle';
-    s.textContent = '.ordersSummary{display:flex;justify-content:space-between;gap:12px;margin:16px 0 10px;flex-wrap:wrap}.ordersSummary b{font-family:Montserrat}.orderCardV2 .actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.orderCustomer{margin:12px 0 6px;padding:10px 12px;background:#fff8fb;border:1px solid #ffd6e5;border-radius:14px;color:#4d454d;font-weight:800}@media(max-width:720px){.orderCardV2 .itemHead{align-items:flex-start}.orderCardV2 .actions .btn{width:100%;justify-content:center}}';
+    s.textContent = '.ordersSummary{display:flex;justify-content:space-between;gap:12px;margin:16px 0 10px;flex-wrap:wrap}.ordersSummary b{font-family:Montserrat}.orderCardV2 .actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.orderCustomer{margin:12px 0 6px;padding:10px 12px;background:#fff8fb;border:1px solid #ffd6e5;border-radius:14px;color:#4d454d;font-weight:800}.orderNumberPill{display:inline-flex;align-items:center;border-radius:999px;background:#222124;color:#fff;font-weight:950;letter-spacing:.06em;padding:7px 12px;margin-bottom:6px;font-family:Montserrat,Arial,sans-serif}.legacyOrder{display:inline-block;margin-left:8px;color:#9a8f98;font-size:11px}@media(max-width:720px){.orderCardV2 .itemHead{align-items:flex-start}.orderCardV2 .actions .btn{width:100%;justify-content:center}.orderNumberPill{font-size:13px}}';
     document.head.appendChild(s);
   }
 
