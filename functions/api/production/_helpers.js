@@ -66,27 +66,19 @@ export async function findOrderByNumber(env, number) {
   return hit || { order: null, key: "", error: "PEDIDO_NAO_ENCONTRADO" };
 }
 
-export function buildProductionPayload(order, config = {}) {
-  const production = normalizeProductionApi(config.productionApi || {});
+export function buildProductionPayload(order) {
   const items = normalizeItems(order.items || []);
-  const customer = production.exposeCustomer ? (order.customer || null) : null;
-  const totals = production.exposeTotals ? (order.totals || {}) : {};
+  const customer = order.customer || {};
+  const seller = order.seller || {};
   const orderNumber = order.orderNumber || order.orderCode || order.displayId || order.id;
   return {
     ok: true,
     orderNumber,
-    id: order.id,
-    status: order.status || "Novo",
+    customerName: clean(customer.name || customer.nome || ""),
     createdAt: order.createdAt || "",
-    updatedAt: order.updatedAt || "",
-    customer,
-    seller: order.seller || null,
-    totals,
-    qty: Number(order.qty || items.reduce((s, i) => s + (Number(i.qty) || 0), 0)),
-    items,
-    codes: unique(items.map(i => i.code).filter(Boolean)),
-    codesText: unique(items.map(i => i.code).filter(Boolean)).join("\n"),
-    folderName: folderSafe(`${orderNumber} - ${customer && customer.name || "Cliente"}`)
+    createdAtFormatted: formatDate(order.createdAt),
+    sellerName: clean(seller.label || seller.name || seller.nome || ""),
+    items: items.map(item => ({ id: item.id, quantity: item.quantity }))
   };
 }
 
@@ -132,21 +124,25 @@ export function productionStatuses(config = {}) {
 }
 
 function normalizeItems(items) {
-  return (Array.isArray(items) ? items : []).map(item => ({
-    code: cleanCode(item.code || item.codigo || item.id),
-    theme: clean(item.theme || item.tema),
-    product: clean(item.product || item.productName || item.produto),
-    productName: clean(item.productName || item.product || item.produto),
-    qty: Number(item.qty || item.quantity || item.quantidade || 1) || 1,
-    image: String(item.image || item.thumbnail || "").slice(0, 1000)
-  })).filter(item => item.code);
+  const map = new Map();
+  (Array.isArray(items) ? items : []).forEach(item => {
+    const id = cleanCode(item.code || item.codigo || item.id);
+    if (!id) return;
+    const qty = Number(item.qty || item.quantity || item.quantidade || 1) || 1;
+    map.set(id, (map.get(id) || 0) + qty);
+  });
+  return [...map.entries()].map(([id, quantity]) => ({ id, quantity }));
 }
 function orderMatches(order, wanted) {
   return [order.id, order.orderNumber, order.orderCode, order.displayId, order.legacyId]
     .map(v => clean(v).toUpperCase())
     .includes(wanted);
 }
+function formatDate(value) {
+  if (!value) return "";
+  try { return new Date(value).toLocaleString("pt-BR", { timeZone: "America/Recife" }); }
+  catch (_) { return clean(value); }
+}
 function clean(value) { return String(value || "").replace(/\s+/g, " ").trim(); }
 function cleanCode(value) { return String(value || "").replace(/\D/g, "").trim(); }
 function unique(list) { return [...new Set((list || []).map(x => clean(x)).filter(Boolean))]; }
-function folderSafe(value) { return clean(value).replace(/[\\/:*?"<>|]+/g, "-").slice(0, 120); }
