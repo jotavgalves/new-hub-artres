@@ -3,6 +3,9 @@
   const esc = v => String(v ?? '').replace(/[&<>'"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]));
   const money = v => Number(v || 0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
   let orders = [];
+  let toastTimer = null;
+  let loading = false;
+  let renderTimer = null;
 
   async function api(url, opts={}){
     const r = await fetch(url, { credentials:'include', cache:'no-store', headers:{'Content-Type':'application/json', ...(opts.headers || {})}, ...opts });
@@ -10,44 +13,55 @@
     if (!r.ok || d.ok === false) throw new Error(d.error || 'Erro');
     return d;
   }
-
-  function panel(){ return $('ordersPanelV2') || $('ordersPanel'); }
+  function panel(){ return $('ordersPanel'); }
+  function isOrdersActive(){ return document.body.dataset.adminTab === 'ordersView' || (!$('ordersView')?.classList.contains('hidden')); }
   function toast(msg, type='ok'){
     const el = $('status');
     if (!el) return;
+    clearTimeout(toastTimer);
     el.textContent = msg;
     el.className = 'status ' + type;
     el.classList.remove('hidden');
+    toastTimer = setTimeout(() => { if (el.textContent === msg) el.classList.add('hidden'); }, type === 'err' ? 6500 : 3500);
   }
-
   function digits(v){ return String(v || '').replace(/\D/g, ''); }
   function wa(phone){ const d = digits(phone); return d ? 'https://wa.me/' + (d.startsWith('55') ? d : '55' + d) : '#'; }
   function formatDate(value){ try { return new Date(value).toLocaleString('pt-BR'); } catch(e) { return value || ''; } }
   function orderNo(o){ return o.orderNumber || o.orderCode || o.displayId || o.id || ''; }
 
-  function renderShell(){
+  function claimOrdersPanel(){
     const target = panel();
-    if (!target) return;
+    if (!target || !isOrdersActive()) return false;
+    if (target.dataset.ordersOwner === 'unified' && $('ordersListV2')) return true;
+    target.dataset.ordersOwner = 'unified';
     target.innerHTML = '<div class="card span-12"><div class="sectionHead"><div><h3>Pedidos</h3><p>Pedidos salvos com número curto no formato PED2600001A.</p></div><button id="reloadOrdersV2" class="btn secondary" type="button">Atualizar</button></div><div class="grid"><div class="field span-4"><label>Buscar pedido</label><input id="orderSearch" placeholder="PED2600001A, nome, telefone, código..."></div><div class="field span-3"><label>Vendedora</label><select id="sellerFilter"><option value="">Todas</option></select></div><div class="field span-3"><label>Data</label><input id="dateFilter" type="date"></div><div class="field span-2"><label>Limpar</label><button id="clearOrderFilters" class="btn secondary" type="button">Limpar filtros</button></div></div><div id="ordersListV2"><p class="hint">Carregando pedidos...</p></div></div>';
     $('reloadOrdersV2').onclick = () => load(true);
     $('orderSearch').oninput = renderList;
     $('sellerFilter').onchange = renderList;
     $('dateFilter').oninput = renderList;
     $('clearOrderFilters').onclick = () => { $('orderSearch').value=''; $('sellerFilter').value=''; $('dateFilter').value=''; renderList(); };
+    return true;
+  }
+
+  function renderShell(){
+    if (!claimOrdersPanel()) return;
     load(false);
   }
 
   async function load(showToast){
+    if (loading) return;
+    loading = true;
     try {
       const d = await api('/api/orders?limit=500');
       orders = d.orders || [];
+      claimOrdersPanel();
       renderFilters();
       renderList();
       if (showToast) toast('Pedidos atualizados.');
     } catch(e) {
       const list = $('ordersListV2');
       if (list) list.innerHTML = '<p class="hint">' + esc(e.message) + '</p>';
-    }
+    } finally { loading = false; }
   }
 
   function renderFilters(){
@@ -90,7 +104,7 @@
     const no = orderNo(o);
     const items = (o.items || []).slice(0, 20).map(i => '#' + esc(i.code) + ' (' + esc(i.qty || 1) + 'x)').join(' · ');
     const phoneLink = wa(phone);
-    return '<div class="item orderCardV2"><div class="itemHead"><div><span class="orderNumberPill">' + esc(no) + '</span><p class="hint">' + esc(formatDate(o.createdAt)) + ' · ' + esc(o.seller && o.seller.label || 'Sem vendedora') + ' · ' + esc(o.qty || 0) + ' item(ns)</p></div><div class="actions"><a class="btn secondary" href="' + esc(phoneLink) + '" target="_blank" rel="noopener">Abrir conversa</a><button class="btn secondary" data-copy-customer="' + esc(o.id) + '" type="button">Copiar dados</button><button class="btn danger" data-delete-order-v2="' + esc(o.id) + '" type="button">Excluir</button></div></div><div class="orderCustomer"><b>Cliente:</b> ' + esc(c.name || 'Não informado') + ' · <b>WhatsApp:</b> ' + esc(phone || 'Não informado') + '</div><p class="hint"><b>Total:</b> ' + money(o.totals && o.totals.net) + ' · <b>Desconto:</b> ' + money(o.totals && o.totals.discount) + '</p><p class="hint">' + items + '</p></div>';
+    return '<div class="item orderCardV2"><div class="itemHead"><div><span class="orderNumberPill">' + esc(no) + '</span><p class="hint">' + esc(formatDate(o.createdAt)) + ' · ' + esc(o.seller && o.seller.label || 'Sem vendedora') + ' · ' + esc(o.qty || 0) + ' item(ns)</p></div><div class="actions"><a class="btn secondary" href="' + esc(phoneLink) + '" target="_blank" rel="noopener">Abrir conversa</a><button class="btn secondary" data-copy-customer="' + esc(o.id) + '" type="button">Copiar dados</button><button class="btn danger" data-delete-order-v2="' + esc(o.id) + '" type="button">Excluir</button></div></div><div class="orderCustomer"><b>Cliente:</b> ' + esc(c.name || 'Não informado') + ' · <b>WhatsApp:</b> ' + esc(phone || 'Não informado') + '</div><p class="hint"><b>Status:</b> ' + esc(o.status || 'Novo') + ' · <b>Total:</b> ' + money(o.totals && o.totals.net) + ' · <b>Desconto:</b> ' + money(o.totals && o.totals.discount) + '</p><p class="hint">' + items + '</p></div>';
   }
 
   function copyCustomer(id){
@@ -119,8 +133,16 @@
     document.head.appendChild(s);
   }
 
-  function activeOrders(){ return document.querySelector('[data-tab="ordersView"]')?.classList.contains('active') || !$('ordersView')?.classList.contains('hidden'); }
-  document.addEventListener('click', e => { if (e.target && e.target.closest('[data-tab="ordersView"]')) setTimeout(renderShell, 450); });
+  function scheduleRender(){
+    clearTimeout(renderTimer);
+    renderTimer = setTimeout(() => {
+      if (!isOrdersActive()) return;
+      if (!$('ordersListV2')) renderShell();
+    }, 180);
+  }
+
+  document.addEventListener('click', e => { if (e.target && e.target.closest('[data-tab="ordersView"]')) setTimeout(renderShell, 220); });
   injectStyle();
-  setTimeout(() => { if (activeOrders()) renderShell(); }, 1400);
+  new MutationObserver(scheduleRender).observe(document.body, { childList:true, subtree:true });
+  setTimeout(() => { if (isOrdersActive()) renderShell(); }, 900);
 })();
