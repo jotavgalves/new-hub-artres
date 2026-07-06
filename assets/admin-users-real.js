@@ -1,202 +1,61 @@
 (function(){
-  var currentUser = null;
-  var usersCache = [];
-  var sellersCache = [];
-
-  function $(id){ return document.getElementById(id); }
-  function esc(v){ return String(v == null ? '' : v).replace(/[&<>'"]/g, function(m){ return {'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]; }); }
-  function clean(v){ return String(v || '').replace(/\s+/g, ' ').trim(); }
-  function idify(v){ return clean(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''); }
-
-  async function api(url, opts){
-    opts = opts || {};
-    var r = await fetch(url, { credentials:'include', cache:'no-store', headers:{ 'Content-Type':'application/json', ...(opts.headers || {}) }, ...opts });
-    var d = await r.json().catch(function(){ return {}; });
-    if(!r.ok || d.ok === false) throw new Error(d.error || 'Erro');
+  var currentUser=null,usersCache=[],sellersCache=[];
+  function $(id){return document.getElementById(id)}
+  function esc(v){return String(v==null?'':v).replace(/[&<>'"]/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]})}
+  function clean(v){return String(v||'').replace(/\s+/g,' ').trim()}
+  function idify(v){return clean(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'')}
+  async function api(url,opts){
+    opts=opts||{};
+    var r=await fetch(url,{credentials:'include',cache:'no-store',headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts});
+    var text=await r.text().catch(function(){return ''});
+    var d={};
+    try{d=text?JSON.parse(text):{}}catch(e){d={error:text}}
+    if(!r.ok||d.ok===false)throw new Error(d.error||('HTTP '+r.status+(text?': '+text.slice(0,240):'')));
     return d;
   }
-
   function injectStyles(){
-    if($('adminUsersRealStyle')) return;
-    var s = document.createElement('style');
-    s.id = 'adminUsersRealStyle';
-    s.textContent = '#loginUserField{margin-bottom:12px}.userRoleBadge{display:inline-flex;align-items:center;border-radius:999px;background:#fff1f6;color:#b61f55;font-weight:950;padding:8px 12px;margin-left:8px}.usersRealGrid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px}.usersRealGrid .span-3{grid-column:span 3}.usersRealGrid .span-4{grid-column:span 4}.usersRealGrid .span-6{grid-column:span 6}.usersRealGrid .span-12{grid-column:span 12}.createUserRow{display:flex!important;gap:12px;align-items:center;margin:14px 0 18px!important;padding:14px!important;background:#f7fff9!important;border:1px solid #b9f3cb!important;border-radius:18px!important}.createUserRow .btn{display:inline-flex!important;visibility:visible!important;opacity:1!important;min-width:260px!important;justify-content:center!important;font-size:15px!important}.realUserCard{border:1px solid #efdfe4;border-radius:20px;background:#fff;padding:14px;margin:10px 0}.realUserTop{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.realUserTop h4{margin:0;font-family:Montserrat}.realUserTop p{margin:5px 0 0;color:#6f6872;font-weight:800}.realUserActions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.adminOnlyNotice{background:#fff8fb;border:1px solid #ffd6e5;border-radius:18px;padding:12px 14px;font-weight:850;color:#5a4b56;margin-bottom:14px}body[data-user-role="vendedora"] [data-tab]:not([data-tab="ordersView"]){display:none!important}body[data-user-role="vendedora"] .saveBar,body[data-user-role="vendedora"] .topbar .actions{display:none!important}body[data-user-role="vendedora"] #sellerFilter,body[data-user-role="vendedora"] label[for="sellerFilter"],body[data-user-role="vendedora"] [data-delete-order-v2]{display:none!important}@media(max-width:760px){.usersRealGrid .span-3,.usersRealGrid .span-4,.usersRealGrid .span-6{grid-column:span 12}.realUserTop{display:block}.realUserActions{justify-content:flex-start;margin-top:12px}.createUserRow{display:block!important}.createUserRow .btn{width:100%!important}}';
+    if($('adminUsersRealStyle'))return;
+    var s=document.createElement('style');s.id='adminUsersRealStyle';
+    s.textContent='#loginUserField{margin-bottom:12px}.userRoleBadge{display:inline-flex;align-items:center;border-radius:999px;background:#fff1f6;color:#b61f55;font-weight:950;padding:8px 12px;margin-left:8px}.usersRealGrid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px}.usersRealGrid .span-3{grid-column:span 3}.createUserRow{display:flex!important;gap:12px;align-items:center;margin:14px 0 18px!important;padding:14px!important;background:#f7fff9!important;border:1px solid #b9f3cb!important;border-radius:18px!important}.createUserRow .btn{display:inline-flex!important;visibility:visible!important;opacity:1!important;min-width:260px!important;justify-content:center!important;font-size:15px!important}.realUserCard{border:1px solid #efdfe4;border-radius:20px;background:#fff;padding:14px;margin:10px 0}.realUserTop{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.realUserTop h4{margin:0;font-family:Montserrat}.realUserTop p{margin:5px 0 0;color:#6f6872;font-weight:800}.realUserActions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.adminOnlyNotice{background:#fff8fb;border:1px solid #ffd6e5;border-radius:18px;padding:12px 14px;font-weight:850;color:#5a4b56;margin-bottom:14px}body[data-user-role="vendedora"] [data-tab]:not([data-tab="ordersView"]){display:none!important}body[data-user-role="vendedora"] .saveBar,body[data-user-role="vendedora"] .topbar .actions{display:none!important}body[data-user-role="vendedora"] #sellerFilter,body[data-user-role="vendedora"] label[for="sellerFilter"],body[data-user-role="vendedora"] [data-delete-order-v2]{display:none!important}@media(max-width:760px){.usersRealGrid .span-3{grid-column:span 12}.realUserTop{display:block}.realUserActions{justify-content:flex-start;margin-top:12px}.createUserRow{display:block!important}.createUserRow .btn{width:100%!important}}';
     document.head.appendChild(s);
   }
-
   function patchLogin(){
-    var form = $('loginForm');
-    var pass = $('password');
-    if(!form || !pass) return;
-    if(!$('username')){
-      var box = document.createElement('div');
-      box.className = 'field';
-      box.id = 'loginUserField';
-      box.innerHTML = '<label>Usuário</label><input id="username" autocomplete="username" placeholder="admin, ana, dayane...">';
-      pass.closest('.field').insertAdjacentElement('beforebegin', box);
-    }
-    if(form.dataset.realUsersPatched === '1') return;
-    form.dataset.realUsersPatched = '1';
-    form.onsubmit = async function(e){
-      e.preventDefault();
-      var status = $('loginStatus');
-      try {
-        if(status){ status.className='status hidden'; status.textContent=''; }
-        await api('/api/admin/login', { method:'POST', body:JSON.stringify({ username:($('username') && $('username').value) || 'admin', password:pass.value }) });
-        location.reload();
-      } catch(err) {
-        if(status){ status.textContent = err.message || 'Login inválido'; status.className='status err'; status.classList.remove('hidden'); }
-      }
-    };
+    var form=$('loginForm'),pass=$('password');if(!form||!pass)return;
+    if(!$('username')){var box=document.createElement('div');box.className='field';box.id='loginUserField';box.innerHTML='<label>Usuário</label><input id="username" autocomplete="username" placeholder="admin, ana, dayane...">';pass.closest('.field').insertAdjacentElement('beforebegin',box)}
+    if(form.dataset.realUsersPatched==='1')return;form.dataset.realUsersPatched='1';
+    form.onsubmit=async function(e){e.preventDefault();var st=$('loginStatus');try{if(st){st.className='status hidden';st.textContent=''}await api('/api/admin/login',{method:'POST',body:JSON.stringify({username:($('username')&&$('username').value)||'admin',password:pass.value})});location.reload()}catch(err){if(st){st.textContent=err.message||'Login inválido';st.className='status err';st.classList.remove('hidden')}}};
   }
-
-  async function loadMe(){
-    try {
-      var d = await api('/api/admin/me');
-      currentUser = d.user || null;
-      applyRoleUi();
-      if(currentUser && currentUser.role === 'admin') renderUsersIfNeeded();
-    } catch(e) {}
-  }
-
+  async function loadMe(){try{var d=await api('/api/admin/me');currentUser=d.user||null;applyRoleUi();if(currentUser&&currentUser.role==='admin')renderUsersIfNeeded()}catch(e){}}
   function applyRoleUi(){
-    if(!currentUser) return;
-    document.body.dataset.userRole = currentUser.role || '';
-    document.body.dataset.sellerId = currentUser.sellerId || '';
-    var title = $('adminTitle');
-    if(title && !$('userRoleBadge')){
-      title.insertAdjacentHTML('afterend', '<span id="userRoleBadge" class="userRoleBadge">' + esc(currentUser.name || currentUser.username) + ' · ' + esc(currentUser.role) + '</span>');
-    }
-    if(currentUser.role === 'vendedora'){
-      var orders = document.querySelector('[data-tab="ordersView"]');
-      setTimeout(function(){ if(orders) orders.click(); }, 250);
-      document.querySelectorAll('[data-view]').forEach(function(v){ v.classList.toggle('hidden', v.id !== 'ordersView'); });
-      document.querySelectorAll('[data-tab]').forEach(function(b){ b.classList.toggle('active', b.dataset.tab === 'ordersView'); });
-      document.body.dataset.adminTab = 'ordersView';
-    }
+    if(!currentUser)return;document.body.dataset.userRole=currentUser.role||'';document.body.dataset.sellerId=currentUser.sellerId||'';
+    var title=$('adminTitle');if(title&&!$('userRoleBadge'))title.insertAdjacentHTML('afterend','<span id="userRoleBadge" class="userRoleBadge">'+esc(currentUser.name||currentUser.username)+' · '+esc(currentUser.role)+'</span>');
+    if(currentUser.role==='vendedora'){var orders=document.querySelector('[data-tab="ordersView"]');setTimeout(function(){if(orders)orders.click()},250);document.querySelectorAll('[data-view]').forEach(function(v){v.classList.toggle('hidden',v.id!=='ordersView')});document.querySelectorAll('[data-tab]').forEach(function(b){b.classList.toggle('active',b.dataset.tab==='ordersView')});document.body.dataset.adminTab='ordersView'}
   }
-
   function renderUsersIfNeeded(){
-    if(!currentUser || currentUser.role !== 'admin') return;
-    var active = document.body.dataset.adminTab === 'permissionsView' || (!$('permissionsView') || !$('permissionsView').classList.contains('hidden'));
-    var panel = $('permissionsPanel');
-    if(!panel || !active) return;
-    if($('usersRealPanel')) return;
-    panel.innerHTML = usersMarkup(true);
-    bindUsersPanel();
-    loadUsers();
+    if(!currentUser||currentUser.role!=='admin')return;var active=document.body.dataset.adminTab==='permissionsView'||($('permissionsView')&&!$('permissionsView').classList.contains('hidden'));var panel=$('permissionsPanel');if(!panel||!active)return;if($('usersRealPanel'))return;panel.innerHTML=usersMarkup(true);bindUsersPanel();loadUsers();
   }
-
   function usersMarkup(loading){
-    return '<div class="card span-12" id="usersRealPanel"><div class="sectionHead"><div><h3>Usuários do painel</h3><p>O usuário mestre continua sendo <b>admin</b> com a senha ADMIN_SECRET_KEY do Cloudflare. Abaixo ficam apenas os acessos das vendedoras.</p></div><button id="reloadUsersReal" class="btn secondary" type="button">Atualizar</button></div><div class="adminOnlyNotice">Admin: usuário <b>admin</b> + senha do Cloudflare. Vendedora: usuário próprio + senha criada aqui, vendo apenas pedidos e clientes vinculados à vendedora.</div><div class="usersRealGrid"><div class="field span-3"><label>Nome</label><input id="newUserName" placeholder="Ana"></div><div class="field span-3"><label>Usuário</label><input id="newUserLogin" placeholder="ana"></div><div class="field span-3"><label>Vendedora vinculada</label><select id="newUserSeller"></select></div><div class="field span-3"><label>Senha inicial</label><input id="newUserPassword" type="password" autocomplete="new-password" placeholder="mín. 4 caracteres"></div></div><div class="createUserRow"><button id="createUserReal" class="btn green" type="button">Criar / salvar vendedora</button><span class="hint">Depois de preencher os campos, clique aqui para gravar o usuário.</span></div><div id="usersRealStatus" class="status hidden"></div><div id="usersRealList"><p class="hint">' + (loading ? 'Carregando usuários...' : '') + '</p></div></div>';
+    return '<div class="card span-12" id="usersRealPanel"><div class="sectionHead"><div><h3>Usuários do painel</h3><p>O usuário mestre continua sendo <b>admin</b> com a senha ADMIN_SECRET_KEY do Cloudflare. Abaixo ficam apenas os acessos das vendedoras.</p></div><button id="reloadUsersReal" class="btn secondary" type="button">Atualizar</button></div><div class="adminOnlyNotice">Admin: usuário <b>admin</b> + senha do Cloudflare. Vendedora: usuário próprio + senha criada aqui, vendo apenas pedidos e clientes vinculados à vendedora.</div><div class="usersRealGrid"><div class="field span-3"><label>Nome</label><input id="newUserName" placeholder="Ana"></div><div class="field span-3"><label>Usuário</label><input id="newUserLogin" placeholder="ana"></div><div class="field span-3"><label>Vendedora vinculada</label><select id="newUserSeller"></select></div><div class="field span-3"><label>Senha inicial</label><input id="newUserPassword" type="password" autocomplete="new-password" placeholder="mín. 4 caracteres"></div></div><div class="createUserRow"><button id="createUserReal" class="btn green" type="button">Criar / salvar vendedora</button><span class="hint">Depois de preencher os campos, clique aqui para gravar o usuário.</span></div><div id="usersRealStatus" class="status hidden"></div><div id="usersRealList"><p class="hint">'+(loading?'Carregando usuários...':'')+'</p></div></div>';
   }
-
   function bindUsersPanel(){
-    var reload = $('reloadUsersReal');
-    var create = $('createUserReal');
-    var name = $('newUserName');
-    var login = $('newUserLogin');
-    var pass = $('newUserPassword');
-    var seller = $('newUserSeller');
-    if(reload) reload.onclick = loadUsers;
-    if(create) create.onclick = saveNewUser;
-    if(pass) pass.addEventListener('keydown', function(e){ if(e.key === 'Enter'){ e.preventDefault(); saveNewUser(); } });
-    if(name) name.oninput = function(){ if(login && !login.dataset.touched) login.value = idify(name.value); };
-    if(login) login.oninput = function(){ login.dataset.touched = '1'; };
-    if(seller) seller.onchange = function(){
-      var s = sellersCache.find(function(x){ return x.id === seller.value; });
-      if(s && name && !name.value) name.value = s.label || s.id;
-      if(s && login && !login.dataset.touched) login.value = s.id;
-    };
+    var reload=$('reloadUsersReal'),create=$('createUserReal'),name=$('newUserName'),login=$('newUserLogin'),pass=$('newUserPassword'),seller=$('newUserSeller');
+    if(reload)reload.onclick=loadUsers;if(create)create.onclick=saveNewUser;if(pass)pass.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();saveNewUser()}});if(name)name.oninput=function(){if(login&&!login.dataset.touched)login.value=idify(name.value)};if(login)login.oninput=function(){login.dataset.touched='1'};if(seller)seller.onchange=function(){var s=sellersCache.find(function(x){return x.id===seller.value});if(s&&name&&!name.value)name.value=s.label||s.id;if(s&&login&&!login.dataset.touched)login.value=s.id};
   }
-
-  async function loadUsers(){
-    try {
-      var d = await api('/api/admin/users');
-      usersCache = d.users || [];
-      sellersCache = d.sellers || [];
-      renderSellerOptions();
-      renderUserList();
-      status('Usuários carregados.', 'ok', true);
-    } catch(e) { status(e.message || 'Erro ao carregar usuários.', 'err'); }
-  }
-
-  function renderSellerOptions(){
-    var sel = $('newUserSeller');
-    if(!sel) return;
-    var current = sel.value;
-    sel.innerHTML = sellersCache.map(function(s){ return '<option value="' + esc(s.id) + '">' + esc(s.label || s.id) + '</option>'; }).join('');
-    if(current) sel.value = current;
-  }
-
+  async function loadUsers(){try{var d=await api('/api/admin/users');usersCache=d.users||[];sellersCache=d.sellers||[];renderSellerOptions();renderUserList();status('Usuários carregados.','ok',true)}catch(e){status(e.message||'Erro ao carregar usuários.','err')}}
+  function renderSellerOptions(){var sel=$('newUserSeller');if(!sel)return;var current=sel.value;sel.innerHTML=sellersCache.map(function(s){return '<option value="'+esc(s.id)+'">'+esc(s.label||s.id)+'</option>'}).join('');if(current)sel.value=current}
   function renderUserList(){
-    var list = $('usersRealList');
-    if(!list) return;
-    if(!usersCache.length){ list.innerHTML = '<p class="hint">Nenhuma vendedora com usuário criado ainda.</p>'; return; }
-    list.innerHTML = usersCache.map(function(u){
-      var seller = sellersCache.find(function(s){ return s.id === u.sellerId; });
-      return '<article class="realUserCard"><div class="realUserTop"><div><h4>' + esc(u.name) + '</h4><p>Usuário: <b>' + esc(u.username) + '</b> · Cargo: <b>' + esc(u.role) + '</b> · Vendedora: <b>' + esc(seller && seller.label || u.sellerId) + '</b></p><p>Status: ' + (u.active === false ? 'Inativo' : 'Ativo') + '</p></div><div class="realUserActions"><button class="btn secondary" data-toggle-user="' + esc(u.id) + '">' + (u.active === false ? 'Ativar' : 'Desativar') + '</button><button class="btn secondary" data-reset-user="' + esc(u.id) + '">Trocar senha</button><button class="btn danger" data-delete-user="' + esc(u.id) + '">Excluir</button></div></div></article>';
-    }).join('');
-    list.querySelectorAll('[data-toggle-user]').forEach(function(btn){ btn.onclick = function(){ toggleUser(btn.dataset.toggleUser); }; });
-    list.querySelectorAll('[data-reset-user]').forEach(function(btn){ btn.onclick = function(){ resetPassword(btn.dataset.resetUser); }; });
-    list.querySelectorAll('[data-delete-user]').forEach(function(btn){ btn.onclick = function(){ deleteUser(btn.dataset.deleteUser); }; });
+    var list=$('usersRealList');if(!list)return;if(!usersCache.length){list.innerHTML='<p class="hint">Nenhuma vendedora com usuário criado ainda.</p>';return}
+    list.innerHTML=usersCache.map(function(u){var seller=sellersCache.find(function(s){return s.id===u.sellerId});return '<article class="realUserCard"><div class="realUserTop"><div><h4>'+esc(u.name)+'</h4><p>Usuário: <b>'+esc(u.username)+'</b> · Cargo: <b>'+esc(u.role)+'</b> · Vendedora: <b>'+esc(seller&&seller.label||u.sellerId)+'</b></p><p>Status: '+(u.active===false?'Inativo':'Ativo')+'</p></div><div class="realUserActions"><button class="btn secondary" data-toggle-user="'+esc(u.id)+'">'+(u.active===false?'Ativar':'Desativar')+'</button><button class="btn secondary" data-reset-user="'+esc(u.id)+'">Trocar senha</button><button class="btn danger" data-delete-user="'+esc(u.id)+'">Excluir</button></div></div></article>'}).join('');
+    list.querySelectorAll('[data-toggle-user]').forEach(function(btn){btn.onclick=function(){toggleUser(btn.dataset.toggleUser)}});list.querySelectorAll('[data-reset-user]').forEach(function(btn){btn.onclick=function(){resetPassword(btn.dataset.resetUser)}});list.querySelectorAll('[data-delete-user]').forEach(function(btn){btn.onclick=function(){deleteUser(btn.dataset.deleteUser)}});
   }
-
   async function saveNewUser(){
-    var name = clean(($('newUserName') || {}).value);
-    var username = idify(($('newUserLogin') || {}).value);
-    var sellerId = ($('newUserSeller') || {}).value || username;
-    var password = (($('newUserPassword') || {}).value || '').trim();
-    if(!name || !username || !sellerId || !password) return status('Preencha nome, usuário, vendedora e senha.', 'err');
-    try {
-      status('Salvando usuário...', 'ok');
-      await api('/api/admin/users', { method:'POST', body:JSON.stringify({ name:name, username:username, sellerId:sellerId, password:password, active:true }) });
-      $('newUserName').value = '';
-      $('newUserLogin').value = '';
-      $('newUserLogin').dataset.touched = '';
-      $('newUserPassword').value = '';
-      await loadUsers();
-      status('Usuário salvo.', 'ok');
-    } catch(e) { status(e.message || 'Erro ao salvar usuário.', 'err'); }
+    var name=clean(($('newUserName')||{}).value),username=idify(($('newUserLogin')||{}).value),sellerId=($('newUserSeller')||{}).value||username,password=(($('newUserPassword')||{}).value||'').trim();
+    if(!name||!username||!sellerId||!password)return status('Preencha nome, usuário, vendedora e senha.','err');
+    try{status('Salvando usuário...','ok');await api('/api/admin/users',{method:'POST',body:JSON.stringify({name:name,username:username,sellerId:sellerId,password:password,active:true})});$('newUserName').value='';$('newUserLogin').value='';$('newUserLogin').dataset.touched='';$('newUserPassword').value='';await loadUsers();status('Usuário salvo.','ok')}catch(e){status(e.message||'Erro ao salvar usuário.','err')}
   }
-
-  async function toggleUser(id){
-    var u = usersCache.find(function(x){ return x.id === id; });
-    if(!u) return;
-    try { await api('/api/admin/users', { method:'POST', body:JSON.stringify({ id:u.id, username:u.username, name:u.name, sellerId:u.sellerId, active:u.active === false }) }); await loadUsers(); status('Status atualizado.', 'ok'); }
-    catch(e) { status(e.message || 'Erro ao atualizar status.', 'err'); }
-  }
-
-  async function resetPassword(id){
-    var u = usersCache.find(function(x){ return x.id === id; });
-    if(!u) return;
-    var pass = prompt('Nova senha para ' + u.name + ' (mínimo 4 caracteres):');
-    if(!pass) return;
-    try { await api('/api/admin/users', { method:'POST', body:JSON.stringify({ id:u.id, username:u.username, name:u.name, sellerId:u.sellerId, active:u.active !== false, password:pass }) }); await loadUsers(); status('Senha alterada.', 'ok'); }
-    catch(e) { status(e.message || 'Erro ao trocar senha.', 'err'); }
-  }
-
-  async function deleteUser(id){
-    if(!confirm('Excluir este usuário de vendedora?')) return;
-    try { await api('/api/admin/users?id=' + encodeURIComponent(id), { method:'DELETE' }); await loadUsers(); status('Usuário excluído.', 'ok'); }
-    catch(e) { status(e.message || 'Erro ao excluir usuário.', 'err'); }
-  }
-
-  function status(msg, type, silent){
-    var el = $('usersRealStatus') || $('status');
-    if(!el || (silent && type === 'ok')) return;
-    el.textContent = msg;
-    el.className = 'status ' + (type || 'ok');
-    el.classList.remove('hidden');
-  }
-
-  injectStyles();
-  patchLogin();
-  loadMe();
-  document.addEventListener('click', function(e){
-    var tab = e.target && e.target.closest ? e.target.closest('[data-tab]') : null;
-    if(tab && tab.dataset.tab === 'permissionsView') setTimeout(renderUsersIfNeeded, 120);
-  });
-  new MutationObserver(function(){ patchLogin(); applyRoleUi(); renderUsersIfNeeded(); }).observe(document.body, { childList:true, subtree:true });
-  setTimeout(renderUsersIfNeeded, 900);
+  async function toggleUser(id){var u=usersCache.find(function(x){return x.id===id});if(!u)return;try{await api('/api/admin/users',{method:'POST',body:JSON.stringify({id:u.id,username:u.username,name:u.name,sellerId:u.sellerId,active:u.active===false})});await loadUsers();status('Status atualizado.','ok')}catch(e){status(e.message||'Erro ao atualizar status.','err')}}
+  async function resetPassword(id){var u=usersCache.find(function(x){return x.id===id});if(!u)return;var pass=prompt('Nova senha para '+u.name+' (mínimo 4 caracteres):');if(!pass)return;try{await api('/api/admin/users',{method:'POST',body:JSON.stringify({id:u.id,username:u.username,name:u.name,sellerId:u.sellerId,active:u.active!==false,password:pass})});await loadUsers();status('Senha alterada.','ok')}catch(e){status(e.message||'Erro ao trocar senha.','err')}}
+  async function deleteUser(id){if(!confirm('Excluir este usuário de vendedora?'))return;try{await api('/api/admin/users?id='+encodeURIComponent(id),{method:'DELETE'});await loadUsers();status('Usuário excluído.','ok')}catch(e){status(e.message||'Erro ao excluir usuário.','err')}}
+  function status(msg,type,silent){var el=$('usersRealStatus')||$('status');if(!el||(silent&&type==='ok'))return;el.textContent=msg;el.className='status '+(type||'ok');el.classList.remove('hidden')}
+  injectStyles();patchLogin();loadMe();document.addEventListener('click',function(e){var tab=e.target&&e.target.closest?e.target.closest('[data-tab]'):null;if(tab&&tab.dataset.tab==='permissionsView')setTimeout(renderUsersIfNeeded,120)});new MutationObserver(function(){patchLogin();applyRoleUi();renderUsersIfNeeded()}).observe(document.body,{childList:true,subtree:true});setTimeout(renderUsersIfNeeded,900);
 })();
