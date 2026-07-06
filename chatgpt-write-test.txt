@@ -1,2 +1,0 @@
-Teste temporario de escrita via conector GitHub.
-Criado para verificar se o bloqueio ainda ocorre.
