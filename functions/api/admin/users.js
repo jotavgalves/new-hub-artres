@@ -6,10 +6,11 @@ export async function onRequestGet(context) {
   if (!auth.ok) return json({ ok: false, error: auth.error }, auth.status);
 
   const { config, storageReady } = await loadConfig(context.env);
+  const rawUsers = normalizeUsers(config.permissions && config.permissions.users);
   return json({
     ok: true,
     storageReady,
-    users: sanitizeUsers(config.permissions && config.permissions.users),
+    users: publicUsersWithPasswordStatus(rawUsers),
     sellers: config.sellers || [],
     roles: ["vendedora"]
   });
@@ -62,8 +63,9 @@ export async function onRequestPost(context) {
   };
 
   const saved = await saveConfig(context.env, config);
-  const savedUser = normalizeUsers(saved.permissions && saved.permissions.users).find(u => u.id === user.id);
-  return json({ ok: true, user: safeUser(savedUser), users: sanitizeUsers(saved.permissions && saved.permissions.users) });
+  const savedUsers = normalizeUsers(saved.permissions && saved.permissions.users);
+  const savedUser = savedUsers.find(u => u.id === user.id);
+  return json({ ok: true, user: publicUserWithPasswordStatus(savedUser), users: publicUsersWithPasswordStatus(savedUsers) });
 }
 
 export async function onRequestDelete(context) {
@@ -85,8 +87,16 @@ export async function onRequestDelete(context) {
   };
 
   const saved = await saveConfig(context.env, config);
-  return json({ ok: true, deleted: true, id, users: sanitizeUsers(saved.permissions && saved.permissions.users) });
+  return json({ ok: true, deleted: true, id, users: publicUsersWithPasswordStatus(normalizeUsers(saved.permissions && saved.permissions.users)) });
 }
 
+function publicUsersWithPasswordStatus(users) {
+  return (Array.isArray(users) ? users : []).map(publicUserWithPasswordStatus);
+}
+function publicUserWithPasswordStatus(user) {
+  const out = safeUser(user);
+  out.hasPassword = Boolean(user && user.passwordHash);
+  return out;
+}
 function clean(value) { return String(value || "").replace(/\s+/g, " ").trim().slice(0, 120); }
 function sanitizeId(value) { return clean(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""); }
