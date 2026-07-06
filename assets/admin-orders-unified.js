@@ -14,8 +14,9 @@
     return d;
   }
   function panel(){ return $('ordersPanel'); }
+  function isVendor(){ return document.body.dataset.userRole === 'vendedora'; }
   function isClientesSubtab(){ return document.body.dataset.ordersSubtab === 'clientes'; }
-  function isOrdersActive(){ return !isClientesSubtab() && (document.body.dataset.adminTab === 'ordersView' || (!$('ordersView')?.classList.contains('hidden'))); }
+  function isOrdersActive(){ return !isVendor() && !isClientesSubtab() && (document.body.dataset.adminTab === 'ordersView' || (!$('ordersView')?.classList.contains('hidden'))); }
   function toast(msg, type='ok'){
     const el = $('status');
     if (!el) return;
@@ -45,12 +46,13 @@
   }
 
   function renderShell(){
+    if (isVendor()) return;
     if (!claimOrdersPanel()) return;
     load(false);
   }
 
   async function load(showToast){
-    if (loading || isClientesSubtab()) return;
+    if (loading || isVendor() || isClientesSubtab()) return;
     loading = true;
     try {
       const d = await api('/api/orders?limit=500');
@@ -91,7 +93,7 @@
 
   function renderList(){
     const list = $('ordersListV2');
-    if (!list || isClientesSubtab()) return;
+    if (!list || isVendor() || isClientesSubtab()) return;
     const filtered = orders.filter(matches);
     if (!filtered.length) { list.innerHTML = '<p class="hint">Nenhum pedido encontrado.</p>'; return; }
     list.innerHTML = '<div class="ordersSummary"><b>' + filtered.length + ' pedido(s)</b><span>' + orders.length + ' no total</span></div>' + filtered.map(orderCard).join('');
@@ -137,13 +139,14 @@
   function scheduleRender(){
     clearTimeout(renderTimer);
     renderTimer = setTimeout(() => {
+      if (isVendor()) return;
       if (isClientesSubtab()) return;
       if (!isOrdersActive()) return;
       if (!$('ordersListV2')) renderShell();
     }, 180);
   }
 
-  document.addEventListener('click', e => { if (e.target && e.target.closest('[data-tab="ordersView"]')) { document.body.dataset.ordersSubtab = 'solicitacoes'; setTimeout(renderShell, 220); } });
+  document.addEventListener('click', e => { if (!isVendor() && e.target && e.target.closest('[data-tab="ordersView"]')) { document.body.dataset.ordersSubtab = 'solicitacoes'; setTimeout(renderShell, 220); } });
   injectStyle();
   new MutationObserver(scheduleRender).observe(document.body, { childList:true, subtree:true });
   setTimeout(() => { if (isOrdersActive()) renderShell(); }, 900);
