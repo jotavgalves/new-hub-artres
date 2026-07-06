@@ -11,13 +11,13 @@
 </head>
 <body>
   <section id="loginView" class="loginPage hidden">
-    <form id="loginForm" class="loginCard">
+    <form id="loginForm" class="loginCard" autocomplete="on">
       <div class="loginMark"></div>
       <h1 id="loginTitle">Painel administrativo</h1>
       <p id="loginSubtitle">Entre com seu usuário e senha.</p>
       <div id="loginStatus" class="status hidden"></div>
-      <div class="field"><label>Usuário</label><input id="username" autocomplete="username" placeholder="Digite seu usuário"></div>
-      <div class="field"><label>Senha</label><input id="password" type="password" autocomplete="current-password" placeholder="Digite sua senha"></div>
+      <div class="field"><label>Usuário</label><input id="username" name="username" autocomplete="username" placeholder="Digite seu usuário"></div>
+      <div class="field"><label>Senha</label><input id="password" name="password" type="password" autocomplete="current-password" placeholder="Digite sua senha"></div>
       <div style="height:14px"></div><button class="btn primary full" type="submit">Entrar</button>
     </form>
   </section>
@@ -69,11 +69,40 @@
     <footer class="saveBar"><div class="actions"><button id="saveBtn" class="btn green" type="button">Salvar alterações</button><button id="reloadBtnBottom" class="btn secondary" type="button">Recarregar</button><span id="saveHint" class="hint"></span></div></footer>
   </section>
 
+  <script>
+    (function(){
+      function $(id){return document.getElementById(id)}
+      function showLoginError(msg){var s=$('loginStatus');if(!s)return;s.textContent=msg||'Usuário ou senha inválidos.';s.className='status err';s.classList.remove('hidden')}
+      function lockLogin(locked){var form=$('loginForm');if(!form)return;Array.from(form.querySelectorAll('input,button')).forEach(function(el){el.disabled=!!locked});var btn=form.querySelector('button[type="submit"]');if(btn)btn.textContent=locked?'Entrando...':'Entrar'}
+      async function submitLogin(event){
+        var form=$('loginForm');
+        if(!form || event.target!==form)return;
+        event.preventDefault();
+        event.stopPropagation();
+        if(event.stopImmediatePropagation)event.stopImmediatePropagation();
+        var username=(($('username')&&$('username').value)||'admin').trim()||'admin';
+        var password=(($('password')&&$('password').value)||'').trim();
+        if(!password){showLoginError('Informe a senha.');return false}
+        lockLogin(true);
+        try{
+          var res=await fetch('/api/admin/login',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:username,password:password})});
+          var data=await res.json().catch(function(){return {}});
+          if(!res.ok||data.ok===false)throw new Error(data.error||'Usuário ou senha inválidos.');
+          var check=await fetch('/api/admin/config?ts='+Date.now(),{credentials:'include',cache:'no-store'});
+          if(!check.ok)throw new Error('Login aceito, mas a sessão não foi reconhecida. Recarregue e tente novamente.');
+          window.location.replace('/adm/?ok='+Date.now());
+        }catch(err){lockLogin(false);showLoginError(err.message||'Usuário ou senha inválidos.');}
+        return false;
+      }
+      document.addEventListener('submit',submitLogin,true);
+      window.__ARMAZEM_LOGIN_CAPTURE__=true;
+    })();
+  </script>
   <script src="/assets/admin.js?v=4" defer></script>
   <script src="/assets/admin-catalog-unified.js?v=1" defer></script>
   <script src="/assets/admin-ui-fix.js?v=1" defer></script>
   <script src="/assets/admin-site-texts-real.js?v=1" defer></script>
-  <script src="/assets/admin-login-fix.js?v=1" defer></script>
+  <script src="/assets/admin-login-fix.js?v=2" defer></script>
   <script src="/assets/admin-permissions-real.js?v=1" defer></script>
   <script src="/assets/admin-role-guard.js?v=1" defer></script>
   <script src="/assets/admin-orders-subtabs-fix.js?v=1" defer></script>
