@@ -61,6 +61,7 @@
   }
 
   function openClientes(){
+    var y = window.scrollY || document.documentElement.scrollTop || 0;
     document.body.dataset.ordersSubtab = 'clientes';
     activateOrders(); showSub(); mark('c');
     var p = panel(); if (!p) return;
@@ -69,6 +70,8 @@
     $('reloadClientes').onclick = loadAndRender;
     $('clientesBusca').oninput = renderClientes;
     loadAndRender();
+    setTimeout(function(){ window.scrollTo(0, y); }, 0);
+    setTimeout(function(){ window.scrollTo(0, y); }, 120);
   }
   function loadAndRender(){ fetchClientes().then(renderClientes).catch(function(e){ if ($('clientesLista')) $('clientesLista').innerHTML = '<p class="hint">' + esc(e.message) + '</p>'; }); }
   function renderClientes(){
@@ -88,9 +91,16 @@
   document.addEventListener('click', function(e){
     var main = e.target && e.target.closest ? e.target.closest('[data-tab]') : null;
     if (!main) return;
-    if (main.dataset.tab === 'ordersView') { document.body.dataset.ordersSubtab = 'solicitacoes'; setTimeout(function(){ showSub(); mark('s'); }, 320); }
+    if (main.dataset.tab === 'ordersView') {
+      setTimeout(function(){
+        showSub();
+        if (document.body.dataset.ordersSubtab === 'clientes') { mark('c'); openClientes(); }
+        else { document.body.dataset.ordersSubtab = 'solicitacoes'; mark('s'); }
+      }, 320);
+    }
     else { delete document.body.dataset.ordersSubtab; hideSub(); }
   });
   window.openClientesAdmin = openClientes;
+  setInterval(function(){ if (document.body.dataset.ordersSubtab === 'clientes') { showSub(); mark('c'); } }, 500);
   setTimeout(ensureSubnav, 900);
 })();
