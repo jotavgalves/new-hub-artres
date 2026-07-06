@@ -1,5 +1,5 @@
 import { json } from "../_config.js";
-import { requireAdmin } from "./_auth.js";
+import { canAccessOrder, requireAdmin } from "./_auth.js";
 
 const ORDER_PREFIX = "ORDER:";
 
@@ -16,6 +16,8 @@ export async function onRequestGet(context) {
     if (!raw) continue;
     let order;
     try { order = JSON.parse(raw); } catch (_) { continue; }
+    if (!canAccessOrder(auth, order)) continue;
+
     const customer = order.customer || {};
     const phone = digits(customer.whatsapp || customer.phone);
     if (!phone) continue;
@@ -49,7 +51,7 @@ export async function onRequestGet(context) {
   }
 
   const customers = Array.from(map.values()).sort((a,b) => String(b.lastOrderAt || "").localeCompare(String(a.lastOrderAt || "")));
-  return json({ ok: true, total: customers.length, customers });
+  return json({ ok: true, total: customers.length, customers, sessionUser: auth.user });
 }
 
 function digits(value) { return String(value || "").replace(/\D/g, ""); }

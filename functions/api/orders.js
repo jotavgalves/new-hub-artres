@@ -1,5 +1,5 @@
 import { json, loadConfig } from "./_config.js";
-import { requireAdmin } from "./admin/_auth.js";
+import { canAccessOrder, filterOrdersForUser, requireAdmin } from "./admin/_auth.js";
 import { hydrateOrderNumbers, nextOrderNumber } from "./_order_numbers.js";
 
 const ORDER_PREFIX = "ORDER:";
@@ -20,8 +20,9 @@ export async function onRequestGet(context) {
     try { orders.push(JSON.parse(raw)); } catch (_) {}
   }
   hydrateOrderNumbers(orders);
-  orders.sort((a,b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
-  return json({ ok: true, total: orders.length, orders });
+  const visibleOrders = filterOrdersForUser(auth, orders);
+  visibleOrders.sort((a,b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+  return json({ ok: true, total: visibleOrders.length, orders: visibleOrders, sessionUser: auth.user });
 }
 
 export async function onRequestPost(context) {
@@ -48,6 +49,8 @@ export async function onRequestPatch(context) {
   const raw = await context.env.CONFIG_KV.get(key);
   if (!raw) return json({ ok: false, error: "PEDIDO_NAO_ENCONTRADO" }, 404);
   const order = JSON.parse(raw);
+  if (!canAccessOrder(auth, order)) return json({ ok: false, error: "ACESSO_NEGADO" }, 403);
+
   order.status = String(body.status || order.status || "Novo");
   order.updatedAt = new Date().toISOString();
   await context.env.CONFIG_KV.put(key, JSON.stringify(order, null, 2));
@@ -57,6 +60,7 @@ export async function onRequestPatch(context) {
 export async function onRequestDelete(context) {
   const auth = await requireAdmin(context.request, context.env);
   if (!auth.ok) return json({ ok: false, error: auth.error }, auth.status);
+  if (auth.role !== "admin") return json({ ok: false, error: "ACESSO_NEGADO" }, 403);
   if (!context.env.CONFIG_KV) return json({ ok: false, error: "CONFIG_KV_NAO_CONFIGURADO" }, 500);
 
   const url = new URL(context.request.url);

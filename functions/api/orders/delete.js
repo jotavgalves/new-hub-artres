@@ -1,11 +1,11 @@
 import { json } from "../_config.js";
-import { requireAdmin } from "../admin/_auth.js";
+import { requireRole } from "../admin/_auth.js";
 
 const ORDER_PREFIX = "ORDER:";
 const DELETED_ORDER_PREFIX = "ORDER_DELETED:";
 
 export async function onRequestPost(context) {
-  const auth = await requireAdmin(context.request, context.env);
+  const auth = await requireRole(context.request, context.env, ["admin"]);
   if (!auth.ok) return json({ ok: false, error: auth.error }, auth.status);
   if (!context.env.CONFIG_KV) return json({ ok: false, error: "CONFIG_KV_NAO_CONFIGURADO" }, 500);
 
@@ -23,7 +23,7 @@ export async function onRequestPost(context) {
       if (!candidateRaw) continue;
       try {
         const candidate = JSON.parse(candidateRaw);
-        if (String(candidate.id || "") === id) {
+        if (String(candidate.id || "") === id || String(candidate.orderNumber || "") === id || String(candidate.orderCode || "") === id || String(candidate.displayId || "") === id) {
           key = item.name;
           raw = candidateRaw;
           break;
