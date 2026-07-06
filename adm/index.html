@@ -10,13 +10,14 @@
   <link rel="stylesheet" href="/assets/admin.css?v=4" />
 </head>
 <body>
-  <section id="loginView" class="loginWrap">
+  <section id="loginView" class="loginPage hidden">
     <form id="loginForm" class="loginCard">
       <div class="loginMark"></div>
-      <h1>Painel administrativo</h1>
-      <p>Entre com sua senha administrativa.</p>
+      <h1 id="loginTitle">Painel administrativo</h1>
+      <p id="loginSubtitle">Entre com seu usuário e senha.</p>
       <div id="loginStatus" class="status hidden"></div>
-      <div class="field"><label>Senha</label><input id="password" type="password" autocomplete="current-password"></div>
+      <div class="field"><label>Usuário</label><input id="username" autocomplete="username" placeholder="Digite seu usuário"></div>
+      <div class="field"><label>Senha</label><input id="password" type="password" autocomplete="current-password" placeholder="Digite sua senha"></div>
       <div style="height:14px"></div><button class="btn primary full" type="submit">Entrar</button>
     </form>
   </section>
@@ -72,6 +73,9 @@
   <script src="/assets/admin-catalog-unified.js?v=1" defer></script>
   <script src="/assets/admin-ui-fix.js?v=1" defer></script>
   <script src="/assets/admin-site-texts-real.js?v=1" defer></script>
-  <script src="/assets/admin-login-placeholder.js?v=1" defer></script>
+  <script src="/assets/admin-login-fix.js?v=1" defer></script>
+  <script src="/assets/admin-permissions-real.js?v=1" defer></script>
+  <script src="/assets/admin-role-guard.js?v=1" defer></script>
+  <script src="/assets/admin-orders-subtabs-fix.js?v=1" defer></script>
 </body>
 </html>
