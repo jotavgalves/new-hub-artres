@@ -32,6 +32,7 @@
   loadScript('adminCampaignDiscountScript','/assets/admin-campaign-discount.js?v=1');
   loadScript('adminProductionScript','/assets/admin-production.js?v=1');
   loadScript('adminWhatsappRealScript','/assets/admin-whatsapp-real.js?v=1');
+  loadScript('adminUsersRealScript','/assets/admin-users-real.js?v=1');
   bindTabs();
   new MutationObserver(bindTabs).observe(document.body,{childList:true,subtree:true});
 })();
