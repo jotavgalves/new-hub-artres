@@ -1,4 +1,6 @@
 (function(){
+  if(window.__ARMAZEM_ORDERS_UNIFIED_LOADED__)return;
+  window.__ARMAZEM_ORDERS_UNIFIED_LOADED__=true;
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>'"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]));
   const money = v => Number(v || 0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
@@ -9,7 +11,10 @@
 
   async function api(url, opts={}){
     const r = await fetch(url, { credentials:'include', cache:'no-store', headers:{'Content-Type':'application/json', ...(opts.headers || {})}, ...opts });
-    const d = await r.json().catch(() => ({}));
+    const text = await r.text();
+    let d = {};
+    try { d = text ? JSON.parse(text) : {}; }
+    catch(e) { throw new Error('A API de pedidos retornou HTML em vez de JSON. Verifique ' + url + '.'); }
     if (!r.ok || d.ok === false) throw new Error(d.error || 'Erro');
     return d;
   }
@@ -17,6 +22,7 @@
   function isVendor(){ return document.body.dataset.userRole === 'vendedora'; }
   function isClientesSubtab(){ return document.body.dataset.ordersSubtab === 'clientes'; }
   function isOrdersActive(){ return !isVendor() && !isClientesSubtab() && (document.body.dataset.adminTab === 'ordersView' || (!$('ordersView')?.classList.contains('hidden'))); }
+  function safeItems(value){ return Array.isArray(value) ? value : []; }
   function toast(msg, type='ok'){
     const el = $('status');
     if (!el) return;
@@ -56,7 +62,7 @@
     loading = true;
     try {
       const d = await api('/api/orders?limit=500');
-      orders = d.orders || [];
+      orders = Array.isArray(d.orders) ? d.orders : [];
       claimOrdersPanel();
       renderFilters();
       renderList();
@@ -82,7 +88,7 @@
     const seller = $('sellerFilter')?.value || '';
     const date = $('dateFilter')?.value || '';
     const customer = order.customer || {};
-    const parts = [orderNo(order), order.id, order.legacyId, customer.name, customer.phone, customer.whatsapp, order.seller && order.seller.label, order.partyDate, customer.partyDate, order.notes, customer.notes].concat((order.items || []).map(i => i.code + ' ' + i.theme));
+    const parts = [orderNo(order), order.id, order.legacyId, customer.name, customer.phone, customer.whatsapp, order.seller && order.seller.label, order.partyDate, customer.partyDate, order.notes, customer.notes].concat(safeItems(order.items).map(i => i.code + ' ' + i.theme));
     const hay = parts.join(' ').toLowerCase();
     const compactHay = hay.replace(/[^a-z0-9]/g, '');
     if (q && !hay.includes(q) && !compactHay.includes(compactQ)) return false;
@@ -105,7 +111,7 @@
     const c = o.customer || {};
     const phone = c.whatsapp || c.phone || '';
     const no = orderNo(o);
-    const items = (o.items || []).slice(0, 20).map(i => '#' + esc(i.code) + ' (' + esc(i.qty || 1) + 'x)').join(' · ');
+    const items = safeItems(o.items).slice(0, 20).map(i => '#' + esc(i.code) + ' (' + esc(i.qty || 1) + 'x)').join(' · ');
     const phoneLink = wa(phone);
     return '<div class="item orderCardV2"><div class="itemHead"><div><span class="orderNumberPill">' + esc(no) + '</span><p class="hint">' + esc(formatDate(o.createdAt)) + ' · ' + esc(o.seller && o.seller.label || 'Sem vendedora') + ' · ' + esc(o.qty || 0) + ' item(ns)</p></div><div class="actions"><a class="btn secondary" href="' + esc(phoneLink) + '" target="_blank" rel="noopener">Abrir conversa</a><button class="btn secondary" data-copy-customer="' + esc(o.id) + '" type="button">Copiar dados</button><button class="btn danger" data-delete-order-v2="' + esc(o.id) + '" type="button">Excluir</button></div></div><div class="orderCustomer"><b>Cliente:</b> ' + esc(c.name || 'Não informado') + ' · <b>WhatsApp:</b> ' + esc(phone || 'Não informado') + '</div><p class="hint"><b>Status:</b> ' + esc(o.status || 'Novo') + ' · <b>Total:</b> ' + money(o.totals && o.totals.net) + ' · <b>Desconto:</b> ' + money(o.totals && o.totals.discount) + '</p><p class="hint">' + items + '</p></div>';
   }
@@ -114,7 +120,7 @@
     const o = orders.find(x => x.id === id);
     if (!o) return;
     const c = o.customer || {};
-    const text = ['Pedido: ' + orderNo(o), 'Cliente: ' + (c.name || ''), 'WhatsApp: ' + (c.whatsapp || c.phone || ''), 'Vendedora: ' + ((o.seller && o.seller.label) || ''), 'Itens: ' + (o.items || []).map(i => '#' + i.code + ' (' + (i.qty || 1) + 'x)').join(', ')].join('\n');
+    const text = ['Pedido: ' + orderNo(o), 'Cliente: ' + (c.name || ''), 'WhatsApp: ' + (c.whatsapp || c.phone || ''), 'Vendedora: ' + ((o.seller && o.seller.label) || ''), 'Itens: ' + safeItems(o.items).map(i => '#' + i.code + ' (' + (i.qty || 1) + 'x)').join(', ')].join('\n');
     navigator.clipboard?.writeText(text).then(() => toast('Dados copiados.')).catch(() => toast('Não consegui copiar.', 'err'));
   }
 
