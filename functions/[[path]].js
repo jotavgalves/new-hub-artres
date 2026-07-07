@@ -1,5 +1,5 @@
 const CACHE_BUST_SCRIPT = '<script src="/assets/catalog-cache-bust.js?v=5"></script>';
-const CUSTOMER_CHECKOUT_SCRIPT = '<script src="/assets/customer-checkout.js?v=5" defer></script>';
+const CUSTOMER_CHECKOUT_SCRIPT = '<script src="/assets/customer-checkout.js?v=6" defer></script>';
 const HERO_LOGO_CENTER_STYLE = '<style id="heroLogoCenterStyle">.brand .logo{margin-left:auto;margin-right:auto}</style>';
 const CACHE_BUST_RE = /<script\s+src=["']\/assets\/catalog-cache-bust\.js\?v=[^"']+["']><\/script>/g;
 const CUSTOMER_CHECKOUT_RE = /<script\s+src=["']\/assets\/customer-checkout\.js\?v=[^"']+["']\s+defer><\/script>/g;
