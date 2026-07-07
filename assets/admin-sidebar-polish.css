@@ -1,6 +1,33 @@
 /* Sidebar polish apenas para admin. Nao afeta vendedora. */
 body[data-user-role="admin"] #adminView .sidebar {
+  height: 100dvh;
+  max-height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   background: rgba(255,255,255,.84);
+}
+
+body[data-user-role="admin"] #adminView .brand {
+  min-height: 0;
+}
+
+body[data-user-role="admin"] #adminView .nav {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+  scrollbar-width: thin;
+}
+
+body[data-user-role="admin"] #adminView .nav::-webkit-scrollbar {
+  width: 6px;
+}
+
+body[data-user-role="admin"] #adminView .nav::-webkit-scrollbar-thumb {
+  background: #efdfe4;
+  border-radius: 999px;
 }
 
 body[data-user-role="admin"] #adminView .nav button {
@@ -11,10 +38,19 @@ body[data-user-role="admin"] #adminView .nav button small {
   margin-left: auto;
 }
 
+body[data-user-role="admin"] #adminView .sideFoot {
+  min-height: 0;
+  padding-top: 10px;
+  border-top: 1px solid rgba(238,225,227,.72);
+  background: rgba(255,255,255,.60);
+}
+
 @media (max-width: 980px) {
   body[data-user-role="admin"] #adminView .sidebar {
     position: relative !important;
     height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
     padding: 14px 12px !important;
     display: grid !important;
     grid-template-rows: auto auto auto !important;
@@ -76,6 +112,9 @@ body[data-user-role="admin"] #adminView .nav button small {
     display: grid !important;
     grid-template-columns: 1fr 1fr !important;
     gap: 8px !important;
+    padding-top: 0 !important;
+    border-top: 0 !important;
+    background: transparent !important;
   }
 
   body[data-user-role="admin"] #adminView .sideFoot .btn {
