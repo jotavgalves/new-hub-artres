@@ -1,5 +1,5 @@
 const CACHE_BUST_SCRIPT = '<script src="/assets/catalog-cache-bust.js?v=5"></script>';
-const CUSTOMER_CHECKOUT_SCRIPT = '<script src="/assets/customer-checkout.js?v=4" defer></script>';
+const CUSTOMER_CHECKOUT_SCRIPT = '<script src="/assets/customer-checkout.js?v=5" defer></script>';
 const SITE_TEXTS_SCRIPT = '<script src="/assets/site-texts-runtime.js?v=1" defer></script>';
 
 export async function onRequest(context) {
@@ -17,6 +17,7 @@ export async function onRequest(context) {
   html = html.replace('<script src="/assets/customer-checkout.js?v=2" defer></script>', '');
   html = html.replace('<script src="/assets/customer-checkout.js?v=3" defer></script>', '');
   html = html.replace('<script src="/assets/customer-checkout.js?v=4" defer></script>', '');
+  html = html.replace('<script src="/assets/customer-checkout.js?v=5" defer></script>', '');
   html = html.replace('<script src="/assets/site-texts-runtime.js?v=1" defer></script>', '');
   html = html.replace('</head>', `${CACHE_BUST_SCRIPT}${CUSTOMER_CHECKOUT_SCRIPT}${SITE_TEXTS_SCRIPT}</head>`);
 
