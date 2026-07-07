@@ -1,6 +1,7 @@
 import { json, loadConfig } from "./_config.js";
 import { canAccessOrder, requireAdmin } from "./admin/_auth.js";
 import { hydrateOrderNumbers, nextOrderNumber } from "./_order_numbers.js";
+import { nextOrderNumberFromSupabase } from "./_supabase_counter.js";
 import { listOrdersFromSupabase, saveOrderToSupabase, softDeleteOrderInSupabase, supabaseReady, updateOrderStatusInSupabase } from "./_supabase.js";
 
 const ORDER_PREFIX = "ORDER:";
@@ -13,37 +14,38 @@ export async function onRequestGet(context) {
 
     const url = new URL(context.request.url);
     const limit = Math.min(parseInt(url.searchParams.get("limit") || "300", 10) || 300, 500);
+    const warnings = [];
+    let skipped = 0;
+    let supabaseOrders = [];
+    let kvOrders = [];
 
     if (supabaseReady(context.env)) {
       try {
-        const orders = await listOrdersFromSupabase(context.env, auth, limit);
-        return json({ ok: true, source: "supabase", total: orders.length, skipped: 0, orders, sessionUser: auth.user });
+        supabaseOrders = await listOrdersFromSupabase(context.env, auth, limit) || [];
       } catch (error) {
-        if (!context.env.CONFIG_KV) return json({ ok: false, error: "SUPABASE_ORDERS_LIST_FAILED", detail: errorMessage(error) }, 500);
+        warnings.push({ source: "supabase", error: errorMessage(error) });
       }
     }
 
-    if (!context.env.CONFIG_KV) return json({ ok: false, error: "CONFIG_KV_NAO_CONFIGURADO" }, 500);
-    const listed = await context.env.CONFIG_KV.list({ prefix: ORDER_PREFIX, limit });
-    const orders = [];
-    let skipped = 0;
-
-    for (const key of listed.keys) {
+    if (context.env.CONFIG_KV) {
       try {
-        const raw = await context.env.CONFIG_KV.get(key.name);
-        if (!raw) { skipped += 1; continue; }
-        const order = parseStoredOrder(raw);
-        if (order) orders.push(order);
-        else skipped += 1;
-      } catch (_) {
-        skipped += 1;
+        const loaded = await loadOrdersFromKv(context.env, auth, limit);
+        kvOrders = loaded.orders;
+        skipped += loaded.skipped;
+      } catch (error) {
+        warnings.push({ source: "kv", error: errorMessage(error) });
       }
+    } else if (!supabaseOrders.length) {
+      return json({ ok: false, error: "CONFIG_KV_NAO_CONFIGURADO" }, 500);
     }
 
-    try { hydrateOrderNumbers(orders); } catch (_) {}
-    const visibleOrders = orders.filter(order => safeCanAccessOrder(auth, order));
-    visibleOrders.sort((a,b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
-    return json({ ok: true, source: "kv", total: visibleOrders.length, skipped, orders: visibleOrders, sessionUser: auth.user });
+    if (!supabaseOrders.length && !kvOrders.length && warnings.length) {
+      return json({ ok: false, error: "ORDERS_LIST_FAILED", warnings }, 500);
+    }
+
+    const orders = mergeOrders(supabaseOrders, kvOrders);
+    orders.sort((a,b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+    return json({ ok: true, source: sourceName(supabaseOrders, kvOrders), total: orders.length, skipped, orders, warnings, sessionUser: auth.user });
   } catch (error) {
     return json({ ok: false, error: "ORDERS_LIST_FAILED", detail: errorMessage(error) }, 500);
   }
@@ -51,7 +53,6 @@ export async function onRequestGet(context) {
 
 export async function onRequestPost(context) {
   const hasKv = Boolean(context.env.CONFIG_KV);
-  if (!hasKv) return json({ ok: true, saved: false, error: "CONFIG_KV_NAO_CONFIGURADO" }, 200);
   const { config } = await loadConfig(context.env);
   if (config.orderSettings && config.orderSettings.saveOrders === false) return json({ ok: true, saved: false, disabled: true });
 
@@ -59,14 +60,21 @@ export async function onRequestPost(context) {
   const order = await normalizeOrder(body, config, context.env);
   let supabaseSaved = false;
   let supabaseError = "";
+  let kvSaved = false;
+  let kvError = "";
 
   if (supabaseReady(context.env)) {
     try { await saveOrderToSupabase(context.env, order); supabaseSaved = true; }
     catch (error) { supabaseError = errorMessage(error); }
   }
 
-  await context.env.CONFIG_KV.put(`${ORDER_PREFIX}${order.id}`, JSON.stringify(order, null, 2));
-  return json({ ok: true, saved: true, storage: supabaseSaved ? "supabase+kv" : "kv", supabaseSaved, supabaseError, order });
+  if (hasKv) {
+    try { await context.env.CONFIG_KV.put(`${ORDER_PREFIX}${order.id}`, JSON.stringify(order, null, 2)); kvSaved = true; }
+    catch (error) { kvError = errorMessage(error); }
+  }
+
+  if (!supabaseSaved && !kvSaved) return json({ ok: false, saved: false, error: "ORDER_SAVE_FAILED", supabaseError, kvError }, 500);
+  return json({ ok: true, saved: true, storage: supabaseSaved && kvSaved ? "supabase+kv" : (supabaseSaved ? "supabase" : "kv"), supabaseSaved, supabaseError, kvSaved, kvError, order });
 }
 
 export async function onRequestPatch(context) {
@@ -81,7 +89,10 @@ export async function onRequestPatch(context) {
   if (supabaseReady(context.env)) {
     try {
       const updated = await updateOrderStatusInSupabase(context.env, auth, id, status);
-      if (updated) return json({ ok: true, source: "supabase", order: updated });
+      if (updated) {
+        if (context.env.CONFIG_KV) { try { await context.env.CONFIG_KV.put(`${ORDER_PREFIX}${updated.id}`, JSON.stringify(updated, null, 2)); } catch (_) {} }
+        return json({ ok: true, source: "supabase", order: updated });
+      }
       if (!context.env.CONFIG_KV) return json({ ok: false, error: "PEDIDO_NAO_ENCONTRADO" }, 404);
     } catch (error) {
       if (!context.env.CONFIG_KV) return json({ ok: false, error: "SUPABASE_ORDER_PATCH_FAILED", detail: errorMessage(error) }, 500);
@@ -141,9 +152,55 @@ export async function onRequestDelete(context) {
   return json({ ok: true, source: "kv", deleted: true, id });
 }
 
+async function loadOrdersFromKv(env, auth, limit) {
+  const listed = await env.CONFIG_KV.list({ prefix: ORDER_PREFIX, limit });
+  const orders = [];
+  let skipped = 0;
+  for (const key of listed.keys || []) {
+    try {
+      const raw = await env.CONFIG_KV.get(key.name);
+      if (!raw) { skipped += 1; continue; }
+      const order = parseStoredOrder(raw);
+      if (order) orders.push(order);
+      else skipped += 1;
+    } catch (_) {
+      skipped += 1;
+    }
+  }
+  try { hydrateOrderNumbers(orders); } catch (_) {}
+  return { orders: orders.filter(order => safeCanAccessOrder(auth, order)), skipped };
+}
+
+function mergeOrders(primary, fallback) {
+  const map = new Map();
+  for (const order of [...(Array.isArray(fallback) ? fallback : []), ...(Array.isArray(primary) ? primary : [])]) {
+    if (!isOrderObject(order)) continue;
+    const key = String(order.orderNumber || order.orderCode || order.displayId || order.id || "").trim();
+    if (!key) continue;
+    map.set(key, order);
+  }
+  return [...map.values()];
+}
+
+function sourceName(supabaseOrders, kvOrders) {
+  if (supabaseOrders.length && kvOrders.length) return "supabase+kv";
+  if (supabaseOrders.length) return "supabase";
+  return "kv";
+}
+
+async function nextOrderNumberSafe(env, createdAt) {
+  if (supabaseReady(env)) {
+    try {
+      const value = await nextOrderNumberFromSupabase(env, createdAt);
+      if (value) return value;
+    } catch (_) {}
+  }
+  return nextOrderNumber(env, createdAt);
+}
+
 async function normalizeOrder(body, config, env) {
   const createdAt = new Date().toISOString();
-  const orderNumber = await nextOrderNumber(env, createdAt);
+  const orderNumber = await nextOrderNumberSafe(env, createdAt);
   const legacyId = `${createdAt.replace(/[^0-9]/g, "")}-${crypto.randomUUID().slice(0, 8)}`;
   const items = Array.isArray(body.items) ? body.items.slice(0, 200).map(item => ({
     code: clean(item.code),
