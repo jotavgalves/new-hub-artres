@@ -107,7 +107,7 @@
     var el = byId('customerCheckoutFallback');
     if (!el) return;
     if (!href) { el.innerHTML = ''; el.classList.remove('show'); return; }
-    el.innerHTML = 'Pedido salvo. Se o WhatsApp não abriu automaticamente, toque no botão abaixo:<br><a target="_blank" rel="noopener" href="' + esc(href) + '">Abrir WhatsApp</a>';
+    el.innerHTML = 'Pedido salvo com sucesso. Se o WhatsApp não abriu automaticamente, toque no botão abaixo para enviar sua seleção:<br><a target="_blank" rel="noopener" href="' + esc(href) + '">Abrir WhatsApp</a>';
     el.classList.add('show');
   }
 
@@ -119,7 +119,7 @@
         try { w.opener = null; } catch(_) {}
         try {
           w.document.open();
-          w.document.write('<!doctype html><title>Preparando WhatsApp...</title><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:Arial,sans-serif;padding:28px;color:#222"><h2>Preparando WhatsApp...</h2><p>Seu pedido está sendo salvo. Esta janela será redirecionada automaticamente.</p></body>');
+          w.document.write('<!doctype html><title>Preparando WhatsApp...</title><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:Arial,sans-serif;padding:28px;color:#222"><h2>Preparando WhatsApp...</h2><p>Seu pedido está sendo salvo. Em seguida, esta tela abrirá o WhatsApp para você enviar sua seleção.</p></body>');
           w.document.close();
         } catch(_) {}
       }
