@@ -58,6 +58,8 @@ export async function onRequestPost(context) {
 
   const body = await context.request.json().catch(() => ({}));
   const order = await normalizeOrder(body, config, context.env);
+  if (!order.items.length) return json({ ok: false, saved: false, error: "CARRINHO_VAZIO_OU_INVALIDO" }, 400);
+
   let supabaseSaved = false;
   let supabaseError = "";
   let kvSaved = false;
@@ -202,14 +204,9 @@ async function normalizeOrder(body, config, env) {
   const createdAt = new Date().toISOString();
   const orderNumber = await nextOrderNumberSafe(env, createdAt);
   const legacyId = `${createdAt.replace(/[^0-9]/g, "")}-${crypto.randomUUID().slice(0, 8)}`;
-  const items = Array.isArray(body.items) ? body.items.slice(0, 200).map(item => ({
-    code: clean(item.code),
-    theme: clean(item.theme),
-    product: clean(item.product),
-    productName: clean(item.productName),
-    qty: Number(item.qty || item.quantity || 1),
-    image: String(item.image || item.thumbnail || "").slice(0, 1000)
-  })) : [];
+  const rawItems = Array.isArray(body.items) ? body.items.slice(0, 200) : [];
+  const items = normalizeOrderItems(rawItems);
+  const qty = items.reduce((s,i)=>s+(Number(i.qty)||0),0);
   return {
     id: orderNumber,
     orderNumber,
@@ -223,11 +220,46 @@ async function normalizeOrder(body, config, env) {
     customer: body.customer || null,
     totals: body.totals || {},
     items,
-    qty: Number(body.qty || items.reduce((s,i)=>s+(Number(i.qty)||0),0)),
+    qty,
+    checkoutIntegrity: {
+      rawItems: rawItems.length,
+      normalizedItems: items.length,
+      rawQty: Number(body.qty || 0) || 0,
+      normalizedQty: qty,
+      snapshotVersion: Number(body.checkoutSnapshotVersion || 1) || 1
+    },
     source: "catalog",
     userAgent: String(contextSafe(body.userAgent || "")).slice(0, 300)
   };
 }
+
+function normalizeOrderItems(rawItems) {
+  const map = new Map();
+  for (const raw of Array.isArray(rawItems) ? rawItems : []) {
+    const item = {
+      code: cleanCode(raw && raw.code),
+      theme: clean(raw && raw.theme),
+      product: clean(raw && raw.product),
+      productName: clean(raw && raw.productName || raw && raw.product_name),
+      qty: Math.max(1, Math.min(999, Number(raw && (raw.qty || raw.quantity) || 1) || 1)),
+      image: String(raw && (raw.image || raw.thumbnail) || "").slice(0, 1000)
+    };
+    if (!item.code) continue;
+    const key = itemKey(item);
+    if (!key) continue;
+    if (map.has(key)) {
+      const prev = map.get(key);
+      prev.qty = Math.max(prev.qty, item.qty);
+      if (!prev.image && item.image) prev.image = item.image;
+    } else {
+      map.set(key, item);
+    }
+  }
+  return [...map.values()];
+}
+
+function itemKey(item) { return [item.code, item.theme, item.product, item.productName].map(v => String(v || "").toLowerCase()).join("|"); }
+function cleanCode(value) { return String(value || "").replace(/^#/, "").replace(/\s+/g, " ").trim().slice(0, 80); }
 function clean(value) { return String(value || "").replace(/\s+/g, " ").trim().slice(0, 200); }
 function contextSafe(value) { return value == null ? "" : value; }
 function parseStoredOrder(raw) {
