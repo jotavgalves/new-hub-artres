@@ -44,7 +44,7 @@
       var role=d.sessionUser&&d.sessionUser.role;
       if(role==='vendedora'){
         document.body.dataset.userRole='vendedora';
-        loadScript('adminVendorPanelScript','/assets/admin-vendor-panel.js?v=2');
+        loadScript('adminVendorPanelScript','/assets/admin-vendor-panel.js?v=3');
         return;
       }
     }catch(e){}
