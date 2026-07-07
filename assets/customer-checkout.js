@@ -1,19 +1,53 @@
 (function(){
   window.__ARMAZEM_CUSTOMER_CHECKOUT__ = true;
-  var state = { href: '#', saving: false, whatsappConfig: null };
+  var state = { href: '#', saving: false, whatsappConfig: null, snapshot: [] };
 
   function byId(id){ return document.getElementById(id); }
   function safe(fn, fallback){ try { return fn(); } catch(e) { return fallback; } }
   function esc(v){ return String(v == null ? '' : v).replace(/[&<>'"]/g, function(m){ return {'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]; }); }
   function digits(v){ return String(v || '').replace(/\D/g, ''); }
   function normPhone(v){ var d = digits(v); return d.indexOf('55') === 0 ? d.slice(2) : d; }
-  function fullName(v){ return String(v || '').replace(/\s+/g, ' ').trim().toLocaleUpperCase('pt-BR'); }
+  function clean(v){ return String(v == null ? '' : v).replace(/\s+/g, ' ').trim(); }
+  function fullName(v){ return clean(v).toLocaleUpperCase('pt-BR'); }
   function getCart(){ return safe(function(){ return Array.isArray(cart) ? cart : []; }, []); }
+  function itemKey(i){ return [clean(i.code), clean(i.theme), clean(i.product), clean(i.productName)].join('|').toLowerCase(); }
+  function normalizeCartItem(i){
+    var code = clean(i && i.code).replace(/^#/, '');
+    if (!code) return null;
+    var qty = Math.max(1, Math.min(999, Number(i.qty || i.quantity || 1) || 1));
+    return {
+      code: code.slice(0,80),
+      theme: clean(i.theme).slice(0,200),
+      product: clean(i.product).slice(0,200),
+      productName: clean(i.productName || i.product_name).slice(0,200),
+      qty: qty,
+      image: String(i.image || i.thumbnail || '').slice(0,1000)
+    };
+  }
+  function cartSnapshot(){
+    var map = new Map();
+    getCart().forEach(function(raw){
+      var item = normalizeCartItem(raw);
+      if (!item) return;
+      var key = itemKey(item);
+      if (!key || key === '|||') return;
+      if (map.has(key)) {
+        var prev = map.get(key);
+        prev.qty = Math.max(prev.qty, item.qty);
+        if (!prev.image && item.image) prev.image = item.image;
+      } else {
+        map.set(key, item);
+      }
+    });
+    return Array.from(map.values());
+  }
+  function snapshotQty(items){ return (Array.isArray(items) ? items : []).reduce(function(s,i){ return s + (Number(i.qty)||0); }, 0); }
   function getSeller(){ return safe(function(){ if (typeof selectedSeller !== 'undefined' && selectedSeller && SELLERS && SELLERS[selectedSeller]) { var s = SELLERS[selectedSeller]; return { id:selectedSeller, label:s.label, phone:digits(s.phone) }; } var phone = phoneFromHref(state.href || (typeof waUrl === 'function' ? waUrl() : '')); var found = sellerByPhone(phone); return found || null; }, null); }
   function phoneFromHref(href){ try { var u = new URL(href, location.href); return digits(u.searchParams.get('phone') || u.pathname); } catch(e) { return digits(href); } }
   function sellerByPhone(phone){ var want = normPhone(phone); if (!want) return null; try { for (var id in SELLERS) { var s = SELLERS[id]; if (normPhone(s.phone) === want) return { id:id, label:s.label, phone:digits(s.phone) }; } } catch(e) {} return null; }
-  function getTotals(){ return safe(function(){ return { gross:gross(), discount:discount(), net:typeof net === 'function' ? net() : total(), qty:cartQty() }; }, {}); }
-  function getQty(){ return safe(function(){ return cartQty(); }, getCart().reduce(function(s,i){ return s + (Number(i.qty)||0); }, 0)); }
+  function getTotals(){ return safe(function(){ return { gross:gross(), discount:discount(), net:typeof net === 'function' ? net() : total(), qty:snapshotQty(currentSnapshot()) }; }, { qty:snapshotQty(currentSnapshot()) }); }
+  function currentSnapshot(){ return Array.isArray(state.snapshot) && state.snapshot.length ? state.snapshot : cartSnapshot(); }
+  function getQty(){ return snapshotQty(currentSnapshot()); }
 
   function normalizePhone(value){
     var raw = digits(value);
@@ -53,11 +87,13 @@
   function openModal(href){
     ensureModal();
     state.href = href || safe(function(){ return typeof waUrl === 'function' ? waUrl() : '#'; }, '#');
+    state.snapshot = cartSnapshot();
+    if (!state.snapshot.length) { showError('Seu carrinho está vazio. Selecione as artes novamente.'); return; }
     var cached = safe(function(){ return JSON.parse(localStorage.getItem('armazemCustomer') || '{}'); }, {});
     byId('customerName').value = fullName(cached.name || '');
     byId('customerPhone').value = cached.phone || '';
-    var items = getCart().slice(0, 12).map(function(i){ return '#' + esc(i.code || '') + ' (' + (Number(i.qty)||1) + 'x)'; }).join(' · ');
-    byId('customerCheckoutSummary').innerHTML = '<b>Resumo do pedido confirmado</b><p>' + getQty() + ' item(ns) selecionado(s)</p><p>' + items + '</p>';
+    var items = state.snapshot.slice(0, 12).map(function(i){ return '#' + esc(i.code || '') + ' (' + (Number(i.qty)||1) + 'x)'; }).join(' · ');
+    byId('customerCheckoutSummary').innerHTML = '<b>Resumo do pedido confirmado</b><p>' + snapshotQty(state.snapshot) + ' item(ns) selecionado(s)</p><p>' + items + '</p>';
     showError('');
     byId('customerCheckoutBg').classList.add('show');
     byId('customerCheckoutBg').setAttribute('aria-hidden', 'false');
@@ -68,7 +104,9 @@
   function showError(msg){ var el = byId('customerCheckoutError'); if(!el) return; el.textContent = msg || ''; el.classList.toggle('show', !!msg); }
 
   async function saveOrder(customer){
-    var payload = { seller:getSeller(), customer:customer, totals:getTotals(), qty:getQty(), items:getCart().map(function(i){ return { code:i.code, theme:i.theme, product:i.product, productName:i.productName, qty:i.qty, image:i.image || i.thumbnail || '' }; }), userAgent:navigator.userAgent };
+    var items = currentSnapshot();
+    if (!items.length) throw new Error('CARRINHO_VAZIO');
+    var payload = { seller:getSeller(), customer:customer, totals:getTotals(), qty:snapshotQty(items), items:items, checkoutSnapshotVersion:2, userAgent:navigator.userAgent };
     var res = await fetch('/api/orders', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload), keepalive:true });
     var data = await res.json().catch(function(){ return {}; });
     if (!res.ok || data.ok === false) throw new Error(data.error || 'FALHA_AO_SALVAR_PEDIDO');
@@ -90,19 +128,24 @@
   function buildConfiguredMessage(cfg, orderNumber){
     var sellerInfo = getSeller() || { label:'Ana' };
     var lines = [];
+    var items = currentSnapshot();
     lines.push(applyTpl(cfg.intro, { vendedora:sellerInfo.label || 'Ana' }));
     lines.push('');
     lines.push(applyTpl(cfg.orderLine, { pedido:orderNumber }));
     lines.push('');
     lines.push(applyTpl(cfg.sellerLine, {}));
-    var gs = safe(function(){ return groups(); }, []);
-    if (!gs || !gs.length) gs = [{ label:'Artes', items:getCart() }];
-    gs.forEach(function(g){
+    var grouped = new Map();
+    items.forEach(function(i){
+      var label = i.productName || i.product || 'Artes';
+      if (!grouped.has(label)) grouped.set(label, []);
+      grouped.get(label).push(i);
+    });
+    grouped.forEach(function(list, label){
       lines.push('');
-      lines.push(g.label || 'Artes');
-      var themes = Array.from(new Set((g.items || []).map(function(i){ return i.theme; }).filter(Boolean))).join(', ');
+      lines.push(label || 'Artes');
+      var themes = Array.from(new Set((list || []).map(function(i){ return i.theme; }).filter(Boolean))).join(', ');
       if (themes) lines.push('Tema(s): ' + themes);
-      (g.items || []).forEach(function(i){
+      (list || []).forEach(function(i){
         var qty = Number(i.qty || 1) || 1;
         lines.push(applyTpl(cfg.itemLine, { codigo:i.code || '', quantidade:qty, quantidadeTexto: qty > 1 ? ' (' + qty + ' un.)' : '' }));
         var det = safe(function(){ return typeof detailsForWhatsApp === 'function' ? detailsForWhatsApp(i) : ''; }, '');
@@ -126,6 +169,8 @@
 
   async function submit(){
     if (state.saving) return;
+    state.snapshot = cartSnapshot();
+    if (!state.snapshot.length) return showError('Seu carrinho está vazio. Selecione as artes novamente.');
     var name = fullName(byId('customerName').value);
     var phone = normalizePhone(byId('customerPhone').value);
     if (!name) return showError('Informe o nome completo.');
