@@ -1,5 +1,5 @@
 import { json, loadConfig } from "./_config.js";
-import { canAccessOrder, filterOrdersForUser, requireAdmin } from "./admin/_auth.js";
+import { canAccessOrder, requireAdmin } from "./admin/_auth.js";
 import { hydrateOrderNumbers, nextOrderNumber } from "./_order_numbers.js";
 
 const ORDER_PREFIX = "ORDER:";
@@ -15,16 +15,24 @@ export async function onRequestGet(context) {
     const limit = Math.min(parseInt(url.searchParams.get("limit") || "300", 10) || 300, 500);
     const listed = await context.env.CONFIG_KV.list({ prefix: ORDER_PREFIX, limit });
     const orders = [];
+    let skipped = 0;
+
     for (const key of listed.keys) {
-      const raw = await context.env.CONFIG_KV.get(key.name);
-      if (!raw) continue;
-      const order = parseStoredOrder(raw);
-      if (order) orders.push(order);
+      try {
+        const raw = await context.env.CONFIG_KV.get(key.name);
+        if (!raw) { skipped += 1; continue; }
+        const order = parseStoredOrder(raw);
+        if (order) orders.push(order);
+        else skipped += 1;
+      } catch (_) {
+        skipped += 1;
+      }
     }
-    hydrateOrderNumbers(orders);
-    const visibleOrders = filterOrdersForUser(auth, orders);
+
+    try { hydrateOrderNumbers(orders); } catch (_) {}
+    const visibleOrders = orders.filter(order => safeCanAccessOrder(auth, order));
     visibleOrders.sort((a,b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
-    return json({ ok: true, total: visibleOrders.length, orders: visibleOrders, sessionUser: auth.user });
+    return json({ ok: true, total: visibleOrders.length, skipped, orders: visibleOrders, sessionUser: auth.user });
   } catch (error) {
     return json({ ok: false, error: "ORDERS_LIST_FAILED", detail: errorMessage(error) }, 500);
   }
@@ -130,4 +138,8 @@ function parseStoredOrder(raw) {
   }
 }
 function isOrderObject(value) { return value && typeof value === "object" && !Array.isArray(value); }
+function safeCanAccessOrder(auth, order) {
+  try { return isOrderObject(order) && canAccessOrder(auth, order); }
+  catch (_) { return false; }
+}
 function errorMessage(error) { return String(error && error.message || error || "ERRO_DESCONHECIDO").slice(0, 300); }
