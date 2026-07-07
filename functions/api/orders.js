@@ -1,6 +1,7 @@
 import { json, loadConfig } from "./_config.js";
 import { canAccessOrder, requireAdmin } from "./admin/_auth.js";
 import { hydrateOrderNumbers, nextOrderNumber } from "./_order_numbers.js";
+import { listOrdersFromSupabase, saveOrderToSupabase, softDeleteOrderInSupabase, supabaseReady, updateOrderStatusInSupabase } from "./_supabase.js";
 
 const ORDER_PREFIX = "ORDER:";
 const DELETED_ORDER_PREFIX = "ORDER_DELETED:";
@@ -9,10 +10,20 @@ export async function onRequestGet(context) {
   try {
     const auth = await requireAdmin(context.request, context.env);
     if (!auth.ok) return json({ ok: false, error: auth.error }, auth.status);
-    if (!context.env.CONFIG_KV) return json({ ok: false, error: "CONFIG_KV_NAO_CONFIGURADO" }, 500);
 
     const url = new URL(context.request.url);
     const limit = Math.min(parseInt(url.searchParams.get("limit") || "300", 10) || 300, 500);
+
+    if (supabaseReady(context.env)) {
+      try {
+        const orders = await listOrdersFromSupabase(context.env, auth, limit);
+        return json({ ok: true, source: "supabase", total: orders.length, skipped: 0, orders, sessionUser: auth.user });
+      } catch (error) {
+        if (!context.env.CONFIG_KV) return json({ ok: false, error: "SUPABASE_ORDERS_LIST_FAILED", detail: errorMessage(error) }, 500);
+      }
+    }
+
+    if (!context.env.CONFIG_KV) return json({ ok: false, error: "CONFIG_KV_NAO_CONFIGURADO" }, 500);
     const listed = await context.env.CONFIG_KV.list({ prefix: ORDER_PREFIX, limit });
     const orders = [];
     let skipped = 0;
@@ -32,32 +43,52 @@ export async function onRequestGet(context) {
     try { hydrateOrderNumbers(orders); } catch (_) {}
     const visibleOrders = orders.filter(order => safeCanAccessOrder(auth, order));
     visibleOrders.sort((a,b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
-    return json({ ok: true, total: visibleOrders.length, skipped, orders: visibleOrders, sessionUser: auth.user });
+    return json({ ok: true, source: "kv", total: visibleOrders.length, skipped, orders: visibleOrders, sessionUser: auth.user });
   } catch (error) {
     return json({ ok: false, error: "ORDERS_LIST_FAILED", detail: errorMessage(error) }, 500);
   }
 }
 
 export async function onRequestPost(context) {
-  if (!context.env.CONFIG_KV) return json({ ok: true, saved: false, error: "CONFIG_KV_NAO_CONFIGURADO" }, 200);
+  const hasKv = Boolean(context.env.CONFIG_KV);
+  if (!hasKv) return json({ ok: true, saved: false, error: "CONFIG_KV_NAO_CONFIGURADO" }, 200);
   const { config } = await loadConfig(context.env);
   if (config.orderSettings && config.orderSettings.saveOrders === false) return json({ ok: true, saved: false, disabled: true });
 
   const body = await context.request.json().catch(() => ({}));
   const order = await normalizeOrder(body, config, context.env);
+  let supabaseSaved = false;
+  let supabaseError = "";
+
+  if (supabaseReady(context.env)) {
+    try { await saveOrderToSupabase(context.env, order); supabaseSaved = true; }
+    catch (error) { supabaseError = errorMessage(error); }
+  }
+
   await context.env.CONFIG_KV.put(`${ORDER_PREFIX}${order.id}`, JSON.stringify(order, null, 2));
-  return json({ ok: true, saved: true, order });
+  return json({ ok: true, saved: true, storage: supabaseSaved ? "supabase+kv" : "kv", supabaseSaved, supabaseError, order });
 }
 
 export async function onRequestPatch(context) {
   const auth = await requireAdmin(context.request, context.env);
   if (!auth.ok) return json({ ok: false, error: auth.error }, auth.status);
-  if (!context.env.CONFIG_KV) return json({ ok: false, error: "CONFIG_KV_NAO_CONFIGURADO" }, 500);
 
   const body = await context.request.json().catch(() => ({}));
   const id = String(body.id || "").trim();
   if (!id) return json({ ok: false, error: "ID_OBRIGATORIO" }, 400);
+  const status = String(body.status || "Novo");
 
+  if (supabaseReady(context.env)) {
+    try {
+      const updated = await updateOrderStatusInSupabase(context.env, auth, id, status);
+      if (updated) return json({ ok: true, source: "supabase", order: updated });
+      if (!context.env.CONFIG_KV) return json({ ok: false, error: "PEDIDO_NAO_ENCONTRADO" }, 404);
+    } catch (error) {
+      if (!context.env.CONFIG_KV) return json({ ok: false, error: "SUPABASE_ORDER_PATCH_FAILED", detail: errorMessage(error) }, 500);
+    }
+  }
+
+  if (!context.env.CONFIG_KV) return json({ ok: false, error: "CONFIG_KV_NAO_CONFIGURADO" }, 500);
   const key = `${ORDER_PREFIX}${id}`;
   const raw = await context.env.CONFIG_KV.get(key);
   if (!raw) return json({ ok: false, error: "PEDIDO_NAO_ENCONTRADO" }, 404);
@@ -65,17 +96,17 @@ export async function onRequestPatch(context) {
   if (!order) return json({ ok: false, error: "PEDIDO_INVALIDO" }, 422);
   if (!canAccessOrder(auth, order)) return json({ ok: false, error: "ACESSO_NEGADO" }, 403);
 
-  order.status = String(body.status || order.status || "Novo");
+  order.status = status;
   order.updatedAt = new Date().toISOString();
   await context.env.CONFIG_KV.put(key, JSON.stringify(order, null, 2));
-  return json({ ok: true, order });
+  if (supabaseReady(context.env)) { try { await saveOrderToSupabase(context.env, order); } catch (_) {} }
+  return json({ ok: true, source: "kv", order });
 }
 
 export async function onRequestDelete(context) {
   const auth = await requireAdmin(context.request, context.env);
   if (!auth.ok) return json({ ok: false, error: auth.error }, auth.status);
   if (auth.role !== "admin") return json({ ok: false, error: "ACESSO_NEGADO" }, 403);
-  if (!context.env.CONFIG_KV) return json({ ok: false, error: "CONFIG_KV_NAO_CONFIGURADO" }, 500);
 
   const url = new URL(context.request.url);
   let id = String(url.searchParams.get("id") || "").trim();
@@ -85,16 +116,29 @@ export async function onRequestDelete(context) {
   }
   if (!id) return json({ ok: false, error: "ID_OBRIGATORIO" }, 400);
 
+  if (supabaseReady(context.env)) {
+    try {
+      const deleted = await softDeleteOrderInSupabase(context.env, id);
+      if (deleted && !context.env.CONFIG_KV) return json({ ok: true, source: "supabase", deleted: true, id });
+    } catch (error) {
+      if (!context.env.CONFIG_KV) return json({ ok: false, error: "SUPABASE_ORDER_DELETE_FAILED", detail: errorMessage(error) }, 500);
+    }
+  }
+
+  if (!context.env.CONFIG_KV) return json({ ok: false, error: "CONFIG_KV_NAO_CONFIGURADO" }, 500);
   const key = `${ORDER_PREFIX}${id}`;
   const raw = await context.env.CONFIG_KV.get(key);
-  if (!raw) return json({ ok: false, error: "PEDIDO_NAO_ENCONTRADO" }, 404);
+  if (!raw) {
+    if (supabaseReady(context.env)) return json({ ok: true, source: "supabase", deleted: true, id });
+    return json({ ok: false, error: "PEDIDO_NAO_ENCONTRADO" }, 404);
+  }
 
   const order = parseStoredOrder(raw);
   if (!order) return json({ ok: false, error: "PEDIDO_INVALIDO" }, 422);
   order.deletedAt = new Date().toISOString();
   await context.env.CONFIG_KV.put(`${DELETED_ORDER_PREFIX}${id}`, JSON.stringify(order, null, 2));
   await context.env.CONFIG_KV.delete(key);
-  return json({ ok: true, deleted: true, id });
+  return json({ ok: true, source: "kv", deleted: true, id });
 }
 
 async function normalizeOrder(body, config, env) {
