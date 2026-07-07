@@ -29,6 +29,7 @@ export function parseOrderNumber(value) {
 export function hydrateOrderNumbers(orders) {
   const groups = new Map();
   for (const order of orders) {
+    if (!isOrderObject(order)) continue;
     const parsed = parseOrderNumber(order.orderNumber || order.orderCode || order.id);
     if (parsed) {
       order.orderNumber = formatOrderNumber(parsed.yy, parsed.sequence);
@@ -71,6 +72,7 @@ async function scanNextSequence(env, yy) {
     if (!raw) continue;
     try {
       const order = JSON.parse(raw);
+      if (!isOrderObject(order)) continue;
       if (yearCode(order.createdAt) !== yy) continue;
       const parsed = parseOrderNumber(order.orderNumber || order.orderCode || order.id);
       if (parsed && parsed.yy === yy) max = Math.max(max, parsed.sequence);
@@ -79,3 +81,5 @@ async function scanNextSequence(env, yy) {
   }
   return Math.max(max, legacy) + 1;
 }
+
+function isOrderObject(value) { return value && typeof value === "object" && !Array.isArray(value); }
