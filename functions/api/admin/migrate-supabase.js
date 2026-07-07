@@ -12,8 +12,9 @@ export async function onRequestPost(context) {
     if (!context.env.CONFIG_KV) return json({ ok: false, error: "CONFIG_KV_NAO_CONFIGURADO" }, 500);
 
     const url = new URL(context.request.url);
-    const limit = Math.min(parseInt(url.searchParams.get("limit") || "300", 10) || 300, 500);
-    const listed = await context.env.CONFIG_KV.list({ prefix: ORDER_PREFIX, limit });
+    const limit = Math.min(parseInt(url.searchParams.get("limit") || "25", 10) || 25, 100);
+    const cursor = String(url.searchParams.get("cursor") || "").trim() || undefined;
+    const listed = await context.env.CONFIG_KV.list({ prefix: ORDER_PREFIX, limit, cursor });
 
     let migrated = 0;
     let skipped = 0;
@@ -32,7 +33,18 @@ export async function onRequestPost(context) {
       }
     }
 
-    return json({ ok: errors.length === 0, migrated, skipped, errors: errors.slice(0, 20), totalErrors: errors.length });
+    const done = Boolean(listed.list_complete);
+    return json({
+      ok: errors.length === 0,
+      migrated,
+      skipped,
+      limit,
+      cursor: cursor || "",
+      nextCursor: done ? "" : String(listed.cursor || ""),
+      done,
+      errors: errors.slice(0, 20),
+      totalErrors: errors.length
+    });
   } catch (error) {
     return json({ ok: false, error: "MIGRATE_SUPABASE_FAILED", detail: errorMessage(error) }, 500);
   }
