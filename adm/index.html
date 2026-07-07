@@ -4,10 +4,20 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin | Hub de Artes</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
+  <link rel="shortcut icon" href="/assets/favicon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800;900&family=Montserrat:wght@800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/assets/admin.css?v=4" />
+  <style id="adminBrandFaviconStyle">
+    .brandMark,
+    .loginMark{
+      background:#fff url('/assets/favicon.svg') center/78% no-repeat!important;
+      border:1px solid rgba(238,225,227,.95)!important;
+      box-shadow:0 12px 24px rgba(31,27,35,.08)!important;
+    }
+  </style>
 </head>
 <body>
   <section id="loginView" class="loginPage hidden">
@@ -24,7 +34,7 @@
 
   <section id="adminView" class="shell hidden">
     <aside class="sidebar">
-      <div class="brand"><div class="brandMark"></div><div><h1>Armazém Admin</h1><p>Painel de controle</p></div></div>
+      <div class="brand"><div class="brandMark" aria-hidden="true"></div><div><h1>Armazém Admin</h1><p>Painel de controle</p></div></div>
       <nav class="nav" aria-label="Menu administrativo">
         <button class="active" data-tab="overviewView">Visão geral <small>01</small></button>
         <button data-tab="ordersView">Pedidos <small>02</small></button>
@@ -100,10 +110,10 @@
   </script>
   <script src="/assets/admin.js?v=4" defer></script>
   <script src="/assets/admin-catalog-unified.js?v=1" defer></script>
-  <script src="/assets/admin-ui-fix.js?v=2" defer></script>
+  <script src="/assets/admin-ui-fix.js?v=3" defer></script>
   <script src="/assets/admin-site-texts-real.js?v=1" defer></script>
   <script src="/assets/admin-login-fix.js?v=2" defer></script>
   <script src="/assets/admin-permissions-real.js?v=1" defer></script>
-  <script src="/assets/admin-vendor-panel.js?v=2" defer></script>
+  <script src="/assets/admin-vendor-panel.js?v=3" defer></script>
 </body>
 </html>
