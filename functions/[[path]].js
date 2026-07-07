@@ -1,9 +1,13 @@
 const CACHE_BUST_SCRIPT = '<script src="/assets/catalog-cache-bust.js?v=5"></script>';
 const CUSTOMER_CHECKOUT_SCRIPT = '<script src="/assets/customer-checkout.js?v=6" defer></script>';
 const HERO_LOGO_CENTER_STYLE = '<style id="heroLogoCenterStyle">.brand .logo{margin-left:auto;margin-right:auto}</style>';
+const ORDER_TOOLS_SCRIPT = '<script src="/assets/order-action-tools.js?v=1" defer></script>';
 const CACHE_BUST_RE = /<script\s+src=["']\/assets\/catalog-cache-bust\.js\?v=[^"']+["']><\/script>/g;
 const CUSTOMER_CHECKOUT_RE = /<script\s+src=["']\/assets\/customer-checkout\.js\?v=[^"']+["']\s+defer><\/script>/g;
 const HERO_LOGO_CENTER_RE = /<style\s+id=["']heroLogoCenterStyle["']>[^<]*<\/style>/g;
+const ORDER_TOOLS_RE = /<script\s+src=["']\/assets\/order-action-tools\.js\?v=[^"']+["']\s+defer><\/script>/g;
+const VENDOR_PANEL_RE = /<script\s+src=["']\/assets\/admin-vendor-panel\.js\?v=[^"']+["']\s+defer><\/script>/g;
+const ORDERS_UNIFIED_RE = /<script\s+src=["']\/assets\/admin-orders-unified\.js\?v=[^"']+["']\s+defer><\/script>/g;
 
 export async function onRequest(context) {
   const url = new URL(context.request.url);
@@ -19,14 +23,22 @@ export async function onRequest(context) {
   }
 
   let html = await assetResponse.text();
-  html = html.replace(HERO_LOGO_CENTER_RE, '');
-  html = html.replace('</head>', `${HERO_LOGO_CENTER_STYLE}</head>`);
 
-  if (CACHE_BUST_RE.test(html)) html = html.replace(CACHE_BUST_RE, CACHE_BUST_SCRIPT);
-  else html = html.replace('</head>', `${CACHE_BUST_SCRIPT}</head>`);
+  if (url.pathname === '/adm' || url.pathname === '/adm/' || url.pathname === '/adm/index.html') {
+    html = html.replace(ORDER_TOOLS_RE, '');
+    html = html.replace('</head>', `${ORDER_TOOLS_SCRIPT}</head>`);
+    html = html.replace(VENDOR_PANEL_RE, '<script src="/assets/admin-vendor-panel.js?v=6" defer></script>');
+    html = html.replace(ORDERS_UNIFIED_RE, '<script src="/assets/admin-orders-unified.js?v=4" defer></script>');
+  } else {
+    html = html.replace(HERO_LOGO_CENTER_RE, '');
+    html = html.replace('</head>', `${HERO_LOGO_CENTER_STYLE}</head>`);
 
-  if (CUSTOMER_CHECKOUT_RE.test(html)) html = html.replace(CUSTOMER_CHECKOUT_RE, CUSTOMER_CHECKOUT_SCRIPT);
-  else html = html.replace('</head>', `${CUSTOMER_CHECKOUT_SCRIPT}</head>`);
+    if (CACHE_BUST_RE.test(html)) html = html.replace(CACHE_BUST_RE, CACHE_BUST_SCRIPT);
+    else html = html.replace('</head>', `${CACHE_BUST_SCRIPT}</head>`);
+
+    if (CUSTOMER_CHECKOUT_RE.test(html)) html = html.replace(CUSTOMER_CHECKOUT_RE, CUSTOMER_CHECKOUT_SCRIPT);
+    else html = html.replace('</head>', `${CUSTOMER_CHECKOUT_SCRIPT}</head>`);
+  }
 
   const headers = new Headers(assetResponse.headers);
   headers.delete('content-length');
