@@ -48,10 +48,8 @@
         return;
       }
     }catch(e){}
-    loadScript('adminPedidosSidebarScript','/assets/pedidos-sidebar.js?v=3');
+    loadScript('adminPedidosSidebarScript','/assets/pedidos-sidebar.js?v=4');
     loadScript('adminOrdersUnifiedScript','/assets/admin-orders-unified.js?v=3');
-    loadScript('adminClientesScript','/assets/clientes.js?v=2');
-    loadScript('adminOrdersSubtabsFixScript','/assets/admin-orders-subtabs-fix.js?v=2');
     loadScript('adminCampaignDiscountScript','/assets/admin-campaign-discount.js?v=1');
     loadScript('adminProductionScript','/assets/admin-production.js?v=1');
     loadScript('adminWhatsappRealScript','/assets/admin-whatsapp-real.js?v=1');
