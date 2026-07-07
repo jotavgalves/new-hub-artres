@@ -1,4 +1,3 @@
-const ORDER_PREFIX = "ORDER:";
 const COUNTER_PREFIX = "ORDER_COUNTER:";
 const BLOCK_SIZE = 10000;
 const CODE_RE = /^PED(\d{2})(\d{5})([A-Z])$/;
@@ -20,10 +19,7 @@ export function formatOrderNumber(yy, sequence) {
 export function parseOrderNumber(value) {
   const m = String(value || "").toUpperCase().match(CODE_RE);
   if (!m) return null;
-  return {
-    yy: m[1],
-    sequence: (m[3].charCodeAt(0) - 65) * BLOCK_SIZE + parseInt(m[2], 10)
-  };
+  return { yy: m[1], sequence: (m[3].charCodeAt(0) - 65) * BLOCK_SIZE + parseInt(m[2], 10) };
 }
 
 export function hydrateOrderNumbers(orders) {
@@ -58,28 +54,9 @@ export async function nextOrderNumber(env, createdAt) {
   const counterKey = `${COUNTER_PREFIX}${yy}`;
   const raw = await env.CONFIG_KV.get(counterKey);
   let next = parseInt(raw || "", 10);
-  if (!Number.isFinite(next) || next < 1) next = await scanNextSequence(env, yy);
+  if (!Number.isFinite(next) || next < 1) next = 1;
   await env.CONFIG_KV.put(counterKey, String(next + 1));
   return formatOrderNumber(yy, next);
-}
-
-async function scanNextSequence(env, yy) {
-  const listed = await env.CONFIG_KV.list({ prefix: ORDER_PREFIX, limit: 1000 });
-  let max = 0;
-  let legacy = 0;
-  for (const key of listed.keys) {
-    const raw = await env.CONFIG_KV.get(key.name);
-    if (!raw) continue;
-    try {
-      const order = JSON.parse(raw);
-      if (!isOrderObject(order)) continue;
-      if (yearCode(order.createdAt) !== yy) continue;
-      const parsed = parseOrderNumber(order.orderNumber || order.orderCode || order.id);
-      if (parsed && parsed.yy === yy) max = Math.max(max, parsed.sequence);
-      else legacy += 1;
-    } catch (_) {}
-  }
-  return Math.max(max, legacy) + 1;
 }
 
 function isOrderObject(value) { return value && typeof value === "object" && !Array.isArray(value); }
