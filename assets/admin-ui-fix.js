@@ -6,8 +6,18 @@
     style.textContent='.topbar .actions{display:none!important}#reloadBtnBottom{display:none!important}body[data-admin-tab="catalogView"] .saveBar,body[data-admin-tab="permissionsView"] .saveBar,body[data-admin-tab="toolsView"] .saveBar,body[data-admin-tab="ordersView"] .saveBar,body[data-admin-tab="clientesView"] .saveBar{display:none!important}body[data-admin-tab="catalogView"] .main,body[data-admin-tab="permissionsView"] .main,body[data-admin-tab="toolsView"] .main,body[data-admin-tab="ordersView"] .main,body[data-admin-tab="clientesView"] .main{padding-bottom:36px!important}#catalogPanel .card:first-child .sectionHead,#usersPanel .card:first-child .sectionHead{align-items:center}#saveCatalogControl,#saveUsers{min-width:220px}.saveBar #saveHint{font-weight:800;color:#6f6872}';
     document.head.appendChild(style);
   }
+  function scriptPath(src){
+    try{return new URL(src,location.origin).pathname}catch(e){return String(src||'').split('?')[0]}
+  }
+  function hasScript(src){
+    var wanted=scriptPath(src);
+    return Array.from(document.scripts).some(function(script){
+      var current=script.getAttribute('src')||'';
+      return current&&scriptPath(current)===wanted;
+    });
+  }
   function loadScript(id,src){
-    if(document.getElementById(id))return;
+    if(document.getElementById(id)||hasScript(src))return;
     var script=document.createElement('script');
     script.id=id;
     script.src=src;
