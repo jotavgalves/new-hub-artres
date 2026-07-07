@@ -183,9 +183,23 @@
       font-weight:700;
     }
     @media(max-width:640px){
-      #loginView .loginCard{padding:28px 18px 22px;border-radius:28px}
-      #loginView #loginTitle{font-size:34px}
-      #loginView .loginLogo{width:min(230px,100%)}
+      #loginView.loginPage{padding:14px;align-items:center}
+      #loginView .loginCard{width:100%;max-height:calc(100dvh - 28px);overflow:auto;padding:26px 18px 21px;border-radius:28px}
+      #loginView .loginLogo{width:min(220px,86%);margin-bottom:12px}
+      #loginView .loginEyebrow{margin-bottom:12px;font-size:10px;padding:7px 12px}
+      #loginView #loginTitle{font-size:32px;margin-bottom:6px}
+      #loginView #loginSubtitle{font-size:13px;margin-bottom:17px}
+      #loginView .field{margin-bottom:11px}
+      #loginView .field input{min-height:50px;border-radius:16px;font-size:15px}
+      #loginView .btn.primary.full{min-height:50px;font-size:16px}
+      #loginView .loginHelp{font-size:12px;margin-top:12px}
+    }
+    @media(max-height:700px) and (max-width:640px){
+      #loginView .loginLogo{width:min(190px,76%)}
+      #loginView .loginEyebrow{display:none}
+      #loginView #loginTitle{font-size:28px}
+      #loginView #loginSubtitle{margin-bottom:12px}
+      #loginView .loginHelp{display:none}
     }
   </style>
 </head>
