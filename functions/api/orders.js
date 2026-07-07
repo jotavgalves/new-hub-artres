@@ -17,7 +17,8 @@ export async function onRequestGet(context) {
   for (const key of listed.keys) {
     const raw = await context.env.CONFIG_KV.get(key.name);
     if (!raw) continue;
-    try { orders.push(JSON.parse(raw)); } catch (_) {}
+    const order = parseStoredOrder(raw);
+    if (order) orders.push(order);
   }
   hydrateOrderNumbers(orders);
   const visibleOrders = filterOrdersForUser(auth, orders);
@@ -48,7 +49,8 @@ export async function onRequestPatch(context) {
   const key = `${ORDER_PREFIX}${id}`;
   const raw = await context.env.CONFIG_KV.get(key);
   if (!raw) return json({ ok: false, error: "PEDIDO_NAO_ENCONTRADO" }, 404);
-  const order = JSON.parse(raw);
+  const order = parseStoredOrder(raw);
+  if (!order) return json({ ok: false, error: "PEDIDO_INVALIDO" }, 422);
   if (!canAccessOrder(auth, order)) return json({ ok: false, error: "ACESSO_NEGADO" }, 403);
 
   order.status = String(body.status || order.status || "Novo");
@@ -75,7 +77,8 @@ export async function onRequestDelete(context) {
   const raw = await context.env.CONFIG_KV.get(key);
   if (!raw) return json({ ok: false, error: "PEDIDO_NAO_ENCONTRADO" }, 404);
 
-  const order = JSON.parse(raw);
+  const order = parseStoredOrder(raw);
+  if (!order) return json({ ok: false, error: "PEDIDO_INVALIDO" }, 422);
   order.deletedAt = new Date().toISOString();
   await context.env.CONFIG_KV.put(`${DELETED_ORDER_PREFIX}${id}`, JSON.stringify(order, null, 2));
   await context.env.CONFIG_KV.delete(key);
@@ -114,3 +117,12 @@ async function normalizeOrder(body, config, env) {
 }
 function clean(value) { return String(value || "").replace(/\s+/g, " ").trim().slice(0, 200); }
 function contextSafe(value) { return value == null ? "" : value; }
+function parseStoredOrder(raw) {
+  try {
+    const order = JSON.parse(raw);
+    return isOrderObject(order) ? order : null;
+  } catch (_) {
+    return null;
+  }
+}
+function isOrderObject(value) { return value && typeof value === "object" && !Array.isArray(value); }
