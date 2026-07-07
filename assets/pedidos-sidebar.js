@@ -1,6 +1,7 @@
 (function(){
   if(window.__ARMAZEM_PEDIDOS_SIDEBAR_LOADED__)return;
   window.__ARMAZEM_PEDIDOS_SIDEBAR_LOADED__=true;
+  window.__ARMAZEM_PEDIDOS_SIDEBAR_VERSION__='4';
   var clientes = [];
   function $(id){ return document.getElementById(id); }
   function qs(sel){ return document.querySelector(sel); }
@@ -11,6 +12,7 @@
   function money(v){ return Number(v || 0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' }); }
   function ordersBtn(){ return qs('[data-tab="ordersView"]'); }
   function panel(){ return $('ordersPanel'); }
+  function hasClientes(){ var p = panel(); return !!(p && p.dataset.ordersOwner === 'clientes' && $('clientesLista')); }
 
   function injectStyle(){
     if ($('pedidosSidebarCss')) return;
@@ -37,8 +39,8 @@
       sub.className = 'pedidosSubnav is-hidden';
       sub.innerHTML = '<button id="subSolicitacoes" type="button" class="on">Solicitações</button><button id="subClientes" type="button">Clientes</button>';
       btn.insertAdjacentElement('afterend', sub);
-      $('subSolicitacoes').addEventListener('click', function(e){ e.stopPropagation(); openSolicitacoes(); });
-      $('subClientes').addEventListener('click', function(e){ e.stopPropagation(); openClientes(); });
+      $('subSolicitacoes').addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); openSolicitacoes(); });
+      $('subClientes').addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); openClientes(); });
     }
     return sub;
   }
@@ -49,6 +51,7 @@
 
   function openSolicitacoes(){
     document.body.dataset.ordersSubtab = 'solicitacoes';
+    var p = panel(); if (p && p.dataset.ordersOwner === 'clientes') delete p.dataset.ordersOwner;
     showSub(); mark('s');
     var btn = ordersBtn();
     if (btn) btn.click();
@@ -66,6 +69,7 @@
   }
 
   function openClientes(){
+    if(document.body.dataset.userRole === 'vendedora') return;
     var y = window.scrollY || document.documentElement.scrollTop || 0;
     document.body.dataset.ordersSubtab = 'clientes';
     activateOrders(); showSub(); mark('c');
@@ -94,18 +98,28 @@
   }
 
   document.addEventListener('click', function(e){
+    var cli = e.target && e.target.closest && e.target.closest('#subClientes');
+    if(cli){ e.preventDefault(); e.stopPropagation(); openClientes(); setTimeout(openClientes,80); return; }
+    var sol = e.target && e.target.closest && e.target.closest('#subSolicitacoes');
+    if(sol){ e.preventDefault(); e.stopPropagation(); openSolicitacoes(); return; }
+  }, true);
+
+  document.addEventListener('click', function(e){
     var main = e.target && e.target.closest ? e.target.closest('[data-tab]') : null;
     if (!main) return;
     if (main.dataset.tab === 'ordersView') {
       setTimeout(function(){
         showSub();
-        if (document.body.dataset.ordersSubtab === 'clientes') { mark('c'); openClientes(); }
+        if (document.body.dataset.ordersSubtab === 'clientes') { mark('c'); if(!hasClientes()) openClientes(); }
         else { document.body.dataset.ordersSubtab = 'solicitacoes'; mark('s'); }
       }, 320);
     }
     else { delete document.body.dataset.ordersSubtab; hideSub(); }
   });
   window.openClientesAdmin = openClientes;
-  setInterval(function(){ if (document.body.dataset.ordersSubtab === 'clientes') { showSub(); mark('c'); } }, 500);
+  setInterval(function(){
+    if (document.body.dataset.userRole === 'vendedora') return;
+    if (document.body.dataset.ordersSubtab === 'clientes') { showSub(); mark('c'); if(!hasClientes()) openClientes(); }
+  }, 700);
   setTimeout(ensureSubnav, 900);
 })();
