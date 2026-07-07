@@ -1,5 +1,6 @@
 import { loadConfig } from "../_config.js";
 import { hydrateOrderNumbers } from "../_order_numbers.js";
+import { findOrderInSupabase, saveOrderToSupabase, supabaseReady } from "../_supabase.js";
 
 export const ORDER_PREFIX = "ORDER:";
 const DEFAULT_STATUSES = ["Novo", "Em atendimento", "Em produção", "Separado", "Fechado", "Cancelado"];
@@ -36,16 +37,24 @@ export async function requireDesktopToken(request, env) {
 }
 
 export async function findOrderByNumber(env, number) {
-  if (!env.CONFIG_KV) return { order: null, key: "", error: "CONFIG_KV_NAO_CONFIGURADO" };
   const wanted = clean(number).toUpperCase();
   if (!wanted) return { order: null, key: "", error: "NUMERO_OBRIGATORIO" };
+
+  if (supabaseReady(env)) {
+    try {
+      const order = await findOrderInSupabase(env, wanted);
+      if (order) return { order, key: `SUPABASE:${order.id}`, source: "supabase" };
+    } catch (_) {}
+  }
+
+  if (!env.CONFIG_KV) return { order: null, key: "", error: "CONFIG_KV_NAO_CONFIGURADO" };
 
   const exactRaw = await env.CONFIG_KV.get(`${ORDER_PREFIX}${wanted}`);
   if (exactRaw) {
     try {
       const order = JSON.parse(exactRaw);
       hydrateOrderNumbers([order]);
-      return { order, key: `${ORDER_PREFIX}${wanted}` };
+      return { order, key: `${ORDER_PREFIX}${wanted}`, source: "kv" };
     } catch (_) {}
   }
 
@@ -56,7 +65,7 @@ export async function findOrderByNumber(env, number) {
     for (const item of listed.keys || []) {
       const raw = await env.CONFIG_KV.get(item.name);
       if (!raw) continue;
-      try { orders.push({ order: JSON.parse(raw), key: item.name }); } catch (_) {}
+      try { orders.push({ order: JSON.parse(raw), key: item.name, source: "kv" }); } catch (_) {}
     }
     cursor = listed.list_complete ? undefined : listed.cursor;
   } while (cursor);
@@ -96,7 +105,14 @@ export async function updateOrderProductionStatus(env, found, status, actorName,
   };
   order.events = Array.isArray(order.events) ? order.events.slice(-80) : [];
   order.events.push({ at, by: actorName || "Armazem", type: "production-status", status: order.status, message: clean(message) });
+
+  if (found.source === "supabase" || String(found.key).startsWith("SUPABASE:")) {
+    await saveOrderToSupabase(env, order);
+    return order;
+  }
+
   await env.CONFIG_KV.put(found.key, JSON.stringify(order, null, 2));
+  if (supabaseReady(env)) { try { await saveOrderToSupabase(env, order); } catch (_) {} }
   return order;
 }
 
