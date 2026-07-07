@@ -13,25 +13,8 @@ export async function onRequestPost(context) {
   const id = String(body.id || "").trim();
   if (!id) return json({ ok: false, error: "ID_OBRIGATORIO" }, 400);
 
-  let key = `${ORDER_PREFIX}${id}`;
-  let raw = await context.env.CONFIG_KV.get(key);
-
-  if (!raw) {
-    const listed = await context.env.CONFIG_KV.list({ prefix: ORDER_PREFIX, limit: 300 });
-    for (const item of listed.keys) {
-      const candidateRaw = await context.env.CONFIG_KV.get(item.name);
-      if (!candidateRaw) continue;
-      try {
-        const candidate = JSON.parse(candidateRaw);
-        if (String(candidate.id || "") === id || String(candidate.orderNumber || "") === id || String(candidate.orderCode || "") === id || String(candidate.displayId || "") === id) {
-          key = item.name;
-          raw = candidateRaw;
-          break;
-        }
-      } catch (_) {}
-    }
-  }
-
+  const key = `${ORDER_PREFIX}${id}`;
+  const raw = await context.env.CONFIG_KV.get(key);
   if (!raw) return json({ ok: true, deleted: false, alreadyMissing: true, id });
 
   const order = JSON.parse(raw);
