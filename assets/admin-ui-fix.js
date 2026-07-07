@@ -20,19 +20,34 @@
   }
   function bindTabs(){
     document.querySelectorAll('[data-tab]').forEach(function(btn){
+      if(btn.dataset.boundUiFix==='1')return;
+      btn.dataset.boundUiFix='1';
       btn.addEventListener('click',function(){setTab(btn.dataset.tab)});
       if(btn.classList.contains('active'))setTab(btn.dataset.tab);
     });
     if(!document.body.dataset.adminTab)setTab('overviewView');
   }
+  async function loadRoleSpecific(){
+    try{
+      var r=await fetch('/api/admin/config?ts='+Date.now(),{credentials:'include',cache:'no-store'});
+      var d=await r.json().catch(function(){return {}});
+      var role=d.sessionUser&&d.sessionUser.role;
+      if(role==='vendedora'){
+        document.body.dataset.userRole='vendedora';
+        loadScript('adminVendorPanelScript','/assets/admin-vendor-panel.js?v=2');
+        return;
+      }
+    }catch(e){}
+    loadScript('adminPedidosSidebarScript','/assets/pedidos-sidebar.js?v=3');
+    loadScript('adminOrdersUnifiedScript','/assets/admin-orders-unified.js?v=3');
+    loadScript('adminClientesScript','/assets/clientes.js?v=2');
+    loadScript('adminOrdersSubtabsFixScript','/assets/admin-orders-subtabs-fix.js?v=2');
+    loadScript('adminCampaignDiscountScript','/assets/admin-campaign-discount.js?v=1');
+    loadScript('adminProductionScript','/assets/admin-production.js?v=1');
+    loadScript('adminWhatsappRealScript','/assets/admin-whatsapp-real.js?v=1');
+  }
   injectStyle();
-  loadScript('adminPedidosSidebarScript','/assets/pedidos-sidebar.js?v=2');
-  loadScript('adminOrdersUnifiedScript','/assets/admin-orders-unified.js?v=2');
-  loadScript('adminClientesScript','/assets/clientes.js?v=1');
-  loadScript('adminCampaignDiscountScript','/assets/admin-campaign-discount.js?v=1');
-  loadScript('adminProductionScript','/assets/admin-production.js?v=1');
-  loadScript('adminWhatsappRealScript','/assets/admin-whatsapp-real.js?v=1');
-  loadScript('adminUsersRealScript','/assets/admin-users-real.js?v=1');
   bindTabs();
+  loadRoleSpecific();
   new MutationObserver(bindTabs).observe(document.body,{childList:true,subtree:true});
 })();
