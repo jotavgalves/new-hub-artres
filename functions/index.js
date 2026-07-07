@@ -1,6 +1,7 @@
 const CACHE_BUST_SCRIPT = '<script src="/assets/catalog-cache-bust.js?v=5"></script>';
 const CUSTOMER_CHECKOUT_SCRIPT = '<script src="/assets/customer-checkout.js?v=5" defer></script>';
 const SITE_TEXTS_SCRIPT = '<script src="/assets/site-texts-runtime.js?v=1" defer></script>';
+const HERO_LOGO_CENTER_STYLE = '<style id="heroLogoCenterStyle">.brand .logo{margin-left:auto;margin-right:auto}</style>';
 
 export async function onRequest(context) {
   const assetResponse = await context.env.ASSETS.fetch(context.request);
@@ -19,7 +20,8 @@ export async function onRequest(context) {
   html = html.replace('<script src="/assets/customer-checkout.js?v=4" defer></script>', '');
   html = html.replace('<script src="/assets/customer-checkout.js?v=5" defer></script>', '');
   html = html.replace('<script src="/assets/site-texts-runtime.js?v=1" defer></script>', '');
-  html = html.replace('</head>', `${CACHE_BUST_SCRIPT}${CUSTOMER_CHECKOUT_SCRIPT}${SITE_TEXTS_SCRIPT}</head>`);
+  html = html.replace('<style id="heroLogoCenterStyle">.brand .logo{margin-left:auto;margin-right:auto}</style>', '');
+  html = html.replace('</head>', `${HERO_LOGO_CENTER_STYLE}${CACHE_BUST_SCRIPT}${CUSTOMER_CHECKOUT_SCRIPT}${SITE_TEXTS_SCRIPT}</head>`);
 
   const headers = new Headers(assetResponse.headers);
   headers.delete('content-length');
