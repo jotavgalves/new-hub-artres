@@ -1,4 +1,4 @@
-const PEDIDOS_SIDEBAR_SCRIPT = '<script src="/assets/pedidos-sidebar.js?v=1" defer></script>';
+const PEDIDOS_SIDEBAR_SCRIPT = '<script id="adminPedidosSidebarScript" src="/assets/pedidos-sidebar.js?v=3" defer></script>';
 
 export async function onRequest(context) {
   const response = await context.next();
