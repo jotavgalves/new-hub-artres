@@ -1,6 +1,7 @@
 (function(){
   if (window.__ARMAZEM_VENDOR_PANEL_ACTIVE__) return;
   window.__ARMAZEM_VENDOR_PANEL_ACTIVE__ = true;
+  window.__ARMAZEM_VENDOR_PANEL_VERSION__ = '3';
 
   var user=null, tab='solicitacoes', orders=[], customers=[], loading=false;
   function $(id){return document.getElementById(id)}
@@ -12,31 +13,39 @@
   function money(v){return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
   function wa(phone){var d=digits(phone);return d?'https://wa.me/'+(d.indexOf('55')===0?d:'55'+d):'#'}
   function orderNo(o){return o.orderNumber||o.orderCode||o.displayId||o.id||''}
-  async function api(url,opts){var r=await fetch(url,{credentials:'include',cache:'no-store',headers:{'Content-Type':'application/json'},...(opts||{})});var d=await r.json().catch(function(){return {}});if(!r.ok||d.ok===false)throw new Error(d.error||('HTTP_'+r.status));return d}
+  async function api(url,opts){var r=await fetch(url,{credentials:'include',cache:'no-store',headers:{'Content-Type':'application/json'},...(opts||{})});var d=await r.json().catch(function(){return {}});if(!r.ok||d.ok===false)throw new Error(d.detail||d.error||('HTTP_'+r.status));return d}
   async function init(){
     try{var d=await api('/api/admin/config?ts='+Date.now());user=d.sessionUser||null;if(!user||user.role!=='vendedora')return;document.body.dataset.userRole='vendedora';ownLayout();renderSolicitacoes();}
     catch(e){}
   }
+  function injectStyle(){
+    if($('vendorPanelStyle'))return;
+    var s=document.createElement('style');
+    s.id='vendorPanelStyle';
+    s.textContent='body[data-user-role="vendedora"] .nav{gap:8px}body[data-user-role="vendedora"] .nav>[data-tab]{display:none!important}.vendorNav{display:grid!important;gap:8px;align-content:start}.vendorNav button{width:100%;border:0;background:transparent;text-align:left;border-radius:18px;padding:14px 14px;font-weight:950;color:#504850;cursor:pointer;display:flex;justify-content:space-between;align-items:center;box-shadow:inset 0 0 0 1px transparent}.vendorNav button:hover{background:#fff1f6;color:#d9366b}.vendorNav button.on{background:linear-gradient(135deg,#fff1f6,#eefdff);color:#d9366b;box-shadow:inset 0 0 0 1px #ffd6e5}.vendorNav small{color:#938b94;font-weight:950}.vendorNav button.on small{color:#d9366b}@media(max-width:980px){.vendorNav{display:flex!important;overflow:auto}.vendorNav button{white-space:nowrap;min-width:max-content}}';
+    document.head.appendChild(s);
+  }
   function removeForeignSubnavs(){
-    qsa('.nav .pedidosSubnav').forEach(function(el){ if(el.id !== 'vendorSubnav') el.remove(); });
+    qsa('.nav .pedidosSubnav').forEach(function(el){ el.remove(); });
     var all=qsa('#vendorSubnav');
     all.forEach(function(el,i){ if(i>0) el.remove(); });
   }
   function ownLayout(){
+    injectStyle();
     removeForeignSubnavs();
-    qsa('.nav [data-tab]').forEach(function(btn){var ok=btn.dataset.tab==='ordersView';btn.style.display=ok?'':'none';btn.classList.toggle('active',ok)});
+    qsa('.nav [data-tab]').forEach(function(btn){btn.style.display='none';btn.classList.remove('active')});
     qsa('[data-view]').forEach(function(v){v.classList.toggle('hidden',v.id!=='ordersView')});
     document.body.dataset.adminTab='ordersView';
     var t=$('adminTitle');if(t)t.textContent='Painel da vendedora';
     var sub=$('adminSubtitle');if(sub)sub.textContent='Acesse suas solicitações e clientes vinculados.';
     var save=qs('.saveBar');if(save)save.style.display='none';
-    var ordersBtn=qs('[data-tab="ordersView"]');
-    if(ordersBtn&&!$('vendorSubnav')){
+    var nav=qs('.nav');
+    if(nav&&!$('vendorSubnav')){
       var subnav=document.createElement('div');
       subnav.id='vendorSubnav';
-      subnav.className='pedidosSubnav';
-      subnav.innerHTML='<button id="vendorSolicitacoes" type="button">Solicitações</button><button id="vendorClientes" type="button">Clientes</button>';
-      ordersBtn.insertAdjacentElement('afterend',subnav);
+      subnav.className='vendorNav';
+      subnav.innerHTML='<button id="vendorSolicitacoes" type="button">Solicitações <small>01</small></button><button id="vendorClientes" type="button">Clientes <small>02</small></button>';
+      nav.insertBefore(subnav,nav.firstChild);
       $('vendorSolicitacoes').onclick=function(e){e.preventDefault();e.stopPropagation();renderSolicitacoes()};
       $('vendorClientes').onclick=function(e){e.preventDefault();e.stopPropagation();renderClientes()};
     }
@@ -56,7 +65,7 @@
     tab='clientes';document.body.dataset.ordersSubtab='vendor-clientes';mark();
     shell('Clientes','Clientes vinculados às suas solicitações.','<div id="vendorCustomersList"><p class="hint">Carregando clientes...</p></div>');
     if(loading)return;loading=true;
-    try{var d=await api('/api/admin/customers?ts='+Date.now());customers=d.customers||[];var list=$('vendorCustomersList');if(list)list.innerHTML=customers.length?customers.map(customerCard).join(''):'<p class="hint">Nenhum cliente encontrado para sua vendedora.</p>'}catch(e){var l=$('vendorCustomersList');if(l)l.innerHTML='<p class="hint">'+esc(e.message||'Erro ao carregar clientes.')+'</p>'}finally{loading=false}
+    try{var d=await api('/api/admin/customers-indexed?ts='+Date.now());customers=d.customers||[];var list=$('vendorCustomersList');if(list)list.innerHTML=customers.length?customers.map(customerCard).join(''):'<p class="hint">Nenhum cliente encontrado para sua vendedora.</p>'}catch(e){var l=$('vendorCustomersList');if(l)l.innerHTML='<p class="hint">'+esc(e.message||'Erro ao carregar clientes.')+'</p>'}finally{loading=false}
   }
   function customerCard(c){var ph=c.whatsapp||c.phone||'', codes=(c.codes||[]).slice(0,15).map(function(x){return '<span>#'+esc(x)+'</span>'}).join('');return '<article class="clienteCard"><div class="clienteTop"><div><h4>'+esc(c.name||'CLIENTE SEM NOME')+'</h4><p>'+esc(ph||'Sem WhatsApp')+'</p></div><strong class="clienteBadge">'+esc(c.ordersCount||0)+' solicitação(ões)</strong></div><div class="clienteInfo"><div><small>Última solicitação</small><b>'+esc(date(c.lastOrderAt))+'</b></div><div><small>Total</small><b>'+money(c.totalNet)+'</b></div><div><small>Quantidade</small><b>'+esc(c.totalQty||0)+'</b></div></div><div class="codigoChips">'+(codes||'<em>Nenhum código</em>')+'</div><div style="margin-top:14px"><a class="btn secondary" target="_blank" rel="noopener" href="'+esc(wa(ph))+'">Abrir WhatsApp</a></div></article>'}
   document.addEventListener('click',function(e){if(!user||user.role!=='vendedora')return;var vc=e.target&&e.target.closest&&e.target.closest('#vendorClientes');if(vc){e.preventDefault();e.stopPropagation();renderClientes();return}var vs=e.target&&e.target.closest&&e.target.closest('#vendorSolicitacoes');if(vs){e.preventDefault();e.stopPropagation();renderSolicitacoes();return}},true);
