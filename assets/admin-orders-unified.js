@@ -61,7 +61,7 @@
     if (loading || isVendor() || isClientesSubtab()) return;
     loading = true;
     try {
-      const d = await api('/api/orders?limit=500');
+      const d = await api('/api/orders-indexed?limit=500');
       orders = Array.isArray(d.orders) ? d.orders : [];
       claimOrdersPanel();
       renderFilters();
