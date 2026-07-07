@@ -1,6 +1,7 @@
 (function(){
   if(window.__ARMAZEM_ORDERS_UNIFIED_LOADED__)return;
   window.__ARMAZEM_ORDERS_UNIFIED_LOADED__=true;
+  window.__ARMAZEM_ORDERS_UNIFIED_VERSION__='4';
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>'"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]));
   const money = v => Number(v || 0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
@@ -36,6 +37,10 @@
   function wa(phone){ const d = digits(phone); return d ? 'https://wa.me/' + (d.startsWith('55') ? d : '55' + d) : '#'; }
   function formatDate(value){ try { return new Date(value).toLocaleString('pt-BR'); } catch(e) { return value || ''; } }
   function orderNo(o){ return o.orderNumber || o.orderCode || o.displayId || o.id || ''; }
+  function tools(){ return window.ArmazemOrderTools || null; }
+  function confirmHref(order){ const t = tools(); const c = order.customer || {}; return t && t.confirmHref ? t.confirmHref(order) : wa(c.whatsapp || c.phone); }
+  function findOrder(key){ key = String(key || ''); return orders.find(o => String(o.id || '') === key || String(orderNo(o)) === key); }
+  function openOrderPdf(key){ const o = findOrder(key); const t = tools(); if(!o) return; if(!t || !t.openPdf){ toast('Ferramenta de PDF ainda não carregou. Tente novamente.', 'err'); return; } t.openPdf(o); }
 
   function claimOrdersPanel(){
     const target = panel();
@@ -105,15 +110,17 @@
     list.innerHTML = '<div class="ordersSummary"><b>' + filtered.length + ' pedido(s)</b><span>' + orders.length + ' no total</span></div>' + filtered.map(orderCard).join('');
     list.querySelectorAll('[data-copy-customer]').forEach(btn => btn.onclick = () => copyCustomer(btn.dataset.copyCustomer));
     list.querySelectorAll('[data-delete-order-v2]').forEach(btn => btn.onclick = () => deleteOrder(btn.dataset.deleteOrderV2));
+    list.querySelectorAll('[data-order-pdf-v2]').forEach(btn => btn.onclick = () => openOrderPdf(btn.dataset.orderPdfV2));
   }
 
   function orderCard(o){
     const c = o.customer || {};
     const phone = c.whatsapp || c.phone || '';
     const no = orderNo(o);
+    const key = String(o.id || no);
     const items = safeItems(o.items).slice(0, 20).map(i => '#' + esc(i.code) + ' (' + esc(i.qty || 1) + 'x)').join(' · ');
     const phoneLink = wa(phone);
-    return '<div class="item orderCardV2"><div class="itemHead"><div><span class="orderNumberPill">' + esc(no) + '</span><p class="hint">' + esc(formatDate(o.createdAt)) + ' · ' + esc(o.seller && o.seller.label || 'Sem vendedora') + ' · ' + esc(o.qty || 0) + ' item(ns)</p></div><div class="actions"><a class="btn secondary" href="' + esc(phoneLink) + '" target="_blank" rel="noopener">Abrir conversa</a><button class="btn secondary" data-copy-customer="' + esc(o.id) + '" type="button">Copiar dados</button><button class="btn danger" data-delete-order-v2="' + esc(o.id) + '" type="button">Excluir</button></div></div><div class="orderCustomer"><b>Cliente:</b> ' + esc(c.name || 'Não informado') + ' · <b>WhatsApp:</b> ' + esc(phone || 'Não informado') + '</div><p class="hint"><b>Status:</b> ' + esc(o.status || 'Novo') + ' · <b>Total:</b> ' + money(o.totals && o.totals.net) + ' · <b>Desconto:</b> ' + money(o.totals && o.totals.discount) + '</p><p class="hint">' + items + '</p></div>';
+    return '<div class="item orderCardV2"><div class="itemHead"><div><span class="orderNumberPill">' + esc(no) + '</span><p class="hint">' + esc(formatDate(o.createdAt)) + ' · ' + esc(o.seller && o.seller.label || 'Sem vendedora') + ' · ' + esc(o.qty || 0) + ' item(ns)</p></div><div class="actions"><a class="btn green" href="' + esc(confirmHref(o)) + '" target="_blank" rel="noopener">Confirmar no WhatsApp</a><button class="btn secondary" data-order-pdf-v2="' + esc(key) + '" type="button">PDF do pedido</button><a class="btn secondary" href="' + esc(phoneLink) + '" target="_blank" rel="noopener">Abrir conversa</a><button class="btn secondary" data-copy-customer="' + esc(o.id) + '" type="button">Copiar dados</button><button class="btn danger" data-delete-order-v2="' + esc(o.id) + '" type="button">Excluir</button></div></div><div class="orderCustomer"><b>Cliente:</b> ' + esc(c.name || 'Não informado') + ' · <b>WhatsApp:</b> ' + esc(phone || 'Não informado') + '</div><p class="hint"><b>Status:</b> ' + esc(o.status || 'Novo') + ' · <b>Total:</b> ' + money(o.totals && o.totals.net) + ' · <b>Desconto:</b> ' + money(o.totals && o.totals.discount) + '</p><p class="hint">' + items + '</p></div>';
   }
 
   function copyCustomer(id){
@@ -138,7 +145,7 @@
     if ($('ordersUnifiedStyle')) return;
     const s = document.createElement('style');
     s.id = 'ordersUnifiedStyle';
-    s.textContent = '.ordersSummary{display:flex;justify-content:space-between;gap:12px;margin:16px 0 10px;flex-wrap:wrap}.ordersSummary b{font-family:Montserrat}.orderCardV2 .actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.orderCustomer{margin:12px 0 6px;padding:10px 12px;background:#fff8fb;border:1px solid #ffd6e5;border-radius:14px;color:#4d454d;font-weight:800}.orderNumberPill{display:inline-flex;align-items:center;border-radius:999px;background:#222124;color:#fff;font-weight:950;letter-spacing:.06em;padding:7px 12px;margin-bottom:6px;font-family:Montserrat,Arial,sans-serif}@media(max-width:720px){.orderCardV2 .itemHead{align-items:flex-start}.orderCardV2 .actions .btn{width:100%;justify-content:center}.orderNumberPill{font-size:13px}}';
+    s.textContent = '.ordersSummary{display:flex;justify-content:space-between;gap:12px;margin:16px 0 10px;flex-wrap:wrap}.ordersSummary b{font-family:Montserrat}.orderCardV2 .actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.orderCardV2 .btn.green{background:#25d366;color:#fff;box-shadow:0 12px 24px rgba(37,211,102,.16)}.orderCustomer{margin:12px 0 6px;padding:10px 12px;background:#fff8fb;border:1px solid #ffd6e5;border-radius:14px;color:#4d454d;font-weight:800}.orderNumberPill{display:inline-flex;align-items:center;border-radius:999px;background:#222124;color:#fff;font-weight:950;letter-spacing:.06em;padding:7px 12px;margin-bottom:6px;font-family:Montserrat,Arial,sans-serif}@media(max-width:720px){.orderCardV2 .itemHead{align-items:flex-start}.orderCardV2 .actions .btn{width:100%;justify-content:center}.orderNumberPill{font-size:13px}}';
     document.head.appendChild(s);
   }
 
