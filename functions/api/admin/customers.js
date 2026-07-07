@@ -16,6 +16,7 @@ export async function onRequestGet(context) {
     if (!raw) continue;
     let order;
     try { order = JSON.parse(raw); } catch (_) { continue; }
+    if (!isOrderObject(order)) continue;
     if (!canAccessOrder(auth, order)) continue;
 
     const customer = order.customer || {};
@@ -43,7 +44,7 @@ export async function onRequestGet(context) {
     if (String(order.createdAt || "") > String(current.lastOrderAt || "")) current.lastOrderAt = order.createdAt;
     const seller = order.seller && order.seller.label;
     if (seller && !current.sellers.includes(seller)) current.sellers.push(seller);
-    for (const item of (order.items || [])) {
+    for (const item of safeItems(order.items)) {
       const code = cleanCode(item.code);
       if (code && !current.codes.includes(code)) current.codes.push(code);
     }
@@ -57,3 +58,5 @@ export async function onRequestGet(context) {
 function digits(value) { return String(value || "").replace(/\D/g, ""); }
 function upper(value) { return String(value || "").replace(/\s+/g, " ").trim().toLocaleUpperCase("pt-BR"); }
 function cleanCode(value) { return String(value || "").replace(/\s+/g, " ").trim().slice(0, 80); }
+function isOrderObject(value) { return value && typeof value === "object" && !Array.isArray(value); }
+function safeItems(value) { return Array.isArray(value) ? value : []; }
