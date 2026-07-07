@@ -2,7 +2,7 @@ import { loadConfig } from "../_config.js";
 
 const COOKIE_NAME = "armazem_admin_session";
 const SESSION_MAX_AGE = 60 * 60 * 12;
-const PASSWORD_ITERATIONS = 20000;
+const PASSWORD_ITERATIONS = 120000;
 const PASSWORD_ALGO = "pbkdf2_sha256";
 
 export function getAdminSecret(env) {
