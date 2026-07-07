@@ -1,11 +1,9 @@
 const CACHE_BUST_SCRIPT = '<script src="/assets/catalog-cache-bust.js?v=5"></script>';
 const CUSTOMER_CHECKOUT_SCRIPT = '<script src="/assets/customer-checkout.js?v=6" defer></script>';
 const HERO_LOGO_CENTER_STYLE = '<style id="heroLogoCenterStyle">.brand .logo{margin-left:auto;margin-right:auto}</style>';
-const ADMIN_MOBILE_CSS = '<link id="adminMobileCss" rel="stylesheet" href="/assets/admin-mobile.css?v=1">';
 const CACHE_BUST_RE = /<script\s+src=["']\/assets\/catalog-cache-bust\.js\?v=[^"']+["']><\/script>/g;
 const CUSTOMER_CHECKOUT_RE = /<script\s+src=["']\/assets\/customer-checkout\.js\?v=[^"']+["']\s+defer><\/script>/g;
 const HERO_LOGO_CENTER_RE = /<style\s+id=["']heroLogoCenterStyle["']>[^<]*<\/style>/g;
-const ADMIN_MOBILE_CSS_RE = /<link\s+id=["']adminMobileCss["'][^>]*>/g;
 
 export async function onRequest(context) {
   const url = new URL(context.request.url);
@@ -21,22 +19,14 @@ export async function onRequest(context) {
   }
 
   let html = await assetResponse.text();
+  html = html.replace(HERO_LOGO_CENTER_RE, '');
+  html = html.replace('</head>', `${HERO_LOGO_CENTER_STYLE}</head>`);
 
-  if (url.pathname === '/' || url.pathname === '/index.html') {
-    html = html.replace(HERO_LOGO_CENTER_RE, '');
-    html = html.replace('</head>', `${HERO_LOGO_CENTER_STYLE}</head>`);
+  if (CACHE_BUST_RE.test(html)) html = html.replace(CACHE_BUST_RE, CACHE_BUST_SCRIPT);
+  else html = html.replace('</head>', `${CACHE_BUST_SCRIPT}</head>`);
 
-    if (CACHE_BUST_RE.test(html)) html = html.replace(CACHE_BUST_RE, CACHE_BUST_SCRIPT);
-    else html = html.replace('</head>', `${CACHE_BUST_SCRIPT}</head>`);
-
-    if (CUSTOMER_CHECKOUT_RE.test(html)) html = html.replace(CUSTOMER_CHECKOUT_RE, CUSTOMER_CHECKOUT_SCRIPT);
-    else html = html.replace('</head>', `${CUSTOMER_CHECKOUT_SCRIPT}</head>`);
-  }
-
-  if (url.pathname === '/adm' || url.pathname === '/adm/' || url.pathname === '/adm/index.html') {
-    html = html.replace(ADMIN_MOBILE_CSS_RE, '');
-    html = html.replace('</head>', `${ADMIN_MOBILE_CSS}</head>`);
-  }
+  if (CUSTOMER_CHECKOUT_RE.test(html)) html = html.replace(CUSTOMER_CHECKOUT_RE, CUSTOMER_CHECKOUT_SCRIPT);
+  else html = html.replace('</head>', `${CUSTOMER_CHECKOUT_SCRIPT}</head>`);
 
   const headers = new Headers(assetResponse.headers);
   headers.delete('content-length');
