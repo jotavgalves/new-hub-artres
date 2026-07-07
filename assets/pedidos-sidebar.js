@@ -1,4 +1,6 @@
 (function(){
+  if(window.__ARMAZEM_PEDIDOS_SIDEBAR_LOADED__)return;
+  window.__ARMAZEM_PEDIDOS_SIDEBAR_LOADED__=true;
   var clientes = [];
   function $(id){ return document.getElementById(id); }
   function qs(sel){ return document.querySelector(sel); }
@@ -55,7 +57,10 @@
 
   async function fetchClientes(){
     var r = await fetch('/api/admin/customers', { credentials:'include', cache:'no-store' });
-    var j = await r.json();
+    var text = await r.text();
+    var j = {};
+    try { j = text ? JSON.parse(text) : {}; }
+    catch(e) { throw new Error('A API de clientes retornou HTML em vez de JSON. Verifique /api/admin/customers.'); }
     if (!r.ok || j.ok === false) throw new Error(j.error || 'Erro');
     clientes = j.customers || [];
   }
