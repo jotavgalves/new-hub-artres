@@ -15,7 +15,7 @@
     let d = {};
     try { d = text ? JSON.parse(text) : {}; }
     catch(e) { throw new Error('A API de pedidos retornou HTML em vez de JSON. Verifique ' + url + '.'); }
-    if (!r.ok || d.ok === false) throw new Error(d.error || 'Erro');
+    if (!r.ok || d.ok === false) throw new Error(d.detail || d.error || 'Erro');
     return d;
   }
   function panel(){ return $('ordersPanel'); }
