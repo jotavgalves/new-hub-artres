@@ -1,0 +1,364 @@
+/* Camada mobile segura para ADM e painel da vendedora.
+   Não altera lógica: só impede quebra visual em telas pequenas. */
+html, body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.shell,
+.main,
+.sidebar,
+.card,
+.item,
+.sectionHead,
+.topbar,
+.actions,
+.nav,
+.vendorNav,
+#ordersPanel,
+#overview,
+#sellersPanel,
+#productsPanel,
+#catalogPanel,
+#campaignsPanel,
+#drivesPanel,
+#toolsPanel,
+#textsPanel,
+#whatsappPanel,
+#linksPanel,
+#appearancePanel,
+#permissionsPanel,
+#usersPanel,
+#advancedPanel {
+  min-width: 0;
+}
+
+.card,
+.item,
+.jsonBox,
+.orderCardV2,
+.clienteCard {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.card {
+  overflow-x: auto;
+}
+
+input,
+select,
+textarea,
+button,
+.btn {
+  max-width: 100%;
+}
+
+@media (max-width: 980px) {
+  .shell {
+    display: block !important;
+    min-height: 100vh;
+  }
+
+  .sidebar {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 60 !important;
+    height: auto !important;
+    max-height: 48vh;
+    overflow: auto;
+    padding: 14px 12px 12px !important;
+    border-right: 0 !important;
+    border-bottom: 1px solid rgba(238,225,227,.9) !important;
+    background: rgba(255,255,255,.92) !important;
+    backdrop-filter: blur(18px) !important;
+    display: grid !important;
+    grid-template-rows: auto auto auto !important;
+    gap: 12px !important;
+  }
+
+  .brand {
+    gap: 10px !important;
+    align-items: center !important;
+  }
+
+  .brandMark {
+    width: 42px !important;
+    height: 42px !important;
+    flex: 0 0 42px !important;
+  }
+
+  .brand h1 {
+    font-size: 16px !important;
+    line-height: 1.05 !important;
+  }
+
+  .brand p {
+    font-size: 10.5px !important;
+  }
+
+  .nav,
+  .vendorNav {
+    display: flex !important;
+    gap: 8px !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    padding: 2px 0 8px !important;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .nav::-webkit-scrollbar,
+  .vendorNav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav button,
+  .vendorNav button {
+    flex: 0 0 auto !important;
+    min-width: max-content !important;
+    min-height: 44px !important;
+    padding: 11px 13px !important;
+    border-radius: 16px !important;
+    white-space: nowrap !important;
+    scroll-snap-align: start;
+  }
+
+  body[data-user-role="vendedora"] .vendorNav {
+    width: 100% !important;
+  }
+
+  body[data-user-role="vendedora"] .vendorNav button {
+    min-width: calc(50vw - 24px) !important;
+    justify-content: center !important;
+    gap: 8px !important;
+  }
+
+  .sideFoot {
+    display: flex !important;
+    gap: 8px !important;
+    align-items: center !important;
+  }
+
+  .sideFoot .btn {
+    flex: 1 1 0 !important;
+    min-height: 40px !important;
+    padding: 0 12px !important;
+    font-size: 12px !important;
+  }
+
+  .main {
+    padding: 16px 12px 110px !important;
+  }
+
+  .topbar {
+    display: grid !important;
+    gap: 12px !important;
+    margin-bottom: 14px !important;
+  }
+
+  .topbar h2 {
+    font-size: clamp(25px, 8vw, 34px) !important;
+    line-height: 1.02 !important;
+  }
+
+  .topbar p {
+    font-size: 13px !important;
+    line-height: 1.45 !important;
+  }
+
+  .grid {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .span-12,
+  .span-8,
+  .span-6,
+  .span-4,
+  .span-3 {
+    grid-column: 1 / -1 !important;
+  }
+
+  .card {
+    padding: 16px !important;
+    border-radius: 22px !important;
+    margin-bottom: 12px !important;
+  }
+
+  .sectionHead {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+    margin-bottom: 14px !important;
+  }
+
+  .sectionHead h3 {
+    font-size: 19px !important;
+    line-height: 1.15 !important;
+  }
+
+  .sectionHead p,
+  .hint {
+    font-size: 12.5px !important;
+    line-height: 1.45 !important;
+  }
+
+  .actions {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .actions .btn,
+  .sectionHead .btn,
+  .itemHead .btn {
+    width: 100% !important;
+  }
+
+  .item,
+  .orderCardV2,
+  .clienteCard {
+    padding: 14px !important;
+    border-radius: 20px !important;
+  }
+
+  .itemHead,
+  .clienteTop,
+  .cartItemTop {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+    align-items: stretch !important;
+  }
+
+  .clienteInfo,
+  .clientesMetrics {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .codigoChips {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 7px !important;
+  }
+
+  .codigoChips span {
+    max-width: 100% !important;
+  }
+
+  .field input,
+  .field select,
+  .field textarea {
+    min-height: 46px !important;
+    border-radius: 15px !important;
+    font-size: 15px !important;
+  }
+
+  .saveBar {
+    left: 0 !important;
+    right: 0 !important;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .saveBar .actions {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+  }
+
+  .saveBar .btn {
+    width: 100% !important;
+  }
+
+  .jsonBox {
+    max-height: 52vh !important;
+    font-size: 11px !important;
+    line-height: 1.45 !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .sidebar {
+    max-height: 43vh;
+  }
+
+  .main {
+    padding: 14px 10px 104px !important;
+  }
+
+  .card {
+    padding: 14px !important;
+    border-radius: 20px !important;
+  }
+
+  .nav button,
+  .vendorNav button {
+    min-height: 42px !important;
+    padding: 10px 12px !important;
+    font-size: 13px !important;
+  }
+
+  body[data-user-role="vendedora"] .vendorNav button {
+    min-width: calc(50vw - 20px) !important;
+  }
+
+  .topbar h2 {
+    font-size: 28px !important;
+  }
+
+  .sectionHead h3 {
+    font-size: 18px !important;
+  }
+
+  .btn {
+    min-height: 42px !important;
+    font-size: 12.5px !important;
+  }
+
+  #loginView.loginPage {
+    align-items: center !important;
+    padding: 14px !important;
+  }
+
+  #loginView .loginCard {
+    max-height: calc(100vh - 28px);
+    overflow: auto;
+  }
+}
+
+@media (max-width: 420px) {
+  .brand h1 {
+    font-size: 15px !important;
+  }
+
+  .brand p {
+    display: none !important;
+  }
+
+  .brandMark {
+    width: 38px !important;
+    height: 38px !important;
+    flex-basis: 38px !important;
+  }
+
+  .sideFoot .btn {
+    min-height: 38px !important;
+    font-size: 11.5px !important;
+  }
+
+  body[data-user-role="vendedora"] .vendorNav button {
+    min-width: 74vw !important;
+  }
+
+  .orderNumberPill,
+  .pill,
+  .clienteBadge {
+    max-width: 100% !important;
+    white-space: normal !important;
+  }
+}
