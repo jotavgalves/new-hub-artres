@@ -18,18 +18,190 @@
       box-shadow:none!important;
       border-radius:0!important;
     }
+    .brandMark{width:56px;height:56px}
+
+    #loginView.loginPage{
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:24px;
+      background:
+        radial-gradient(circle at 4% 5%, rgba(247,210,64,.24), transparent 27%),
+        radial-gradient(circle at 97% 8%, rgba(56,186,227,.18), transparent 25%),
+        radial-gradient(circle at 82% 88%, rgba(239,85,133,.10), transparent 25%),
+        linear-gradient(90deg,#fffdf8 0%,#fcfbfb 52%,#eff8fd 100%);
+    }
+    #loginView .loginCard{
+      position:relative;
+      width:min(560px,100%);
+      overflow:hidden;
+      padding:34px 30px 28px;
+      border-radius:34px;
+      border:1px solid rgba(255,255,255,.95);
+      background:rgba(255,255,255,.94);
+      box-shadow:0 26px 70px rgba(31,27,35,.13);
+      backdrop-filter:blur(12px);
+    }
+    #loginView .loginCard:before,
+    #loginView .loginCard:after{
+      content:"";
+      position:absolute;
+      border-radius:999px;
+      pointer-events:none;
+    }
+    #loginView .loginCard:before{
+      width:150px;
+      height:150px;
+      right:-62px;
+      bottom:-64px;
+      background:rgba(239,85,133,.10);
+    }
+    #loginView .loginCard:after{
+      width:92px;
+      height:92px;
+      left:-34px;
+      top:28px;
+      background:rgba(56,186,227,.12);
+    }
+    #loginView .loginMark{display:none!important}
+    #loginView .loginLogo{
+      position:relative;
+      z-index:1;
+      display:block;
+      width:min(280px,100%);
+      margin:0 auto 16px;
+    }
+    #loginView .loginEyebrow{
+      position:relative;
+      z-index:1;
+      display:flex;
+      width:max-content;
+      max-width:100%;
+      align-items:center;
+      gap:8px;
+      margin:0 auto 16px;
+      padding:8px 14px;
+      border-radius:999px;
+      background:#fff1f6;
+      color:#d9366b;
+      font:900 11px/1 Montserrat,Arial,sans-serif;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+    }
+    #loginView .loginEyebrow:before{
+      content:"";
+      width:8px;
+      height:8px;
+      border-radius:999px;
+      background:#ef5585;
+      box-shadow:0 0 0 5px rgba(239,85,133,.12);
+    }
+    #loginView #loginTitle{
+      position:relative;
+      z-index:1;
+      margin:0 0 7px;
+      text-align:center;
+      font-family:Montserrat,Arial,sans-serif;
+      font-size:42px;
+      line-height:1.02;
+      letter-spacing:-.055em;
+      color:#222124;
+    }
+    #loginView #loginSubtitle{
+      position:relative;
+      z-index:1;
+      margin:0 0 22px;
+      text-align:center;
+      color:#6c6670;
+      font-size:14px;
+      font-weight:700;
+      line-height:1.55;
+    }
+    #loginView .field{
+      position:relative;
+      z-index:1;
+      margin-bottom:14px;
+    }
+    #loginView .field label{
+      display:block;
+      margin-bottom:7px;
+      color:#625a62;
+      font-size:12px;
+      font-weight:900;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+    }
+    #loginView .field input{
+      width:100%;
+      min-height:54px;
+      padding:0 16px;
+      border-radius:18px;
+      border:1px solid #efd8df;
+      background:#f7fbff;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.7);
+      font:800 15px/1 Inter,Arial,sans-serif;
+      color:#222124;
+    }
+    #loginView .field input:focus{
+      outline:none;
+      border-color:#ef5585;
+      box-shadow:0 0 0 4px rgba(239,85,133,.14);
+      background:#fff;
+    }
+    #loginView .status{
+      position:relative;
+      z-index:1;
+      margin-bottom:14px;
+      border-radius:16px;
+      padding:12px 14px;
+      font-weight:900;
+    }
+    #loginView .btn.primary.full{
+      position:relative;
+      z-index:1;
+      width:100%;
+      min-height:54px;
+      border:0;
+      border-radius:999px;
+      background:linear-gradient(135deg,#ef5585,#d9366b);
+      color:#fff;
+      font:900 18px/1 Montserrat,Arial,sans-serif;
+      box-shadow:0 16px 28px rgba(217,54,107,.24);
+    }
+    #loginView .btn.primary.full:hover{
+      transform:translateY(-1px);
+      box-shadow:0 18px 32px rgba(217,54,107,.28);
+    }
+    #loginView .loginHelp{
+      position:relative;
+      z-index:1;
+      margin:16px 0 0;
+      text-align:center;
+      color:#8d8590;
+      font-size:13px;
+      font-weight:700;
+    }
+    @media(max-width:640px){
+      #loginView .loginCard{padding:28px 18px 22px;border-radius:28px}
+      #loginView #loginTitle{font-size:34px}
+      #loginView .loginLogo{width:min(230px,100%)}
+    }
   </style>
 </head>
 <body>
   <section id="loginView" class="loginPage hidden">
     <form id="loginForm" class="loginCard" autocomplete="on">
       <div class="loginMark"></div>
-      <h1 id="loginTitle">Painel administrativo</h1>
-      <p id="loginSubtitle">Entre com seu usuário e senha.</p>
+      <img class="loginLogo" src="https://acompanhe-armazem.pages.dev/assets/logo.svg" alt="Armazém Festas e Eventos">
+      <div class="loginEyebrow">Acesso administrativo</div>
+      <h1 id="loginTitle">Entrar no painel</h1>
+      <p id="loginSubtitle">Acesse o Hub da Armazém para acompanhar solicitações, clientes e configurações do site.</p>
       <div id="loginStatus" class="status hidden"></div>
       <div class="field"><label>Usuário</label><input id="username" name="username" autocomplete="username" placeholder="Digite seu usuário"></div>
       <div class="field"><label>Senha</label><input id="password" name="password" type="password" autocomplete="current-password" placeholder="Digite sua senha"></div>
-      <div style="height:14px"></div><button class="btn primary full" type="submit">Entrar</button>
+      <div style="height:10px"></div><button class="btn primary full" type="submit">Entrar</button>
+      <p class="loginHelp">Use seu usuário e senha cadastrados para acessar.</p>
     </form>
   </section>
 
