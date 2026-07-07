@@ -108,6 +108,15 @@ export async function listOrdersFromSupabase(env, auth, limit = 300) {
   return (Array.isArray(rows) ? rows : []).map(orderFromRow);
 }
 
+export async function findOrderInSupabase(env, number) {
+  if (!supabaseReady(env)) return null;
+  const wanted = String(number || '').trim().toUpperCase();
+  if (!wanted) return null;
+  const q = encodeURIComponent(wanted);
+  const rows = await supabaseRequest(env, `/orders?select=*,order_items(*)&deleted_at=is.null&or=(id.eq.${q},order_number.eq.${q},order_code.eq.${q},display_id.eq.${q},legacy_id.eq.${q})&limit=1`);
+  return Array.isArray(rows) && rows[0] ? orderFromRow(rows[0]) : null;
+}
+
 export async function updateOrderStatusInSupabase(env, auth, id, status) {
   if (!supabaseReady(env)) return null;
   let path = `/orders?id=eq.${encodeURIComponent(id)}&select=*,order_items(*)`;
