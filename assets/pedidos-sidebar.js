@@ -56,12 +56,12 @@
   }
 
   async function fetchClientes(){
-    var r = await fetch('/api/admin/customers', { credentials:'include', cache:'no-store' });
+    var r = await fetch('/api/admin/customers-indexed', { credentials:'include', cache:'no-store' });
     var text = await r.text();
     var j = {};
     try { j = text ? JSON.parse(text) : {}; }
-    catch(e) { throw new Error('A API de clientes retornou HTML em vez de JSON. Verifique /api/admin/customers.'); }
-    if (!r.ok || j.ok === false) throw new Error(j.error || 'Erro');
+    catch(e) { throw new Error('A API de clientes retornou HTML em vez de JSON. Verifique /api/admin/customers-indexed.'); }
+    if (!r.ok || j.ok === false) throw new Error(j.detail || j.error || 'Erro');
     clientes = j.customers || [];
   }
 
