@@ -6,24 +6,28 @@ const ORDER_PREFIX = "ORDER:";
 const DELETED_ORDER_PREFIX = "ORDER_DELETED:";
 
 export async function onRequestGet(context) {
-  const auth = await requireAdmin(context.request, context.env);
-  if (!auth.ok) return json({ ok: false, error: auth.error }, auth.status);
-  if (!context.env.CONFIG_KV) return json({ ok: false, error: "CONFIG_KV_NAO_CONFIGURADO" }, 500);
+  try {
+    const auth = await requireAdmin(context.request, context.env);
+    if (!auth.ok) return json({ ok: false, error: auth.error }, auth.status);
+    if (!context.env.CONFIG_KV) return json({ ok: false, error: "CONFIG_KV_NAO_CONFIGURADO" }, 500);
 
-  const url = new URL(context.request.url);
-  const limit = Math.min(parseInt(url.searchParams.get("limit") || "300", 10) || 300, 500);
-  const listed = await context.env.CONFIG_KV.list({ prefix: ORDER_PREFIX, limit });
-  const orders = [];
-  for (const key of listed.keys) {
-    const raw = await context.env.CONFIG_KV.get(key.name);
-    if (!raw) continue;
-    const order = parseStoredOrder(raw);
-    if (order) orders.push(order);
+    const url = new URL(context.request.url);
+    const limit = Math.min(parseInt(url.searchParams.get("limit") || "300", 10) || 300, 500);
+    const listed = await context.env.CONFIG_KV.list({ prefix: ORDER_PREFIX, limit });
+    const orders = [];
+    for (const key of listed.keys) {
+      const raw = await context.env.CONFIG_KV.get(key.name);
+      if (!raw) continue;
+      const order = parseStoredOrder(raw);
+      if (order) orders.push(order);
+    }
+    hydrateOrderNumbers(orders);
+    const visibleOrders = filterOrdersForUser(auth, orders);
+    visibleOrders.sort((a,b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+    return json({ ok: true, total: visibleOrders.length, orders: visibleOrders, sessionUser: auth.user });
+  } catch (error) {
+    return json({ ok: false, error: "ORDERS_LIST_FAILED", detail: errorMessage(error) }, 500);
   }
-  hydrateOrderNumbers(orders);
-  const visibleOrders = filterOrdersForUser(auth, orders);
-  visibleOrders.sort((a,b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
-  return json({ ok: true, total: visibleOrders.length, orders: visibleOrders, sessionUser: auth.user });
 }
 
 export async function onRequestPost(context) {
@@ -126,3 +130,4 @@ function parseStoredOrder(raw) {
   }
 }
 function isOrderObject(value) { return value && typeof value === "object" && !Array.isArray(value); }
+function errorMessage(error) { return String(error && error.message || error || "ERRO_DESCONHECIDO").slice(0, 300); }
