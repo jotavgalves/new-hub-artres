@@ -183,8 +183,8 @@
       font-weight:700;
     }
     @media(max-width:640px){
-      #loginView.loginPage{padding:14px;align-items:center}
-      #loginView .loginCard{width:100%;max-height:calc(100dvh - 28px);overflow:auto;padding:26px 18px 21px;border-radius:28px}
+      #loginView.loginPage{padding:14px;align-items:center;overflow:hidden;overscroll-behavior:none}
+      #loginView .loginCard{width:100%;overflow:hidden;padding:26px 18px 21px;border-radius:28px;touch-action:manipulation}
       #loginView .loginLogo{width:min(220px,86%);margin-bottom:12px}
       #loginView .loginEyebrow{margin-bottom:12px;font-size:10px;padding:7px 12px}
       #loginView #loginTitle{font-size:32px;margin-bottom:6px}
@@ -301,6 +301,6 @@
   <script src="/assets/admin-site-texts-real.js?v=1" defer></script>
   <script src="/assets/admin-login-fix.js?v=2" defer></script>
   <script src="/assets/admin-permissions-real.js?v=1" defer></script>
-  <script src="/assets/admin-vendor-panel.js?v=3" defer></script>
+  <script src="/assets/admin-vendor-panel.js?v=4" defer></script>
 </body>
 </html>
