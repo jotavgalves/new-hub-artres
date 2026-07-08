@@ -3,7 +3,7 @@ import { supabaseReady, supabaseRequest } from "../_supabase.js";
 
 const COOKIE_NAME = "armazem_admin_session";
 const SESSION_MAX_AGE = 60 * 60 * 12;
-const PASSWORD_ITERATIONS = 120000;
+const PASSWORD_ITERATIONS = 100000;
 const PASSWORD_ALGO = "pbkdf2_sha256";
 
 export function getAdminSecret(env) {
@@ -186,7 +186,8 @@ export function filterOrdersForUser(auth, orders = []) {
 async function pbkdf2(password, salt, iterations) {
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveBits"]);
-  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: enc.encode(salt), iterations }, key, 256);
+  const safeIterations = Math.min(Math.max(Number(iterations) || PASSWORD_ITERATIONS, 1), 100000);
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: enc.encode(salt), iterations: safeIterations }, key, 256);
   return base64url(bits);
 }
 
