@@ -31,7 +31,7 @@ export async function onRequest(context) {
     html = html.replace(ORDERS_UNIFIED_RE, '');
     html = html.replace('</head>', `${ORDER_TOOLS_SCRIPT}</head>`);
     html = html.replace(ADMIN_UI_FIX_RE, '<script src="/assets/admin-ui-fix.js?v=4" defer></script>');
-    html = html.replace(PERMISSIONS_REAL_RE, '<script src="/assets/admin-permissions-real.js?v=2" defer></script>');
+    html = html.replace(PERMISSIONS_REAL_RE, '<script src="/assets/admin-permissions-real.js?v=3" defer></script>');
     html = html.replace(VENDOR_PANEL_RE, '<script src="/assets/admin-vendor-panel.js?v=6" defer></script>');
   } else {
     html = html.replace(HERO_LOGO_CENTER_RE, '');
