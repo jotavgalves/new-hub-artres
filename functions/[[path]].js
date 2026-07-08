@@ -1,4 +1,4 @@
-const CACHE_BUST_SCRIPT = '<script src="/assets/catalog-cache-bust.js?v=8"></script>';
+const CACHE_BUST_SCRIPT = '<script src="/assets/catalog-cache-bust.js?v=9"></script>';
 const CUSTOMER_CHECKOUT_SCRIPT = '<script src="/assets/customer-checkout.js?v=6" defer></script>';
 const CATALOG_DRIVE_SEARCH_SCRIPT = '<scr' + 'ipt src="/assets/catalog-drive-search.js?v=3" defer></scr' + 'ipt>';
 const HERO_LOGO_CENTER_STYLE = '<style id="heroLogoCenterStyle">.brand .logo{margin-left:auto;margin-right:auto}</style>';
