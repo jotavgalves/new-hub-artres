@@ -3,80 +3,92 @@ import { supabaseReady, supabaseRequest } from "../_supabase.js";
 import { hashPassword, normalizeUsers, requireRole, safeUser } from "./_auth.js";
 
 export async function onRequestGet(context) {
-  const auth = await requireRole(context.request, context.env, ["admin"]);
-  if (!auth.ok) return json({ ok: false, error: auth.error }, auth.status);
+  try {
+    const auth = await requireRole(context.request, context.env, ["admin"]);
+    if (!auth.ok) return json({ ok: false, error: auth.error }, auth.status);
 
-  const { config, storageReady } = await loadConfig(context.env);
-  const migrated = await migrateKvUsersToSupabase(context.env, config);
-  const users = await listUsers(context.env, config);
+    const { config, storageReady } = await loadConfig(context.env);
+    const migrated = await migrateKvUsersToSupabase(context.env, config);
+    const users = await listUsers(context.env, config);
 
-  return json({
-    ok: true,
-    storageReady,
-    supabaseReady: supabaseReady(context.env),
-    migrated,
-    users: users.map(publicUser),
-    sellers: config.sellers || [],
-    roles: ["vendedora"]
-  });
+    return json({
+      ok: true,
+      storageReady,
+      supabaseReady: supabaseReady(context.env),
+      migrated,
+      users: users.map(publicUser),
+      sellers: config.sellers || [],
+      roles: ["vendedora"]
+    });
+  } catch (error) {
+    return json({ ok: false, error: message(error) }, 500);
+  }
 }
 
 export async function onRequestPost(context) {
-  const auth = await requireRole(context.request, context.env, ["admin"]);
-  if (!auth.ok) return json({ ok: false, error: auth.error }, auth.status);
+  try {
+    const auth = await requireRole(context.request, context.env, ["admin"]);
+    if (!auth.ok) return json({ ok: false, error: auth.error }, auth.status);
 
-  const body = await context.request.json().catch(() => ({}));
-  const now = new Date().toISOString();
-  const { config } = await loadConfig(context.env);
-  await migrateKvUsersToSupabase(context.env, config);
+    const body = await context.request.json().catch(() => ({}));
+    const now = new Date().toISOString();
+    const { config } = await loadConfig(context.env);
+    await migrateKvUsersToSupabase(context.env, config);
 
-  const username = sanitizeId(body.username || body.login || body.id);
-  const id = sanitizeId(body.id || username);
-  const name = clean(body.name || body.label || username);
-  const sellerId = sanitizeId(body.sellerId || body.seller || username);
-  const active = body.active !== false;
-  const password = String(body.password || "").trim();
+    const username = sanitizeId(body.username || body.login || body.id);
+    const id = sanitizeId(body.id || username);
+    const name = clean(body.name || body.label || username);
+    const sellerId = sanitizeId(body.sellerId || body.seller || username);
+    const active = body.active !== false;
+    const password = String(body.password || "").trim();
 
-  if (!id || !username || !name) return json({ ok: false, error: "USUARIO_OBRIGATORIO" }, 400);
-  if (username === "admin" || id === "admin") return json({ ok: false, error: "ADMIN_EH_USUARIO_RESERVADO" }, 400);
-  if (!sellerId) return json({ ok: false, error: "VENDEDORA_OBRIGATORIA" }, 400);
+    if (!id || !username || !name) return json({ ok: false, error: "USUARIO_OBRIGATORIO" }, 400);
+    if (username === "admin" || id === "admin") return json({ ok: false, error: "ADMIN_EH_USUARIO_RESERVADO" }, 400);
+    if (!sellerId) return json({ ok: false, error: "VENDEDORA_OBRIGATORIA" }, 400);
 
-  const users = await listUsers(context.env, config);
-  const existing = users.find(u => u.id === id || u.username === username);
-  if (!existing && !password) return json({ ok: false, error: "SENHA_OBRIGATORIA" }, 400);
+    const users = await listUsers(context.env, config);
+    const existing = users.find(u => u.id === id || u.username === username);
+    if (!existing && !password) return json({ ok: false, error: "SENHA_OBRIGATORIA" }, 400);
 
-  const user = {
-    id,
-    username,
-    name,
-    role: "vendedora",
-    sellerId,
-    active,
-    passwordHash: password ? await hashPassword(password) : existing.passwordHash,
-    createdAt: existing && existing.createdAt || now,
-    updatedAt: now
-  };
+    const user = {
+      id: existing && existing.id || id,
+      username,
+      name,
+      role: "vendedora",
+      sellerId,
+      active,
+      passwordHash: password ? await hashPassword(password) : existing.passwordHash,
+      createdAt: existing && existing.createdAt || now,
+      updatedAt: now
+    };
 
-  await upsertUser(context.env, user);
-  await ensureConfigMode(context.env, config);
-  const savedUsers = await listUsers(context.env, config);
-  return json({ ok: true, user: safeUser(user), users: savedUsers.map(publicUser), source: supabaseReady(context.env) ? "supabase" : "kv" });
+    await saveUser(context.env, user);
+    await ensureConfigMode(context.env, config);
+    const savedUsers = await listUsers(context.env, config);
+    return json({ ok: true, user: safeUser(user), users: savedUsers.map(publicUser), source: supabaseReady(context.env) ? "supabase" : "kv" });
+  } catch (error) {
+    return json({ ok: false, error: message(error) }, 500);
+  }
 }
 
 export async function onRequestDelete(context) {
-  const auth = await requireRole(context.request, context.env, ["admin"]);
-  if (!auth.ok) return json({ ok: false, error: auth.error }, auth.status);
+  try {
+    const auth = await requireRole(context.request, context.env, ["admin"]);
+    if (!auth.ok) return json({ ok: false, error: auth.error }, auth.status);
 
-  const url = new URL(context.request.url);
-  const body = await context.request.json().catch(() => ({}));
-  const id = sanitizeId(url.searchParams.get("id") || body.id || body.username);
-  if (!id || id === "admin") return json({ ok: false, error: "USUARIO_INVALIDO" }, 400);
+    const url = new URL(context.request.url);
+    const body = await context.request.json().catch(() => ({}));
+    const id = sanitizeId(url.searchParams.get("id") || body.id || body.username);
+    if (!id || id === "admin") return json({ ok: false, error: "USUARIO_INVALIDO" }, 400);
 
-  const { config } = await loadConfig(context.env);
-  await migrateKvUsersToSupabase(context.env, config);
-  await deleteUser(context.env, config, id);
-  const users = await listUsers(context.env, config);
-  return json({ ok: true, deleted: true, id, users: users.map(publicUser), source: supabaseReady(context.env) ? "supabase" : "kv" });
+    const { config } = await loadConfig(context.env);
+    await migrateKvUsersToSupabase(context.env, config);
+    await deleteUser(context.env, id);
+    const users = await listUsers(context.env, config);
+    return json({ ok: true, deleted: true, id, users: users.map(publicUser), source: supabaseReady(context.env) ? "supabase" : "kv" });
+  } catch (error) {
+    return json({ ok: false, error: message(error) }, 500);
+  }
 }
 
 async function listUsers(env, config) {
@@ -85,16 +97,42 @@ async function listUsers(env, config) {
   return (Array.isArray(rows) ? rows : []).map(userFromRow);
 }
 
-async function upsertUser(env, user) {
+async function findSupabaseUser(env, id, username) {
+  if (!supabaseReady(env)) return null;
+  const qId = encodeURIComponent(sanitizeId(id));
+  const qUsername = encodeURIComponent(sanitizeId(username));
+  const rows = await supabaseRequest(env, `/staff_users?select=*&or=(id.eq.${qId},username.eq.${qUsername})&limit=1`);
+  return Array.isArray(rows) && rows[0] ? userFromRow(rows[0]) : null;
+}
+
+async function saveUser(env, user) {
   if (!supabaseReady(env)) throw new Error("SUPABASE_ENV_NAO_CONFIGURADO");
-  await supabaseRequest(env, "/staff_users?on_conflict=id", {
+  const existing = await findSupabaseUser(env, user.id, user.username);
+  const row = rowFromUser({ ...user, id: existing && existing.id || user.id, createdAt: existing && existing.createdAt || user.createdAt });
+  if (existing) {
+    await supabaseRequest(env, `/staff_users?id=eq.${encodeURIComponent(existing.id)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: {
+        username: row.username,
+        name: row.name,
+        role: row.role,
+        seller_id: row.seller_id,
+        active: row.active,
+        password_hash: row.password_hash,
+        updated_at: row.updated_at
+      }
+    });
+    return;
+  }
+  await supabaseRequest(env, "/staff_users", {
     method: "POST",
-    headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
-    body: rowFromUser(user)
+    headers: { Prefer: "return=minimal" },
+    body: row
   });
 }
 
-async function deleteUser(env, config, id) {
+async function deleteUser(env, id) {
   if (!supabaseReady(env)) throw new Error("SUPABASE_ENV_NAO_CONFIGURADO");
   await supabaseRequest(env, `/staff_users?id=eq.${encodeURIComponent(id)}`, { method: "DELETE" });
 }
@@ -166,5 +204,8 @@ function publicUser(user = {}) {
   };
 }
 
+function message(error) {
+  return String(error && error.message || error || "ERRO_DESCONHECIDO").slice(0, 500);
+}
 function clean(value) { return String(value || "").replace(/\s+/g, " ").trim().slice(0, 120); }
 function sanitizeId(value) { return clean(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""); }
