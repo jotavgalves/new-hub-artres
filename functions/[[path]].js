@@ -1,7 +1,7 @@
 const CACHE_BUST_SCRIPT = '<script src="/assets/catalog-cache-bust.js?v=9"></script>';
 const CUSTOMER_CHECKOUT_SCRIPT = '<script src="/assets/customer-checkout.js?v=6" defer></script>';
 const CATALOG_DRIVE_SEARCH_SCRIPT = '<scr' + 'ipt src="/assets/catalog-drive-search.js?v=4" defer></scr' + 'ipt>';
-const CATALOG_NAV_UX_SCRIPT = '<script src="/assets/catalog-navigation-ux.js?v=2" defer></script>';
+const CATALOG_NAV_UX_SCRIPT = '<script src="/assets/catalog-navigation-ux.js?v=3" defer></script>';
 const HERO_LOGO_CENTER_STYLE = '<style id="heroLogoCenterStyle">.brand .logo{margin-left:auto;margin-right:auto}</style>';
 const ORDER_TOOLS_SCRIPT = '<script src="/assets/order-action-tools.js?v=4" defer></script>';
 const CACHE_BUST_RE = /<script\s+src=["']\/assets\/catalog-cache-bust\.js\?v=[^"']+["']><\/script>/g;
