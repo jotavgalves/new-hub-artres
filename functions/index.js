@@ -1,7 +1,7 @@
 const CACHE_BUST_SCRIPT = '<script src="/assets/catalog-cache-bust.js?v=9"></script>';
 const CUSTOMER_CHECKOUT_SCRIPT = '<script src="/assets/customer-checkout.js?v=6" defer></script>';
 const SITE_TEXTS_SCRIPT = '<script src="/assets/site-texts-runtime.js?v=1" defer></script>';
-const CATALOG_NAV_UX_SCRIPT = '<script src="/assets/catalog-navigation-ux.js?v=1" defer></script>';
+const CATALOG_NAV_UX_SCRIPT = '<script src="/assets/catalog-navigation-ux.js?v=2" defer></script>';
 const HERO_LOGO_CENTER_STYLE = '<style id="heroLogoCenterStyle">.brand .logo{margin-left:auto;margin-right:auto}</style>';
 
 export async function onRequest(context) {
