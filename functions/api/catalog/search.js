@@ -12,22 +12,26 @@ export async function onRequestGet(context){
     const q=String(url.searchParams.get('q')||'').trim();
     const limit=Math.min(Math.max(Number(url.searchParams.get('limit')||80),1),120);
     const debug=url.searchParams.get('debug')==='1';
-    if(norm(q).length<1)return json({ok:true,total:0,items:[],folders:[],source:'supabase-artworks'});
+    const nq=norm(q);
+    const digits=q.replace(/\D/g,'');
 
-    const env=context.env;
-    const direct=await directSearch(env,q,limit);
+    if(nq.length<2&&digits.length<2){
+      return json({ok:true,total:0,items:[],folders:[],source:'supabase-artworks'});
+    }
+
+    const direct=await directSearch(context.env,q,limit);
     let matches=searchRows(direct,q);
     let cacheRows=0;
 
-    if(matches.length<limit){
-      const rows=await loadRows(env);
+    if(matches.length<1&&nq.length>=3){
+      const rows=await loadRows(context.env);
       cacheRows=rows.length;
-      matches=sortRows(mergeRows(matches,searchRows(rows,q)),q);
+      matches=searchRows(rows,q);
     }
 
     matches=matches.slice(0,limit);
-    const payload={ok:true,total:matches.length,items:matches.map(mapItem),folders:[],source:'supabase-artworks',cached:Date.now()-CACHE.at<TTL};
-    if(debug)payload.debug={directRows:direct.length,cacheRows:cacheRows,query:norm(q)};
+    const payload={ok:true,total:matches.length,items:matches.map(mapItem),folders:[],source:'supabase-artworks'};
+    if(debug)payload.debug={directRows:direct.length,cacheRows:cacheRows,query:nq};
     return json(payload);
   }catch(error){
     return json({ok:false,error:String(error&&error.message||error||'ERRO_BUSCA_CATALOGO')},500);
@@ -60,7 +64,7 @@ async function directSearch(env,q,limit){
   const rows=[];
   const digits=raw.replace(/\D/g,'');
 
-  if(digits){
+  if(digits.length>=2){
     rows.push(...await fetchByParams(cfg,{id:'eq.'+digits},limit));
   }
 
@@ -69,11 +73,11 @@ async function directSearch(env,q,limit){
   }
 
   const terms=buildTerms(raw);
-  for(let i=0;i<terms.length&&rows.length<limit*4;i++){
+  for(let i=0;i<terms.length&&rows.length<limit;i++){
     rows.push(...await fetchByText(cfg,terms[i],limit));
   }
 
-  const deduped=dedupeRows(rows);
+  const deduped=sortRows(dedupeRows(rows),q);
   QUERY_CACHE[key]={at:Date.now(),rows:deduped};
   return deduped;
 }
@@ -154,11 +158,7 @@ function buildTerms(raw){
   addTerm(out,raw);
   addTerm(out,norm(raw));
   accentVariants(norm(raw)).forEach(function(v){addTerm(out,v)});
-  norm(raw).split(' ').forEach(function(t){
-    addTerm(out,t);
-    accentVariants(t).forEach(function(v){addTerm(out,v)});
-  });
-  return out.slice(0,10);
+  return out.slice(0,4);
 }
 
 function accentVariants(s){
@@ -177,7 +177,6 @@ function addTerm(out,v){
 }
 
 function cleanLike(v){return String(v||'').replace(/[(),]/g,' ').replace(/[\*%]/g,' ').replace(/\s+/g,' ').trim()}
-function mergeRows(a,b){return dedupeRows([].concat(a||[],b||[]))}
 function dedupeRows(rows){const seen={};return(rows||[]).filter(function(r){const k=String(r.drive_file_id||r.id||'');if(!k||seen[k])return false;seen[k]=true;return true})}
 function config(env){const base=restBase(env.ARTS_SUPABASE_URL||env.SUPABASE_ARTS_URL||env.ARTWORKS_SUPABASE_URL);const key=String(env.ARTS_SUPABASE_SERVICE_KEY||env.SUPABASE_ARTS_SERVICE_KEY||env.ARTWORKS_SUPABASE_SERVICE_KEY||'').trim();if(!base||!key)throw new Error('CONFIGURE_ARTS_SUPABASE_URL_E_SERVICE_KEY');return{base,key}}
 function restBase(value){let u=String(value||'').trim().replace(/\/+$/,'');if(!u)return'';if(!/\/rest\/v1$/.test(u))u+='/rest/v1';return u}
