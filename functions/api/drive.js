@@ -1,6 +1,6 @@
 import { loadConfig, getBolinhas } from "./_config.js";
 import { applyFolderRule, cleanLabel, displayTheme, isBlockedArt, isHiddenTheme, sortFolders, norm as normalizeText } from "./_catalog_rules.js";
-import { baseIndexParams, cleanLike, dedupeRows, mapArtwork, productKey, readIndex, scoreRow } from "./_catalog_index.js";
+import { baseIndexParams, catalogProductKey, cleanLike, dedupeRows, mapArtwork, readIndex, scoreRow } from "./_catalog_index.js";
 
 const DEFAULT_ROOT_FOLDER_ID = "193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae";
 const PAGE_SIZE = 500;
@@ -28,8 +28,8 @@ export async function onRequestGet(context){
 
   if(mode === "items"){
    const product = cleanLabel(url.searchParams.get("product") || "");
-   const items = await itemRows(context.env, { folderId, theme, product, config });
-   return json({ ok:true, mode, source:"catalog_index", theme:displayTheme(theme, config), product, productName:product, total:items.length, items }, 200, 15);
+   const items = await itemRows(context.env, { folderId, theme, product, config, bolinhas });
+   return json({ ok:true, mode, source:"catalog_index", theme:displayTheme(theme, config), product:bolinhas.productKey, productName:bolinhas.label, total:items.length, items }, 200, 15);
   }
 
   if(mode === "globalSearch"){
@@ -37,14 +37,14 @@ export async function onRequestGet(context){
    if(!q || normalizeText(q).length < 2) return json({ ok:true, mode, source:"catalog_index", folders:[], items:[] }, 200, 15);
    const [folders, items] = await Promise.all([
     searchFolders(context.env, q, config),
-    searchItems(context.env, q, config, 80)
+    searchItems(context.env, q, config, bolinhas, 80)
    ]);
    return json({ ok:true, mode, source:"catalog_index", totalFolders:folders.length, totalItems:items.length, folders, items }, 200, 15);
   }
 
   if(mode === "search"){
    if(!rawSearch) return json({ ok:true, mode, source:"catalog_index", items:[] }, 200, 15);
-   const items = await searchItems(context.env, rawSearch, config, 80);
+   const items = await searchItems(context.env, rawSearch, config, bolinhas, 80);
    return json({ ok:true, mode, source:"catalog_index", total:items.length, items }, 200, 15);
   }
 
@@ -90,18 +90,12 @@ async function productFolders(env, { folderId, theme, config, bolinhas }){
  return folderCards.concat(productCards);
 }
 
-async function itemRows(env, { folderId, theme, product, config }){
+async function itemRows(env, { folderId, theme, config, bolinhas }){
  const parsed = parseVirtualProductId(folderId);
  const parentId = parsed ? parsed.parentId : folderId;
- const wantedKey = parsed ? parsed.productKey : productKey(product);
  const rows = await artworkRowsByParent(env, parentId);
- const filtered = rows.filter(row => {
-  if(parsed) return productKey(row.product) === wantedKey;
-  if(product && rows.some(r => productKey(r.product) === wantedKey)) return productKey(row.product) === wantedKey;
-  return true;
- });
- return filtered
-  .map(row => itemFromRow(row, config, theme))
+ return rows
+  .map(row => itemFromRow(row, config, theme, bolinhas))
   .filter(Boolean)
   .sort((a,b) => (Number(b.sortId)||0) - (Number(a.sortId)||0));
 }
@@ -113,7 +107,7 @@ async function artworkRowsByParent(env, parentId){
  }));
 }
 
-async function searchItems(env, query, config, limit){
+async function searchItems(env, query, config, bolinhas, limit){
  const q = cleanLabel(query);
  const normalized = cleanLike(q);
  const digits = q.replace(/\D/g, "");
@@ -143,7 +137,7 @@ async function searchItems(env, query, config, limit){
  }
 
  return dedupeRows(out)
-  .map(row => itemFromRow(row, config))
+  .map(row => itemFromRow(row, config, "", bolinhas))
   .filter(Boolean)
   .sort((a,b) => scoreRow(b, q) - scoreRow(a, q) || (Number(b.sortId)||0) - (Number(a.sortId)||0))
   .slice(0, limit);
@@ -164,42 +158,33 @@ async function searchFolders(env, query, config){
 }
 
 function productsFromRows(rows, { parentId, theme, bolinhas }){
- const seen = new Set();
- const out = [];
- for(const row of rows){
-  const label = cleanLabel(row.product || "Artes");
-  const key = productKey(label);
-  if(seen.has(key)) continue;
-  seen.add(key);
-  const product = {
-   id: virtualProductId(parentId, key, label),
-   name: label,
-   rawName: label,
-   label,
-   kind: "product",
-   product: key,
-   productName: label,
-   theme: theme || row.theme || "",
-   productFolderId: parentId,
-   directItems: true
-  };
-  if(key === (bolinhas && bolinhas.productKey)) Object.assign(product, {
-   unitPrice: bolinhas.unitPrice,
-   price: bolinhas.unitPrice,
-   priceLabel: bolinhas.priceLabel,
-   minQty: bolinhas.minQty,
-   step: bolinhas.step,
-   disableCustomization: bolinhas.disableCustomization,
-   customizationDisabled: bolinhas.disableCustomization,
-   allowCustomSize: !bolinhas.disableCustomization,
-   canCustomize: !bolinhas.disableCustomization
-  });
-  out.push(product);
- }
- return out.sort((a,b) => String(a.productName||a.name).localeCompare(String(b.productName||b.name), "pt-BR", { numeric:true }));
+ if(!rows.length) return [];
+ const label = bolinhas.label || "Bolinhas 50x50";
+ const key = bolinhas.productKey || "50x50";
+ return [{
+  id: virtualProductId(parentId, key, label),
+  name: label,
+  rawName: label,
+  label,
+  kind: "product",
+  product: key,
+  productName: label,
+  theme,
+  productFolderId: parentId,
+  directItems: true,
+  unitPrice: bolinhas.unitPrice,
+  price: bolinhas.unitPrice,
+  priceLabel: bolinhas.priceLabel,
+  minQty: bolinhas.minQty,
+  step: bolinhas.step,
+  disableCustomization: bolinhas.disableCustomization,
+  customizationDisabled: bolinhas.disableCustomization,
+  allowCustomSize: !bolinhas.disableCustomization,
+  canCustomize: !bolinhas.disableCustomization
+ }];
 }
 
-function itemFromRow(row, config, fallbackTheme){
+function itemFromRow(row, config, fallbackTheme, bolinhas){
  const item = mapArtwork(row);
  item.code = String(item.code || "").replace(/^#/, "");
  if(!item.code || isBlockedArt(item.code, config)) return null;
@@ -207,7 +192,11 @@ function itemFromRow(row, config, fallbackTheme){
  if(isHiddenTheme(item.theme, config)) return null;
  item.themeId = row.parent_drive_id || "";
  item.sortId = Number(item.code) || 0;
+ item.product = bolinhas.productKey || catalogProductKey(row) || "50x50";
+ item.productName = bolinhas.label || "Bolinhas 50x50";
+ item.productLabel = item.productName;
  item.productFolderId = row.parent_drive_id || "";
+ item.details = { ...(item.details || {}), size: item.size || item.dimension || "50x50" };
  return item;
 }
 
