@@ -22,7 +22,7 @@ export async function onRequestGet(context){
     if(matches.length<limit){
       const rows=await loadRows(env);
       cacheRows=rows.length;
-      matches=mergeRows(matches,searchRows(rows,q));
+      matches=sortRows(mergeRows(matches,searchRows(rows,q)),q);
     }
 
     matches=matches.slice(0,limit);
@@ -107,7 +107,7 @@ function searchRows(rows,q){
   const digits=raw.replace(/\D/g,'');
   const tokens=nq.split(' ').filter(Boolean);
   const looksDriveId=/^[A-Za-z0-9_-]{10,}$/.test(raw);
-  return dedupeRows(rows).filter(function(r){
+  return sortRows(dedupeRows(rows).filter(function(r){
     const id=String(r.id||'');
     const fileId=String(r.drive_file_id||'');
     const file=String(r.drive_file_name||'');
@@ -116,7 +116,11 @@ function searchRows(rows,q){
     const hay=norm([id,r.theme,r.product,r.size,file,fileId].join(' '));
     if(hay.includes(nq))return true;
     return tokens.length>1&&tokens.every(function(t){return hay.includes(t)});
-  }).sort(function(a,b){return score(b,q)-score(a,q)||Number(b.id||0)-Number(a.id||0)});
+  }),q);
+}
+
+function sortRows(rows,q){
+  return dedupeRows(rows).sort(function(a,b){return score(b,q)-score(a,q)||Number(b.id||0)-Number(a.id||0)});
 }
 
 function score(r,q){
@@ -173,7 +177,7 @@ function addTerm(out,v){
 }
 
 function cleanLike(v){return String(v||'').replace(/[(),]/g,' ').replace(/[\*%]/g,' ').replace(/\s+/g,' ').trim()}
-function mergeRows(a,b){return dedupeRows([].concat(a||[],b||[])).sort(function(x,y){return Number(y.id||0)-Number(x.id||0)})}
+function mergeRows(a,b){return dedupeRows([].concat(a||[],b||[]))}
 function dedupeRows(rows){const seen={};return(rows||[]).filter(function(r){const k=String(r.drive_file_id||r.id||'');if(!k||seen[k])return false;seen[k]=true;return true})}
 function config(env){const base=restBase(env.ARTS_SUPABASE_URL||env.SUPABASE_ARTS_URL||env.ARTWORKS_SUPABASE_URL);const key=String(env.ARTS_SUPABASE_SERVICE_KEY||env.SUPABASE_ARTS_SERVICE_KEY||env.ARTWORKS_SUPABASE_SERVICE_KEY||'').trim();if(!base||!key)throw new Error('CONFIGURE_ARTS_SUPABASE_URL_E_SERVICE_KEY');return{base,key}}
 function restBase(value){let u=String(value||'').trim().replace(/\/+$/,'');if(!u)return'';if(!/\/rest\/v1$/.test(u))u+='/rest/v1';return u}
