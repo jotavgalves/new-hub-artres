@@ -57,5 +57,10 @@ create trigger catalog_index_set_updated_at_trigger
 before update on public.catalog_index
 for each row execute function public.catalog_index_set_updated_at();
 
--- Leitura pública via REST pode ficar bloqueada por RLS; as Pages Functions usam SERVICE KEY no servidor.
--- Se você decidir expor leitura anon no futuro, crie políticas específicas e restritas.
+-- Permissões necessárias para a chave service_role usada pelo indexador e pelas Pages Functions.
+grant usage on schema public to service_role;
+grant select, insert, update, delete on public.catalog_index to service_role;
+grant usage, select on sequence public.catalog_index_id_seq to service_role;
+
+-- Leitura pública via REST continua bloqueada por padrão; não concedemos acesso a anon/authenticated aqui.
+-- As Pages Functions devem acessar usando ARTS_SUPABASE_SERVICE_KEY no servidor.
