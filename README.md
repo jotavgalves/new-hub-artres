@@ -7,7 +7,7 @@ Use este arquivo como referência para continuar o projeto em outro chat.
 ---
 
 ## 1. Objetivo do sistema
-
+ 
 O sistema é um **site/cardápio digital de artes da Armazém da Estampa**, hospedado em **Cloudflare Pages**, que puxa as artes diretamente de uma pasta pública do **Google Drive**.
 
 O cliente navega assim:
