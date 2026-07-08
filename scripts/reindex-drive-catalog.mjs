@@ -2,11 +2,13 @@
 /*
   Reindexa todo o catálogo do Google Drive em public.catalog_index no Supabase.
 
-  Requisitos:
+  Requisitos mínimos:
     GOOGLE_API_KEY
-    DRIVE_ROOT_FOLDER_ID
-    ARTS_SUPABASE_URL=https://...supabase.co/rest/v1
     ARTS_SUPABASE_SERVICE_KEY=sb_secret_...
+
+  Já existem padrões seguros no código para:
+    DRIVE_ROOT_FOLDER_ID=193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae
+    ARTS_SUPABASE_URL=https://tviagmllvnhnrumhmeli.supabase.co/rest/v1
 
   Uso:
     node scripts/reindex-drive-catalog.mjs
@@ -20,6 +22,8 @@ import process from 'node:process';
 const DRIVE_API = 'https://www.googleapis.com/drive/v3/files';
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
 const DEFAULT_BATCH_SIZE = 250;
+const DEFAULT_ROOT_FOLDER_ID = '193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae';
+const DEFAULT_SUPABASE_REST_URL = 'https://tviagmllvnhnrumhmeli.supabase.co/rest/v1';
 
 loadEnvFile('.env');
 loadEnvFile('.env.local');
@@ -28,8 +32,8 @@ loadEnvFile('.env.catalog-index');
 const args = parseArgs(process.argv.slice(2));
 const RUN_ID = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14) + '-' + Math.random().toString(16).slice(2, 8);
 const GOOGLE_API_KEY = mustEnv('GOOGLE_API_KEY', 'GOOGLE_DRIVE_API_KEY', 'DRIVE_API_KEY');
-const ROOT_FOLDER_ID = args.root || process.env.DRIVE_ROOT_FOLDER_ID || process.env.CATALOG_DRIVE_ROOT_ID || process.env.ROOT_FOLDER_ID;
-const SUPABASE_URL = restBase(process.env.ARTS_SUPABASE_URL || process.env.SUPABASE_ARTS_URL || process.env.ARTWORKS_SUPABASE_URL || process.env.SUPABASE_REST_URL);
+const ROOT_FOLDER_ID = args.root || process.env.DRIVE_ROOT_FOLDER_ID || process.env.CATALOG_DRIVE_ROOT_ID || process.env.ROOT_FOLDER_ID || DEFAULT_ROOT_FOLDER_ID;
+const SUPABASE_URL = restBase(process.env.ARTS_SUPABASE_URL || process.env.SUPABASE_ARTS_URL || process.env.ARTWORKS_SUPABASE_URL || process.env.SUPABASE_REST_URL || DEFAULT_SUPABASE_REST_URL);
 const SUPABASE_KEY = process.env.ARTS_SUPABASE_SERVICE_KEY || process.env.SUPABASE_ARTS_SERVICE_KEY || process.env.ARTWORKS_SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 const DRY_RUN = !!args['dry-run'];
 const DELETE_STALE = args['delete-stale'] !== false && args['no-stale-delete'] !== true;
@@ -38,7 +42,7 @@ const BATCH_SIZE = Number(args['batch-size'] || process.env.CATALOG_INDEX_BATCH_
 const INDEX_OTHER_FILES = args['index-other'] === true || process.env.CATALOG_INDEX_OTHER_FILES === '1';
 
 if (!ROOT_FOLDER_ID) fail('Defina DRIVE_ROOT_FOLDER_ID ou use --root=ID_DA_PASTA.');
-if (!DRY_RUN && (!SUPABASE_URL || !SUPABASE_KEY)) fail('Defina ARTS_SUPABASE_URL e ARTS_SUPABASE_SERVICE_KEY, ou rode com --dry-run.');
+if (!DRY_RUN && (!SUPABASE_URL || !SUPABASE_KEY)) fail('Defina ARTS_SUPABASE_SERVICE_KEY, ou rode com --dry-run.');
 
 const stats = {
   folders: 0,
@@ -58,6 +62,7 @@ async function main() {
   console.log('== Reindexação do catálogo Drive ==');
   console.log('run_id:', RUN_ID);
   console.log('root:', ROOT_FOLDER_ID);
+  console.log('supabase_url:', SUPABASE_URL);
   console.log('dry_run:', DRY_RUN ? 'sim' : 'não');
   console.log('delete_stale:', DELETE_STALE && !DRY_RUN ? 'sim' : 'não');
 
