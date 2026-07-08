@@ -21,7 +21,7 @@
     if(pdfPromise)return pdfPromise;
     pdfPromise=new Promise(function(resolve,reject){
       var script=document.createElement('script');
-      script.src='/assets/order-pdf-export.js?v=4';
+      script.src='/assets/order-pdf-export.js?v=5';
       script.defer=true;
       script.onload=function(){window.ArmazemOrderPdf&&window.ArmazemOrderPdf.download?resolve(window.ArmazemOrderPdf):reject(new Error('PDF não carregou.'))};
       script.onerror=function(){reject(new Error('PDF não carregou.'))};
