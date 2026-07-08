@@ -1,0 +1,46 @@
+name: Reindex Drive Catalog
+
+on:
+  workflow_dispatch:
+    inputs:
+      root_folder_id:
+        description: "ID da pasta raiz do catálogo no Google Drive. Vazio usa o secret DRIVE_ROOT_FOLDER_ID."
+        required: false
+        type: string
+      dry_run:
+        description: "Rodar sem gravar no Supabase"
+        required: true
+        default: false
+        type: boolean
+      max_depth:
+        description: "Profundidade máxima de subpastas"
+        required: true
+        default: "30"
+        type: string
+
+jobs:
+  reindex:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Reindex catalog
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          DRIVE_ROOT_FOLDER_ID: ${{ github.event.inputs.root_folder_id || secrets.DRIVE_ROOT_FOLDER_ID }}
+          ARTS_SUPABASE_URL: ${{ secrets.ARTS_SUPABASE_URL }}
+          ARTS_SUPABASE_SERVICE_KEY: ${{ secrets.ARTS_SUPABASE_SERVICE_KEY }}
+          CATALOG_INDEX_MAX_DEPTH: ${{ github.event.inputs.max_depth }}
+        run: |
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            node scripts/reindex-drive-catalog.mjs --dry-run --max-depth="${{ github.event.inputs.max_depth }}"
+          else
+            node scripts/reindex-drive-catalog.mjs --max-depth="${{ github.event.inputs.max_depth }}"
+          fi
