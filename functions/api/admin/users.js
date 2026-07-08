@@ -1,4 +1,5 @@
 import { json, loadConfig, saveConfig } from "../_config.js";
+import { supabaseReady, supabaseRequest } from "../_supabase.js";
 import { hashPassword, normalizeUsers, requireRole, safeUser, sanitizeUsers } from "./_auth.js";
 
 export async function onRequestGet(context) {
@@ -6,10 +7,15 @@ export async function onRequestGet(context) {
   if (!auth.ok) return json({ ok: false, error: auth.error }, auth.status);
 
   const { config, storageReady } = await loadConfig(context.env);
+  const migrated = await migrateKvUsersToSupabase(context.env, config);
+  const users = await listUsers(context.env, config);
+
   return json({
     ok: true,
     storageReady,
-    users: sanitizeUsers(config.permissions && config.permissions.users),
+    supabaseReady: supabaseReady(context.env),
+    migrated,
+    users: sanitizeUsers(users),
     sellers: config.sellers || [],
     roles: ["vendedora"]
   });
@@ -22,7 +28,7 @@ export async function onRequestPost(context) {
   const body = await context.request.json().catch(() => ({}));
   const now = new Date().toISOString();
   const { config } = await loadConfig(context.env);
-  const users = normalizeUsers(config.permissions && config.permissions.users);
+  await migrateKvUsersToSupabase(context.env, config);
 
   const username = sanitizeId(body.username || body.login || body.id);
   const id = sanitizeId(body.id || username);
@@ -35,8 +41,8 @@ export async function onRequestPost(context) {
   if (username === "admin" || id === "admin") return json({ ok: false, error: "ADMIN_EH_USUARIO_RESERVADO" }, 400);
   if (!sellerId) return json({ ok: false, error: "VENDEDORA_OBRIGATORIA" }, 400);
 
-  const existingIndex = users.findIndex(u => u.id === id || u.username === username);
-  const existing = existingIndex >= 0 ? users[existingIndex] : null;
+  const users = await listUsers(context.env, config);
+  const existing = users.find(u => u.id === id || u.username === username);
   if (!existing && !password) return json({ ok: false, error: "SENHA_OBRIGATORIA" }, 400);
 
   const user = {
@@ -51,19 +57,10 @@ export async function onRequestPost(context) {
     updatedAt: now
   };
 
-  if (existingIndex >= 0) users[existingIndex] = user;
-  else users.push(user);
-
-  config.permissions = {
-    ...(config.permissions || {}),
-    mode: "users",
-    roles: ["admin", "vendedora"],
-    users
-  };
-
-  const saved = await saveConfig(context.env, config);
-  const savedUser = normalizeUsers(saved.permissions && saved.permissions.users).find(u => u.id === user.id);
-  return json({ ok: true, user: safeUser(savedUser), users: sanitizeUsers(saved.permissions && saved.permissions.users) });
+  await upsertUser(context.env, user);
+  await ensureConfigMode(context.env, config);
+  const savedUsers = await listUsers(context.env, config);
+  return json({ ok: true, user: safeUser(user), users: sanitizeUsers(savedUsers), source: supabaseReady(context.env) ? "supabase" : "kv" });
 }
 
 export async function onRequestDelete(context) {
@@ -76,16 +73,84 @@ export async function onRequestDelete(context) {
   if (!id || id === "admin") return json({ ok: false, error: "USUARIO_INVALIDO" }, 400);
 
   const { config } = await loadConfig(context.env);
-  const users = normalizeUsers(config.permissions && config.permissions.users).filter(u => u.id !== id && u.username !== id);
+  await migrateKvUsersToSupabase(context.env, config);
+  await deleteUser(context.env, config, id);
+  const users = await listUsers(context.env, config);
+  return json({ ok: true, deleted: true, id, users: sanitizeUsers(users), source: supabaseReady(context.env) ? "supabase" : "kv" });
+}
+
+async function listUsers(env, config) {
+  if (!supabaseReady(env)) return normalizeUsers(config.permissions && config.permissions.users);
+  const rows = await supabaseRequest(env, "/staff_users?select=*&order=name.asc");
+  return (Array.isArray(rows) ? rows : []).map(userFromRow);
+}
+
+async function upsertUser(env, user) {
+  if (!supabaseReady(env)) throw new Error("SUPABASE_ENV_NAO_CONFIGURADO");
+  await supabaseRequest(env, "/staff_users?on_conflict=id", {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: rowFromUser(user)
+  });
+}
+
+async function deleteUser(env, config, id) {
+  if (!supabaseReady(env)) throw new Error("SUPABASE_ENV_NAO_CONFIGURADO");
+  await supabaseRequest(env, `/staff_users?id=eq.${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+async function migrateKvUsersToSupabase(env, config) {
+  if (!supabaseReady(env)) return false;
+  const legacy = normalizeUsers(config.permissions && config.permissions.users).filter(u => u.id !== "admin" && u.username !== "admin");
+  if (!legacy.length) return false;
+  const current = await listUsers(env, { permissions: { users: [] } });
+  const known = new Set(current.flatMap(u => [u.id, u.username]));
+  const missing = legacy.filter(u => !known.has(u.id) && !known.has(u.username));
+  if (!missing.length) return false;
+  await supabaseRequest(env, "/staff_users?on_conflict=id", {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: missing.map(rowFromUser)
+  });
+  return true;
+}
+
+async function ensureConfigMode(env, config) {
   config.permissions = {
     ...(config.permissions || {}),
     mode: "users",
     roles: ["admin", "vendedora"],
-    users
+    users: []
   };
+  try { await saveConfig(env, config); } catch (_) {}
+}
 
-  const saved = await saveConfig(context.env, config);
-  return json({ ok: true, deleted: true, id, users: sanitizeUsers(saved.permissions && saved.permissions.users) });
+function rowFromUser(user) {
+  return {
+    id: sanitizeId(user.id || user.username),
+    username: sanitizeId(user.username || user.id),
+    name: clean(user.name || user.username || user.id),
+    role: user.role === "admin" ? "admin" : "vendedora",
+    seller_id: sanitizeId(user.sellerId || user.seller || user.username || user.id),
+    active: user.active !== false,
+    password_hash: String(user.passwordHash || ""),
+    created_at: user.createdAt || new Date().toISOString(),
+    updated_at: user.updatedAt || new Date().toISOString()
+  };
+}
+
+function userFromRow(row = {}) {
+  return {
+    id: sanitizeId(row.id),
+    username: sanitizeId(row.username || row.id),
+    name: clean(row.name || row.username || row.id),
+    role: row.role === "admin" ? "admin" : "vendedora",
+    sellerId: sanitizeId(row.seller_id || row.sellerId || row.username || row.id),
+    active: row.active !== false,
+    passwordHash: clean(row.password_hash || row.passwordHash || ""),
+    createdAt: clean(row.created_at || row.createdAt || ""),
+    updatedAt: clean(row.updated_at || row.updatedAt || "")
+  };
 }
 
 function clean(value) { return String(value || "").replace(/\s+/g, " ").trim().slice(0, 120); }
