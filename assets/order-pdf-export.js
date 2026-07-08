@@ -1,5 +1,5 @@
 (function(){
-  if(window.ArmazemOrderPdf&&window.ArmazemOrderPdf.version==='3')return;
+  if(window.ArmazemOrderPdf&&window.ArmazemOrderPdf.version==='4')return;
   var LOGO='https://acompanhe-armazem.pages.dev/assets/logo.svg';
   function s(v){return String(v==null?'':v).trim()}
   function asc(v){return s(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\x20-\x7E]/g,'')}
@@ -8,7 +8,7 @@
   function cust(o){return o&&o.customer||{}}
   function sell(o){return o&&o.seller||{}}
   function code(i){return s(i&&(i.code||i.codigo||i.id||i.artCode||i.art_code)).replace(/^#/,'')}
-  function prod(i){return s(i&&(i.productName||i.product_name||i.product||i.category||'Artes'))||'Artes'}
+  function prod(i){return s(i&&(i.productName||i.product_name||i.product||i.category||'Artes'))||'Produto'}
   function theme(i){return s(i&&(i.theme||i.themeName||i.theme_name||i.tema))}
   function qty(i){return Math.max(1,Number(i&&(i.qty||i.quantity||1))||1)}
   function imgUrl(i){var r=i&&i.raw||{};return s(i&&(i.image||i.thumbnail||i.thumb||i.url||i.imageUrl||i.image_url||i.preview||i.previewUrl)||r.image||r.thumbnail||r.thumb||r.url||r.imageUrl||r.image_url||'')}
@@ -30,33 +30,36 @@
       var c=document.createElement('canvas'),x=c.getContext('2d');c.width=w;c.height=h;x.fillStyle='#fff';x.fillRect(0,0,w,h);
       var iw=im.naturalWidth||im.width,ih=im.naturalHeight||im.height,sc=Math.min(w/iw,h/ih),dw=iw*sc,dh=ih*sc;
       x.drawImage(im,(w-dw)/2,(h-dh)/2,dw,dh);
-      return {w:w,h:h,bin:dataBin(c.toDataURL('image/jpeg',q||.86))};
+      return {w:w,h:h,bin:dataBin(c.toDataURL('image/jpeg',q||.88))};
     }catch(e){return null}
   }
   async function eachLimit(list,limit,fn){var out=Array(list.length),n=0;async function run(){while(n<list.length){var i=n++;out[i]=await fn(list[i],i)}}var a=[];for(var i=0;i<Math.min(limit,list.length);i++)a.push(run());await Promise.all(a);return out}
   function rgb(r,g,b){return (r/255).toFixed(3)+' '+(g/255).toFixed(3)+' '+(b/255).toFixed(3)}
-  function T(txt,x,y,sz,bold,col,align){col=col||[34,33,36];var out='BT /'+(bold?'F2':'F1')+' '+sz+' Tf '+rgb(col[0],col[1],col[2])+' rg ';var tx=x;if(align==='right')tx=x-(asc(txt).length*sz*.34);if(align==='center')tx=x-(asc(txt).length*sz*.17);return out+tx.toFixed(2)+' '+y.toFixed(2)+' Td ('+pdfEsc(txt)+') Tj ET\n'}
-  function R(x,y,w,h,fill,stroke){var a='';if(fill)a+=rgb(fill[0],fill[1],fill[2])+' rg ';if(stroke)a+=rgb(stroke[0],stroke[1],stroke[2])+' RG ';return a+x+' '+y+' '+w+' '+h+' re '+(fill&&stroke?'B':fill?'f':'S')+'\n'}
+  function widthOf(txt,sz){return asc(txt).length*sz*.49}
+  function T(txt,x,y,sz,bold,col){col=col||[34,33,36];return 'BT /'+(bold?'F2':'F1')+' '+sz+' Tf '+rgb(col[0],col[1],col[2])+' rg '+x.toFixed(2)+' '+y.toFixed(2)+' Td ('+pdfEsc(txt)+') Tj ET\n'}
+  function TR(txt,right,y,sz,bold,col){return T(txt,right-widthOf(txt,sz),y,sz,bold,col)}
+  function R(x,y,w,h,fill,stroke,lw){var a='';if(lw)a+=lw+' w ';if(fill)a+=rgb(fill[0],fill[1],fill[2])+' rg ';if(stroke)a+=rgb(stroke[0],stroke[1],stroke[2])+' RG ';return a+x+' '+y+' '+w+' '+h+' re '+(fill&&stroke?'B':fill?'f':'S')+'\n'}
   function L(x1,y1,x2,y2,col,w){return rgb((col||[210,210,210])[0],(col||[210,210,210])[1],(col||[210,210,210])[2])+' RG '+(w||1)+' w '+x1+' '+y1+' m '+x2+' '+y2+' l S\n'}
   function IM(name,x,y,w,h){return 'q '+w+' 0 0 '+h+' '+x+' '+y+' cm /'+name+' Do Q\n'}
+  function line(label,value,x,y,labelSize,valueSize,valueX){return T(label,x,y,labelSize,1,[34,33,36])+T(value,valueX,y,valueSize,0,[34,33,36])}
   function drawPage(order,item,page,total,img,logo,names){
-    var cmd='',c=cust(order),v=sell(order),ref=code(item)||'--';
-    cmd+=R(0,0,595,842,[255,250,246]);
-    cmd+=R(0,834,198,8,[56,186,227]);cmd+=R(198,834,198,8,[247,210,64]);cmd+=R(396,834,199,8,[239,85,133]);
-    if(logo)cmd+=IM(names.logo,42,728,150,70);else cmd+=T('ARMAZEM',42,768,24,1,[0,0,0]);
-    cmd+=T(ono(order),538,788,18,1,[239,85,133],'right');
-    cmd+=T('Cliente: '+cut(c.name||'Nao informado',34),538,770,10,0,[0,0,0],'right');
-    cmd+=T('Vendedora: '+cut(v.label||v.name||v.id||'--',24),538,755,10,0,[0,0,0],'right');
-    cmd+=T('Data: '+date(order&&order.createdAt),538,740,10,0,[0,0,0],'right');
-    cmd+=L(40,706,555,706,[202,202,202],1);
-    cmd+=R(40,214,515,430,null,[56,186,227]);
-    if(img)cmd+=IM(names.art,58,232,479,394);else{cmd+=R(58,232,479,394,[255,241,246]);cmd+=T('#'+ref,298,424,34,1,[217,54,107],'center')}
-    cmd+=T('Produto:',40,176,16,1,[34,33,36]);cmd+=T(cut(prod(item),34),118,176,16,0,[34,33,36]);
-    cmd+=T('Quantidade:',40,148,14,1,[34,33,36]);cmd+=T(String(qty(item)),142,148,14,0,[34,33,36]);
-    cmd+=T('Tema:',40,120,14,1,[34,33,36]);cmd+=T(cut(theme(item),36),88,120,14,0,[34,33,36]);
-    cmd+=T('Ref:',40,92,14,1,[34,33,36]);cmd+=T(ref,78,92,14,0,[34,33,36]);
-    cmd+=T('Ficha de Producao - Gerado automaticamente',40,46,8,0,[140,140,140]);
-    cmd+=T('Pagina '+page+' de '+total,538,46,8,0,[140,140,140],'right');
+    var cmd='',c=cust(order),v=sell(order),ref=code(item)||'--',right=555;
+    cmd+=R(0,0,595,842,[255,255,255]);
+    cmd+=R(0,834,198,8,[63,187,221]);cmd+=R(198,834,198,8,[247,220,98]);cmd+=R(396,834,199,8,[239,85,133]);
+    if(logo)cmd+=IM(names.logo,40,724,160,78);else cmd+=T('ARMAZEM',40,768,24,1,[0,0,0]);
+    cmd+=TR(ono(order),right,790,18,1,[239,85,133]);
+    cmd+=TR('Cliente: '+cut(c.name||'Nao informado',34),right,770,12,0,[34,33,36]);
+    cmd+=TR('Vendedora: '+cut(v.label||v.name||v.id||'--',24),right,755,12,0,[34,33,36]);
+    cmd+=TR('Data: '+date(order&&order.createdAt),right,740,12,0,[34,33,36]);
+    cmd+=L(40,712,555,712,[202,202,202],1);
+    cmd+=R(40,172,515,500,[247,253,255],[63,187,221],2);
+    if(img)cmd+=IM(names.art,50,182,495,480);else{cmd+=R(50,182,495,480,[255,241,246]);cmd+=T('#'+ref,298,420,34,1,[217,54,107])}
+    cmd+=line('Produto:',prod(item),40,136,16,16,109);
+    cmd+=line('Quantidade:',String(qty(item)),40,108,14,14,128);
+    if(theme(item))cmd+=line('Tema:',theme(item),40,80,14,14,86);
+    cmd+=line('Ref:',ref,40,52,14,14,73);
+    cmd+=T('Ficha de Producao - Gerado automaticamente',40,24,8,0,[153,153,153]);
+    cmd+=TR('Pagina '+page+' de '+total,555,24,8,0,[153,153,153]);
     return cmd;
   }
   function build(order,arts,artImgs,logo){
@@ -66,8 +69,8 @@
     objs[catalog-1]='<< /Type /Catalog /Pages '+pagesId+' 0 R >>';objs[pagesId-1]='<< /Type /Pages /Kids ['+pages.map(function(p){return p+' 0 R'}).join(' ')+'] /Count '+pages.length+' >>';
     var pdf='%PDF-1.4\n%\xE2\xE3\xCF\xD3\n',ofs=[0];objs.forEach(function(o,i){ofs[i+1]=pdf.length;pdf+=(i+1)+' 0 obj\n'+o+'\nendobj\n'});var start=pdf.length;pdf+='xref\n0 '+(objs.length+1)+'\n0000000000 65535 f \n';for(var j=1;j<ofs.length;j++)pdf+=String(ofs[j]).padStart(10,'0')+' 00000 n \n';pdf+='trailer << /Size '+(objs.length+1)+' /Root '+catalog+' 0 R >>\nstartxref\n'+start+'\n%%EOF';var u=new Uint8Array(pdf.length);for(var k=0;k<pdf.length;k++)u[k]=pdf.charCodeAt(k)&255;return u;
   }
-  async function download(order){var arts=arr(order);if(!arts.length){alert('Este pedido nao tem artes para gerar PDF.');return false}try{status('Gerando PDF... carregando imagens');var imgs=await eachLimit(arts,2,function(i){return thumb(imgUrl(i),1100,900,.88)});var logo=await thumb(LOGO,700,320,.88);status('Gerando PDF... montando arquivo');var bytes=build(order,arts,imgs,logo);var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));a.download=name(order);document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},1200);status('PDF baixado.');setTimeout(hide,1400);return true}catch(e){hide();alert('Nao consegui gerar o PDF.');return false}}
+  async function download(order){var arts=arr(order);if(!arts.length){alert('Este pedido nao tem artes para gerar PDF.');return false}try{status('Gerando PDF... carregando imagens');var imgs=await eachLimit(arts,2,function(i){return thumb(imgUrl(i),1200,1164,.90)});var logo=await thumb(LOGO,1200,585,.90);status('Gerando PDF... montando arquivo');var bytes=build(order,arts,imgs,logo);var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));a.download=name(order);document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},1200);status('PDF baixado.');setTimeout(hide,1400);return true}catch(e){hide();alert('Nao consegui gerar o PDF.');return false}}
   function bridge(){if(window.ArmazemOrderTools){window.ArmazemOrderTools.openPdf=download;window.__ARMAZEM_REAL_PDF_BRIDGE__=true;return true}return false}
-  window.ArmazemOrderPdf={version:'3',download:download};
+  window.ArmazemOrderPdf={version:'4',download:download};
   if(!bridge()){var tries=0,t=setInterval(function(){tries++;if(bridge()||tries>40)clearInterval(t)},250)}
 })();
