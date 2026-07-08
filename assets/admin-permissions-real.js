@@ -1,7 +1,7 @@
 (function(){
   if(window.__ARMAZEM_ACCESS_MANAGER_ACTIVE__)return;
   window.__ARMAZEM_ACCESS_MANAGER_ACTIVE__=true;
-  window.__ARMAZEM_ACCESS_MANAGER_VERSION__='2';
+  window.__ARMAZEM_ACCESS_MANAGER_VERSION__='3';
 
   var users=[],sellers=[],loading=false,saving=false,editingId='',lastCreated=null;
   function $(id){return document.getElementById(id)}
@@ -13,7 +13,7 @@
   function sellerId(s){return slug(s&&s.id||s&&s.label)}
   function sellerById(id){id=slug(id);return sellers.find(function(s){return sellerId(s)===id})||null}
   function generatedPassword(){var a='ABCDEFGHJKLMNPQRSTUVWXYZ23456789',out='';for(var i=0;i<8;i++)out+=a[Math.floor(Math.random()*a.length)];return out}
-  function injectStyle(){if($('accessManagerStyle'))return;var st=document.createElement('style');st.id='accessManagerStyle';st.textContent='.accessStats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}.accessStat{border:1px solid #f0e2e6;background:#fff;border-radius:22px;padding:16px}.accessStat span{display:block;color:#8d8590;font-weight:900;font-size:11px;text-transform:uppercase;letter-spacing:.06em}.accessStat b{display:block;margin-top:6px;font:900 26px/1 Montserrat,Arial}.accessCard{border:1px solid #f0e2e6;border-radius:24px;background:#fff;padding:16px;margin-top:12px}.accessCard.off{opacity:.65}.accessTop{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.accessTop h4{margin:0;font:900 20px/1.05 Montserrat,Arial}.accessMeta{margin:8px 0 0;color:#6f6872;font-weight:800;line-height:1.45}.accessActions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.accessResult{margin-top:14px;border:1px solid #d7f3df;background:#f2fff6;border-radius:20px;padding:14px}.accessResult pre{white-space:pre-wrap;margin:10px 0 0;font-weight:900}.accessDanger{margin-top:10px;border-top:1px solid #f0e2e6;padding-top:10px}.accessSubtle{color:#8d8590;font-size:12px;font-weight:800}.accessFormTitle{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}@media(max-width:760px){.accessStats{grid-template-columns:1fr 1fr}.accessTop{display:grid}.accessActions{justify-content:stretch}.accessActions .btn{width:100%}}';document.head.appendChild(st)}
+  function injectStyle(){if($('accessManagerStyle'))return;var st=document.createElement('style');st.id='accessManagerStyle';st.textContent='#permissionsPanel{width:100%;min-width:0}#accessManagerRoot{grid-column:1/-1;width:100%;min-width:0;display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px}.accessStats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}.accessStat{border:1px solid #f0e2e6;background:#fff;border-radius:22px;padding:16px;min-width:0}.accessStat span{display:block;color:#8d8590;font-weight:900;font-size:11px;text-transform:uppercase;letter-spacing:.06em}.accessStat b{display:block;margin-top:6px;font:900 26px/1 Montserrat,Arial}.accessCard{border:1px solid #f0e2e6;border-radius:24px;background:#fff;padding:16px;margin-top:12px}.accessCard.off{opacity:.65}.accessTop{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.accessTop h4{margin:0;font:900 20px/1.05 Montserrat,Arial}.accessMeta{margin:8px 0 0;color:#6f6872;font-weight:800;line-height:1.45}.accessActions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.accessResult{margin-top:14px;border:1px solid #d7f3df;background:#f2fff6;border-radius:20px;padding:14px}.accessResult pre{white-space:pre-wrap;margin:10px 0 0;font-weight:900}.accessDanger{margin-top:10px;border-top:1px solid #f0e2e6;padding-top:10px}.accessSubtle{color:#8d8590;font-size:12px;font-weight:800}.accessFormTitle{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}@media(max-width:760px){#accessManagerRoot{display:block}.accessStats{grid-template-columns:1fr 1fr}.accessTop{display:grid}.accessActions{justify-content:stretch}.accessActions .btn{width:100%}}';document.head.appendChild(st)}
   function ownPlaceholder(){injectStyle();var p=$('permissionsPanel');if(!p||p.dataset.accessOwner==='1')return;p.dataset.accessOwner='1';p.innerHTML='<div class="card span-12"><div class="sectionHead"><div><h3>Acessos da equipe</h3><p>Carregando gerenciador real de acessos...</p></div></div><p class="hint">Esta aba é controlada somente pelo gerenciador de acessos. Usuários são salvos no Supabase.</p></div>'}
 
   async function load(){
@@ -34,7 +34,7 @@
     injectStyle();
     var p=$('permissionsPanel');if(!p)return;
     p.dataset.accessOwner='1';
-    p.innerHTML='<div id="accessManagerRoot">'+statsHtml()+formHtml()+createdHtml()+listHtml()+'</div>';
+    p.innerHTML='<div id="accessManagerRoot" class="grid span-12">'+statsHtml()+formHtml()+createdHtml()+listHtml()+'</div>';
     bind();
   }
 
