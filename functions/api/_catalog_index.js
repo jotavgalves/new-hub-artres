@@ -1,4 +1,7 @@
 const DEFAULT_LIMIT = 80;
+const BOLINHAS_ROOT_FOLDER_ID = '193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae';
+const BOLINHAS_PRODUCT_KEY = '50x50';
+const BOLINHAS_PRODUCT_LABEL = 'Bolinhas 50x50';
 
 export function envConfig(env){
   const base = restBase(env && (env.ARTS_SUPABASE_URL || env.SUPABASE_ARTS_URL || env.ARTWORKS_SUPABASE_URL || env.SUPABASE_REST_URL));
@@ -96,16 +99,30 @@ export function dedupeRows(rows){
   });
 }
 
+export function isBolinhasRoot(row){
+  return String(row && row.root_drive_id || '') === BOLINHAS_ROOT_FOLDER_ID;
+}
+
+export function catalogProductKey(row){
+  return isBolinhasRoot(row) ? BOLINHAS_PRODUCT_KEY : productKey(row && row.product);
+}
+
+export function catalogProductLabel(row){
+  return isBolinhasRoot(row) ? BOLINHAS_PRODUCT_LABEL : (row && row.product || 'Arte');
+}
+
 export function mapArtwork(row){
   const image = row.thumbnail_url || (row.drive_id ? 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(row.drive_id) + '&sz=w1200' : '');
+  const product = catalogProductKey(row);
+  const productName = catalogProductLabel(row);
   return {
     id: row.drive_id || String(row.id || ''),
     code: String(row.code || row.name || '').replace(/^#/, ''),
     theme: row.theme || 'Sem tema',
     subtheme: row.subtheme || '',
-    product: productKey(row.product),
-    productName: row.product || 'Arte',
-    productLabel: row.product || 'Arte',
+    product,
+    productName,
+    productLabel: productName,
     size: row.size || '',
     dimension: row.size || '',
     driveFileId: row.drive_id || '',
@@ -115,11 +132,13 @@ export function mapArtwork(row){
     image,
     thumbnail: image,
     qty: 1,
-    details: {}
+    details: isBolinhasRoot(row) ? { size: row.size || '50x50' } : {}
   };
 }
 
 export function mapFolder(row){
+  const product = catalogProductKey(row);
+  const productName = isBolinhasRoot(row) ? BOLINHAS_PRODUCT_LABEL : (row.product || '');
   return {
     id: row.drive_id || '',
     parentId: row.parent_drive_id || '',
@@ -130,8 +149,8 @@ export function mapFolder(row){
     type: row.type || 'folder',
     path: row.path || '',
     theme: row.theme || '',
-    product: productKey(row.product),
-    productName: row.product || ''
+    product,
+    productName
   };
 }
 
