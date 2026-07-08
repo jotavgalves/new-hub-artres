@@ -1,68 +1,293 @@
-import { loadConfig, getActiveDrive, getBolinhas } from "./_config.js";
+import { loadConfig, getBolinhas } from "./_config.js";
 import { applyFolderRule, cleanLabel, displayTheme, isBlockedArt, isHiddenTheme, sortFolders, norm as normalizeText } from "./_catalog_rules.js";
-const DEFAULT_ROOT_FOLDER_ID="193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae";
-const DRIVE_API="https://www.googleapis.com/drive/v3/files";
-const FOLDER_MIME="application/vnd.google-apps.folder";
+import { baseIndexParams, cleanLike, dedupeRows, mapArtwork, productKey, readIndex, scoreRow } from "./_catalog_index.js";
+
+const DEFAULT_ROOT_FOLDER_ID = "193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae";
+const PAGE_SIZE = 500;
+const MAX_ROWS = 5000;
 
 export async function onRequestGet(context){
  try{
-  const apiKey=context.env.GOOGLE_API_KEY||context.env.GOOGLE_DRIVE_API_KEY||context.env.DRIVE_API_KEY;
-  if(!apiKey)return json({ok:false,error:"GOOGLE_API_KEY_NAO_CONFIGURADA"},500);
-  const {config}=await loadConfig(context.env); const drive=getActiveDrive(config,"bolinhas"); const bolinhas=getBolinhas(config);
-  const rootFolderId=sanitizeId(drive&&drive.folderId)||DEFAULT_ROOT_FOLDER_ID;
-  const url=new URL(context.request.url); const mode=String(url.searchParams.get("mode")||"themes");
-  const folderId=sanitizeId(url.searchParams.get("folderId"))||rootFolderId;
-  const theme=cleanLabel(url.searchParams.get("theme")||"");
-  const rawSearch=String(url.searchParams.get("q")||url.searchParams.get("code")||url.searchParams.get("imageId")||"").trim();
-  const searchCode=rawSearch.replace(/\D/g,"").slice(0,20);
-  const searchImageId=sanitizeId(url.searchParams.get("imageId")||rawSearch);
-  if(mode==="themes"){
-   const folders=(await listChildren(folderId,apiKey)).filter(f=>f.mimeType===FOLDER_MIME).map(f=>applyFolderRule({id:f.id,name:cleanLabel(f.name),rawName:f.name,kind:"theme"},config,"theme")).filter(f=>!f.hidden); sortFolders(folders);
-   return json({ok:true,mode,folders,configVersion:config.ui&&config.ui.cacheVersion||config.version||1},200,15);
+  const { config } = await loadConfig(context.env);
+  const bolinhas = getBolinhas(config);
+  const url = new URL(context.request.url);
+  const mode = String(url.searchParams.get("mode") || "themes");
+  const folderId = String(url.searchParams.get("folderId") || DEFAULT_ROOT_FOLDER_ID).trim();
+  const theme = cleanLabel(url.searchParams.get("theme") || "");
+  const rawSearch = String(url.searchParams.get("q") || url.searchParams.get("code") || url.searchParams.get("imageId") || "").trim();
+
+  if(mode === "themes"){
+   const folders = await themeFolders(context.env, config);
+   return json({ ok:true, mode, source:"catalog_index", folders, configVersion:config.ui&&config.ui.cacheVersion||config.version||1 }, 200, 15);
   }
-  if(mode==="products"){
-   const children=await listChildren(folderId,apiKey);
-   const folders=children.filter(f=>f.mimeType===FOLDER_MIME).map(f=>applyFolderRule({id:f.id,name:cleanLabel(f.name),rawName:f.name,kind:"folder",product:"",productName:"",label:cleanLabel(f.name)},config,"subtheme")).filter(f=>!f.hidden); sortFolders(folders);
-   if(children.some(f=>String(f.mimeType||"").startsWith("image/")))folders.push(makeBolinhasProduct(folderId,bolinhas));
-   return json({ok:true,mode,theme,folders},200,15);
+
+  if(mode === "products"){
+   const folders = await productFolders(context.env, { folderId, theme, config, bolinhas });
+   return json({ ok:true, mode, source:"catalog_index", theme, folders }, 200, 15);
   }
-  if(mode==="items"){
-   const items=(await listChildren(folderId,apiKey)).filter(f=>String(f.mimeType||"").startsWith("image/")).map(f=>itemFromFile(f,{folderId,theme,bolinhas,config})).filter(i=>i.code&&!isBlockedArt(i.code,config)&&!isHiddenTheme(i.theme,config)).sort((a,b)=>(Number(b.sortId)||0)-(Number(a.sortId)||0));
-   return json({ok:true,mode,theme:displayTheme(theme,config),product:bolinhas.productKey,productName:bolinhas.label,total:items.length,items},200,15);
+
+  if(mode === "items"){
+   const product = cleanLabel(url.searchParams.get("product") || "");
+   const items = await itemRows(context.env, { folderId, theme, product, config });
+   return json({ ok:true, mode, source:"catalog_index", theme:displayTheme(theme, config), product, productName:product, total:items.length, items }, 200, 15);
   }
-  if(mode==="globalSearch"){
-   const q=cleanLabel(rawSearch); if(!q||normalizeText(q).length<2)return json({ok:true,mode,folders:[],items:[]},200,15);
-   const [folders,items]=await Promise.all([searchFolders(q,apiKey,rootFolderId,config),searchImages(q,searchCode,searchImageId,apiKey,rootFolderId,bolinhas,config)]);
-   return json({ok:true,mode,totalFolders:folders.length,totalItems:items.length,folders,items},200,15);
+
+  if(mode === "globalSearch"){
+   const q = cleanLabel(rawSearch);
+   if(!q || normalizeText(q).length < 2) return json({ ok:true, mode, source:"catalog_index", folders:[], items:[] }, 200, 15);
+   const [folders, items] = await Promise.all([
+    searchFolders(context.env, q, config),
+    searchItems(context.env, q, config, 80)
+   ]);
+   return json({ ok:true, mode, source:"catalog_index", totalFolders:folders.length, totalItems:items.length, folders, items }, 200, 15);
   }
-  if(mode==="search"){
-   if((!searchCode||searchCode.length<2)&&!searchImageId&&!rawSearch)return json({ok:true,mode,items:[]},200,15);
-   const items=await searchImages(rawSearch,searchCode,searchImageId,apiKey,rootFolderId,bolinhas,config);
-   return json({ok:true,mode,total:items.length,items},200,15);
+
+  if(mode === "search"){
+   if(!rawSearch) return json({ ok:true, mode, source:"catalog_index", items:[] }, 200, 15);
+   const items = await searchItems(context.env, rawSearch, config, 80);
+   return json({ ok:true, mode, source:"catalog_index", total:items.length, items }, 200, 15);
   }
-  if(mode==="folderSearch"){
-   const q=cleanLabel(url.searchParams.get("q")||""); if(!q||normalizeText(q).length<2)return json({ok:true,mode,results:[]},200,15);
-   const results=await searchFolders(q,apiKey,rootFolderId,config); return json({ok:true,mode,total:results.length,results},200,15);
+
+  if(mode === "folderSearch"){
+   const q = cleanLabel(url.searchParams.get("q") || rawSearch || "");
+   if(!q || normalizeText(q).length < 2) return json({ ok:true, mode, source:"catalog_index", results:[] }, 200, 15);
+   const results = await searchFolders(context.env, q, config);
+   return json({ ok:true, mode, source:"catalog_index", total:results.length, results }, 200, 15);
   }
-  return json({ok:false,error:"MODO_INVALIDO"},400);
- }catch(error){return json({ok:false,error:"FALHA_AO_LER_DRIVE",detail:String(error&&error.message||error)},500)}
+
+  return json({ ok:false, error:"MODO_INVALIDO" }, 400);
+ }catch(error){
+  return json({ ok:false, error:"FALHA_AO_LER_CATALOG_INDEX", detail:String(error&&error.message||error) }, 500);
+ }
 }
-function makeBolinhasProduct(folderId,bolinhas){return{id:folderId,name:bolinhas.label,rawName:bolinhas.label,kind:"product",product:bolinhas.productKey,productName:bolinhas.label,label:bolinhas.label,unitPrice:bolinhas.unitPrice,price:bolinhas.unitPrice,priceLabel:bolinhas.priceLabel,minQty:bolinhas.minQty,step:bolinhas.step,directItems:true,skipProductsStep:bolinhas.skipProductsStep,disableCustomization:bolinhas.disableCustomization,customizationDisabled:bolinhas.disableCustomization,allowCustomSize:!bolinhas.disableCustomization,canCustomize:!bolinhas.disableCustomization}}
-async function listChildren(folderId,apiKey){const out=[];let pageToken="";do{const p=new URLSearchParams({key:apiKey,q:`'${folderId}' in parents and trashed = false`,fields:"nextPageToken, files(id,name,mimeType,webViewLink,modifiedTime,parents)",pageSize:"1000",orderBy:"folder,name_natural",supportsAllDrives:"true",includeItemsFromAllDrives:"true"});if(pageToken)p.set("pageToken",pageToken);const r=await fetch(`${DRIVE_API}?${p.toString()}`,{headers:{Accept:"application/json"}});if(!r.ok)throw new Error(`Drive API ${r.status}`);const d=await r.json();out.push(...(d.files||[]));pageToken=d.nextPageToken||""}while(pageToken);return out}
-async function searchFolders(query,apiKey,rootFolderId,config){const q=String(query||"").replace(/'/g,"\\'").trim();let out=[];try{const p=new URLSearchParams({key:apiKey,q:`name contains '${q}' and trashed = false and mimeType = '${FOLDER_MIME}'`,fields:"files(id,name,mimeType,parents)",pageSize:"40",orderBy:"name_natural",supportsAllDrives:"true",includeItemsFromAllDrives:"true"});const r=await fetch(`${DRIVE_API}?${p.toString()}`,{headers:{Accept:"application/json"}});if(r.ok){const d=await r.json();out=await foldersFromFiles(d.files||[],apiKey,rootFolderId,config)}}catch(_){}if(out.length<12){const deep=await deepSearch(rootFolderId,apiKey,config,{folderQuery:query,maxFolders:30,maxImages:0});for(const item of deep.folders){if(!out.some(x=>x.id===item.id))out.push(item)}}return out.slice(0,30).sort((a,b)=>a.path.localeCompare(b.path,"pt-BR",{numeric:true}))}
-async function foldersFromFiles(files,apiKey,rootFolderId,config){const out=[];for(const f of files){try{if(isHiddenTheme(f.name,config))continue;const ancestry=await buildAncestry(f.id,apiKey);const rootIndex=ancestry.findIndex(a=>a.id===rootFolderId);if(rootIndex===-1)continue;const belowRoot=ancestry.slice(rootIndex+1);if(!belowRoot.length)continue;const themeFolder=belowRoot[0];if(isHiddenTheme(themeFolder.name,config))continue;out.push(folderResult(f,belowRoot,config))}catch(_){}if(out.length>=30)break}return out}
-function folderResult(f,belowRoot,config){const themeFolder=belowRoot[0]||f;return{id:f.id,name:displayTheme(f.name,config),rawName:f.name,label:displayTheme(f.name,config),kind:"folder",product:"",productName:"",theme:displayTheme(themeFolder.name,config),themeId:themeFolder.id,trail:belowRoot.slice(1,Math.max(1,belowRoot.length-1)).filter(x=>!isHiddenTheme(x.name,config)).map(x=>({id:x.id,name:displayTheme(x.name,config),kind:"folder"})),path:belowRoot.map(x=>displayTheme(x.name,config)).join(" / ")}}
-async function searchImages(raw,codeValue,imageId,apiKey,rootFolderId,bolinhas,config){const out=[];if(imageId){const byId=await searchByImageId(imageId,apiKey,rootFolderId,bolinhas,config);out.push(...byId)}if(codeValue&&codeValue.length>=2&&!isBlockedArt(codeValue,config)){const byCode=await searchByCode(codeValue,apiKey,rootFolderId,bolinhas,config);for(const item of byCode){if(!out.some(x=>x.id===item.id))out.push(item)}}if(String(raw||"").replace(/\d/g,"").trim().length>=2){const byName=await searchByImageName(raw,apiKey,rootFolderId,bolinhas,config);for(const item of byName){if(!out.some(x=>x.id===item.id))out.push(item)}}if(out.length<12){const deep=await deepSearch(rootFolderId,apiKey,config,{textQuery:raw,codeQuery:codeValue,imageId:imageId,maxFolders:0,maxImages:24});for(const item of deep.images.map(x=>itemFromFile(x.file,{folderId:x.parentId,theme:x.themeLabel,bolinhas,config}))){if(!out.some(x=>x.id===item.id))out.push(item)}}return out.slice(0,24)}
-async function searchByImageName(query,apiKey,rootFolderId,bolinhas,config){const normalized=normalizeText(query);const token=(String(query||"").match(/[A-Za-zÀ-ÿ0-9]{2,}/)||[])[0];if(!token||!normalized)return[];const safe=token.replace(/'/g,"\\'");const p=new URLSearchParams({key:apiKey,q:`name contains '${safe}' and trashed = false and mimeType contains 'image/'`,fields:"files(id,name,mimeType,webViewLink,parents)",pageSize:"80",orderBy:"name_natural",supportsAllDrives:"true",includeItemsFromAllDrives:"true"});const r=await fetch(`${DRIVE_API}?${p.toString()}`,{headers:{Accept:"application/json"}});if(!r.ok)return[];const d=await r.json(),out=[];for(const f of(d.files||[])){const parsed=parseArtFilename(f.name),artCode=parsed.code;if(artCode&&isBlockedArt(artCode,config))continue;const parentId=f.parents&&f.parents[0]||"";let belowRoot=[];try{const ancestry=await buildAncestry(parentId,apiKey);const rootIndex=ancestry.findIndex(a=>a.id===rootFolderId);if(rootIndex===-1)continue;belowRoot=ancestry.slice(rootIndex+1)}catch(_){continue}const pathText=normalizeText(belowRoot.map(x=>x.name).join(" / "));if(!normalizeText(f.name).includes(normalized)&&!pathText.includes(normalized))continue;const themeLabel=parsed.theme||belowRoot.map(x=>cleanLabel(x.name)).join(" / ")||"Sem tema";if(isHiddenTheme(themeLabel,config)||belowRoot.some(x=>isHiddenTheme(x.name,config)))continue;out.push(itemFromFile(f,{folderId:parentId,theme:themeLabel,bolinhas,config}));if(out.length>=24)break}return out.sort((a,b)=>(Number(b.sortId)||0)-(Number(a.sortId)||0))}
-async function deepSearch(rootFolderId,apiKey,config,opts){const folderQuery=normalizeText(opts.folderQuery||""),textQuery=normalizeText(opts.textQuery||""),codeQuery=String(opts.codeQuery||"").replace(/\D/g,""),imageId=sanitizeId(opts.imageId||""),maxFolders=opts.maxFolders||0,maxImages=opts.maxImages||0,out={folders:[],images:[]};async function walk(folderId,path,depth){if(depth>7)return;const children=await listChildren(folderId,apiKey);for(const f of children){if(f.mimeType===FOLDER_MIME){if(!isHiddenTheme(f.name,config)){const nextPath=path.concat([f]);const text=normalizeText(nextPath.map(x=>x.name).join(" / "));if(maxFolders&&folderQuery&&text.includes(folderQuery)&&!out.folders.some(x=>x.id===f.id))out.folders.push(folderResult(f,nextPath,config));if(out.folders.length<maxFolders||out.images.length<maxImages)await walk(f.id,nextPath,depth+1)}}else if(String(f.mimeType||"").startsWith("image/")){if(!maxImages)continue;const parsed=parseArtFilename(f.name),artCode=parsed.code||"";const pathText=normalizeText(path.map(x=>x.name).join(" / "));const fileText=normalizeText(f.name);const matchId=imageId&&f.id===imageId;const matchCode=codeQuery&&artCode&&artCode.includes(codeQuery);const matchText=textQuery&&(fileText.includes(textQuery)||pathText.includes(textQuery));if((matchId||matchCode||matchText)&&!isBlockedArt(artCode,config)){const themeLabel=parsed.theme||path.map(x=>cleanLabel(x.name)).join(" / ")||"Sem tema";if(!isHiddenTheme(themeLabel,config)&&!path.some(x=>isHiddenTheme(x.name,config))&&!out.images.some(x=>x.file.id===f.id))out.images.push({file:f,parentId:folderId,themeLabel})}}if(out.folders.length>=maxFolders&&out.images.length>=maxImages)return}}await walk(rootFolderId,[],0);return out}
-async function searchByImageId(fileId,apiKey,rootFolderId,bolinhas,config){const id=sanitizeId(fileId);if(!id)return[];let f;try{f=await getImageFile(id,apiKey)}catch(_){return[]}if(!String(f.mimeType||"").startsWith("image/"))return[];const parsed=parseArtFilename(f.name),artCode=parsed.code;if(artCode&&isBlockedArt(artCode,config))return[];const parentId=f.parents&&f.parents[0]||"";const ancestry=await buildAncestry(parentId,apiKey);const rootIndex=ancestry.findIndex(a=>a.id===rootFolderId);if(rootIndex===-1)return[];const belowRoot=ancestry.slice(rootIndex+1);if(!belowRoot.length)return[];const themeLabel=parsed.theme||belowRoot.map(x=>cleanLabel(x.name)).join(" / ")||"Sem tema";if(isHiddenTheme(themeLabel,config)||belowRoot.some(x=>isHiddenTheme(x.name,config)))return[];return[itemFromFile(f,{folderId:parentId,theme:themeLabel,bolinhas,config})]}
-async function searchByCode(code,apiKey,rootFolderId,bolinhas,config){const safe=String(code||"").replace(/[^0-9]/g,"");if(!safe||safe.length<2||isBlockedArt(safe,config))return[];const p=new URLSearchParams({key:apiKey,q:`name contains '${safe}' and trashed = false and mimeType contains 'image/'`,fields:"files(id,name,mimeType,webViewLink,parents)",pageSize:"40",orderBy:"name_natural",supportsAllDrives:"true",includeItemsFromAllDrives:"true"});const r=await fetch(`${DRIVE_API}?${p.toString()}`,{headers:{Accept:"application/json"}});if(!r.ok)throw new Error(`Drive API ${r.status}`);const d=await r.json(),out=[];for(const f of(d.files||[])){const parsed=parseArtFilename(f.name),artCode=parsed.code;if(!artCode||!artCode.includes(safe)||isBlockedArt(artCode,config))continue;const parentId=f.parents&&f.parents[0]||"";const ancestry=await buildAncestry(parentId,apiKey);const rootIndex=ancestry.findIndex(a=>a.id===rootFolderId);if(rootIndex===-1)continue;const belowRoot=ancestry.slice(rootIndex+1);if(!belowRoot.length)continue;const themeLabel=parsed.theme||belowRoot.map(x=>cleanLabel(x.name)).join(" / ")||"Sem tema";if(isHiddenTheme(themeLabel,config)||belowRoot.some(x=>isHiddenTheme(x.name,config)))continue;out.push(itemFromFile(f,{folderId:parentId,theme:themeLabel,bolinhas,config}));if(out.length>=24)break}return out.sort((a,b)=>(Number(b.sortId)||0)-(Number(a.sortId)||0))}
-function itemFromFile(file,{folderId,theme,bolinhas,config}){const parsed=parseArtFilename(file.name);const image=`https://drive.google.com/thumbnail?id=${encodeURIComponent(file.id)}&sz=w1200`;return{id:file.id,code:parsed.code,sortId:Number(parsed.code)||0,theme:displayTheme(parsed.theme||theme||"Sem tema",config),product:bolinhas.productKey,productName:bolinhas.label,productLabel:bolinhas.label,size:parsed.dimension||"50x50",dimension:parsed.dimension||"50x50",embeddedTheme:parsed.theme,embeddedProduct:parsed.productRaw,originalName:file.name,themeId:"",productFolderId:folderId,image,thumbnail:image,driveUrl:file.webViewLink||`https://drive.google.com/file/d/${file.id}/view`,unitPrice:bolinhas.unitPrice,price:bolinhas.unitPrice,priceLabel:bolinhas.priceLabel,minQty:bolinhas.minQty,step:bolinhas.step,disableCustomization:bolinhas.disableCustomization,customizationDisabled:bolinhas.disableCustomization,allowCustomSize:!bolinhas.disableCustomization,canCustomize:!bolinhas.disableCustomization,measureDisabled:bolinhas.disableCustomization}}
-function parseArtFilename(value){const base=String(value||"").replace(/\.[^.]+$/,"").trim();const parts=base.split("_").map(p=>p.trim()).filter(Boolean);const leadingId=base.match(/^\s*(\d{1,20})(?:[_\-\s]|$)/);const code=leadingId?leadingId[1]:cleanCode(base);return{code,theme:cleanLabel(parts[1]||""),productRaw:cleanLabel(parts[2]||""),dimension:normalizeDimension(parts.slice(3).join(" "))}}
-async function buildAncestry(startFolderId,apiKey){const ancestry=[];let currentId=startFolderId;const seen=new Set();for(let depth=0;depth<12&&currentId&&!seen.has(currentId);depth++){seen.add(currentId);const file=await getFile(currentId,apiKey);ancestry.unshift(file);currentId=file.parents&&file.parents[0]}return ancestry}
-async function getFile(fileId,apiKey){const p=new URLSearchParams({key:apiKey,fields:"id,name,mimeType,parents",supportsAllDrives:"true"});const r=await fetch(`${DRIVE_API}/${encodeURIComponent(fileId)}?${p.toString()}`,{headers:{Accept:"application/json"}});if(!r.ok)throw new Error(`Drive file ${r.status}`);return r.json()}
-async function getImageFile(fileId,apiKey){const p=new URLSearchParams({key:apiKey,fields:"id,name,mimeType,parents,webViewLink",supportsAllDrives:"true"});const r=await fetch(`${DRIVE_API}/${encodeURIComponent(fileId)}?${p.toString()}`,{headers:{Accept:"application/json"}});if(!r.ok)throw new Error(`Drive file ${r.status}`);return r.json()}
-function cleanCode(value){const base=String(value||"").replace(/\.[^.]+$/,"").trim();const leadingId=base.match(/^\s*(\d{1,20})(?:[_\-\s]|$)/);if(leadingId)return leadingId[1];const arteMatch=base.match(/(?:arte|art)[^\d]*(\d+)/i);if(arteMatch)return arteMatch[1];const nums=base.match(/\d+/g);return nums?nums[0]:base.replace(/[^\w-]/g,"").toUpperCase()}
-function normalizeDimension(value){const text=String(value||"").trim();if(!text)return"";const compact=text.replace(/\s+/g,"").replace(/×/g,"x").toLowerCase();const sizeMatch=compact.match(/(\d+(?:[\.,]\d+)?)[xX](\d+(?:[\.,]\d+)?)/);if(sizeMatch)return`${sizeMatch[1]}x${sizeMatch[2]}`.replace(/,/g,".");return cleanLabel(text)}
-function sanitizeId(value){const id=String(value||"").trim();return/^[A-Za-z0-9_-]{10,}$/.test(id)?id:""}
-function json(payload,status=200,cache=0){return new Response(JSON.stringify(payload),{status,headers:{"Content-Type":"application/json; charset=utf-8","Cache-Control":cache?`public, max-age=${cache}, s-maxage=${cache}`:"no-store, max-age=0","X-Content-Type-Options":"nosniff"}})}
+
+async function themeFolders(env, config){
+ const rows = await allIndexRows(env, params => {
+  params.set("type", "eq.folder");
+  params.set("depth", "eq.1");
+ });
+ const folders = dedupeRows(rows)
+  .map(row => folderFromRow(row, config, "theme"))
+  .map(folder => applyFolderRule(folder, config, "theme"))
+  .filter(folder => !folder.hidden && !isHiddenTheme(folder.name, config));
+ sortFolders(folders);
+ return folders;
+}
+
+async function productFolders(env, { folderId, theme, config, bolinhas }){
+ const childRows = await allIndexRows(env, params => {
+  params.set("type", "eq.folder");
+  params.set("parent_drive_id", "eq." + folderId);
+ });
+ const folderCards = dedupeRows(childRows)
+  .map(row => folderFromRow(row, config, "folder"))
+  .map(folder => applyFolderRule(folder, config, "subtheme"))
+  .filter(folder => !folder.hidden && !isHiddenTheme(folder.name, config));
+ sortFolders(folderCards);
+
+ const artRows = await artworkRowsByParent(env, folderId);
+ const productCards = productsFromRows(artRows, { parentId:folderId, theme, bolinhas });
+ return folderCards.concat(productCards);
+}
+
+async function itemRows(env, { folderId, theme, product, config }){
+ const parsed = parseVirtualProductId(folderId);
+ const parentId = parsed ? parsed.parentId : folderId;
+ const wantedKey = parsed ? parsed.productKey : productKey(product);
+ const rows = await artworkRowsByParent(env, parentId);
+ const filtered = rows.filter(row => {
+  if(parsed) return productKey(row.product) === wantedKey;
+  if(product && rows.some(r => productKey(r.product) === wantedKey)) return productKey(row.product) === wantedKey;
+  return true;
+ });
+ return filtered
+  .map(row => itemFromRow(row, config, theme))
+  .filter(Boolean)
+  .sort((a,b) => (Number(b.sortId)||0) - (Number(a.sortId)||0));
+}
+
+async function artworkRowsByParent(env, parentId){
+ return dedupeRows(await allIndexRows(env, params => {
+  params.set("type", "eq.artwork");
+  params.set("parent_drive_id", "eq." + parentId);
+ }));
+}
+
+async function searchItems(env, query, config, limit){
+ const q = cleanLabel(query);
+ const normalized = cleanLike(q);
+ const digits = q.replace(/\D/g, "");
+ const out = [];
+
+ if(digits.length >= 2){
+  out.push(...await limitedRows(env, params => {
+   params.set("type", "eq.artwork");
+   params.set("code", "eq." + digits);
+  }, limit));
+ }
+
+ if(normalized.length >= 2){
+  out.push(...await limitedRows(env, params => {
+   params.set("type", "eq.artwork");
+   params.set("search_text", "ilike.*" + normalized + "*");
+  }, limit));
+
+  const tokens = normalized.split(" ").filter(Boolean).slice(0, 5);
+  if(tokens.length > 1){
+   const tokenRows = await limitedRows(env, params => {
+    params.set("type", "eq.artwork");
+    params.set("search_text", "ilike.*" + tokens[0] + "*");
+   }, limit * 2);
+   out.push(...tokenRows.filter(row => tokens.every(token => String(row.search_text||"").includes(token))));
+  }
+ }
+
+ return dedupeRows(out)
+  .map(row => itemFromRow(row, config))
+  .filter(Boolean)
+  .sort((a,b) => scoreRow(b, q) - scoreRow(a, q) || (Number(b.sortId)||0) - (Number(a.sortId)||0))
+  .slice(0, limit);
+}
+
+async function searchFolders(env, query, config){
+ const q = cleanLabel(query);
+ const normalized = cleanLike(q);
+ const rows = await limitedRows(env, params => {
+  params.set("type", "eq.folder");
+  params.set("search_text", "ilike.*" + normalized + "*");
+ }, 120);
+ return dedupeRows(rows)
+  .map(row => folderResultFromRow(row, config))
+  .filter(folder => !isHiddenTheme(folder.name, config) && !isHiddenTheme(folder.theme, config))
+  .sort((a,b) => String(a.path||a.name).localeCompare(String(b.path||b.name), "pt-BR", { numeric:true }))
+  .slice(0, 60);
+}
+
+function productsFromRows(rows, { parentId, theme, bolinhas }){
+ const seen = new Set();
+ const out = [];
+ for(const row of rows){
+  const label = cleanLabel(row.product || "Artes");
+  const key = productKey(label);
+  if(seen.has(key)) continue;
+  seen.add(key);
+  const product = {
+   id: virtualProductId(parentId, key, label),
+   name: label,
+   rawName: label,
+   label,
+   kind: "product",
+   product: key,
+   productName: label,
+   theme: theme || row.theme || "",
+   productFolderId: parentId,
+   directItems: true
+  };
+  if(key === (bolinhas && bolinhas.productKey)) Object.assign(product, {
+   unitPrice: bolinhas.unitPrice,
+   price: bolinhas.unitPrice,
+   priceLabel: bolinhas.priceLabel,
+   minQty: bolinhas.minQty,
+   step: bolinhas.step,
+   disableCustomization: bolinhas.disableCustomization,
+   customizationDisabled: bolinhas.disableCustomization,
+   allowCustomSize: !bolinhas.disableCustomization,
+   canCustomize: !bolinhas.disableCustomization
+  });
+  out.push(product);
+ }
+ return out.sort((a,b) => String(a.productName||a.name).localeCompare(String(b.productName||b.name), "pt-BR", { numeric:true }));
+}
+
+function itemFromRow(row, config, fallbackTheme){
+ const item = mapArtwork(row);
+ item.code = String(item.code || "").replace(/^#/, "");
+ if(!item.code || isBlockedArt(item.code, config)) return null;
+ item.theme = displayTheme(item.theme || fallbackTheme || "Sem tema", config);
+ if(isHiddenTheme(item.theme, config)) return null;
+ item.themeId = row.parent_drive_id || "";
+ item.sortId = Number(item.code) || 0;
+ item.productFolderId = row.parent_drive_id || "";
+ return item;
+}
+
+function folderFromRow(row, config, kind){
+ const raw = cleanLabel(row.name || row.theme || "Pasta");
+ const name = displayTheme(raw, config);
+ return {
+  id: row.drive_id || "",
+  parentId: row.parent_drive_id || "",
+  name,
+  rawName: raw,
+  label: name,
+  kind,
+  type: row.type || "folder",
+  path: displayPath(row.path || raw, config),
+  theme: displayTheme(row.theme || raw, config),
+  themeId: row.depth === 1 ? row.drive_id : row.parent_drive_id,
+  product: "",
+  productName: ""
+ };
+}
+
+function folderResultFromRow(row, config){
+ const folder = folderFromRow(row, config, "folder");
+ const parts = Array.isArray(row.path_parts) ? row.path_parts : [];
+ folder.theme = displayTheme(row.theme || parts[0] || folder.name, config);
+ folder.themeId = row.depth === 1 ? row.drive_id : row.parent_drive_id;
+ folder.trail = parts.slice(1).map((name, index) => ({
+  id: index === parts.length - 2 ? row.drive_id : "catalog-path-" + index + "-" + encodeURIComponent(name),
+  name: displayTheme(name, config),
+  kind: "folder"
+ }));
+ return folder;
+}
+
+function displayPath(path, config){
+ return String(path || "").split(" / ").map(part => displayTheme(part, config)).join(" / ");
+}
+
+async function allIndexRows(env, setup){
+ const rows = [];
+ for(let offset = 0; offset < MAX_ROWS; offset += PAGE_SIZE){
+  const batch = await limitedRows(env, params => {
+   setup(params);
+   params.set("offset", String(offset));
+  }, PAGE_SIZE);
+  rows.push(...batch);
+  if(batch.length < PAGE_SIZE) break;
+ }
+ return rows;
+}
+
+async function limitedRows(env, setup, limit){
+ const params = baseIndexParams(Math.min(Math.max(Number(limit)||80, 1), PAGE_SIZE));
+ setup(params);
+ return readIndex(env, params);
+}
+
+function virtualProductId(parentId, key, label){
+ return "catalog-index-product:" + encodeURIComponent(parentId) + ":" + encodeURIComponent(key) + ":" + encodeURIComponent(label || key);
+}
+
+function parseVirtualProductId(id){
+ const text = String(id || "");
+ if(!text.startsWith("catalog-index-product:")) return null;
+ const parts = text.split(":");
+ return {
+  parentId: decodeURIComponent(parts[1] || ""),
+  productKey: decodeURIComponent(parts[2] || ""),
+  label: decodeURIComponent(parts[3] || "")
+ };
+}
+
+function json(payload, status = 200, ttl = 0){
+ return new Response(JSON.stringify(payload), {
+  status,
+  headers: {
+   "Content-Type": "application/json; charset=utf-8",
+   "Cache-Control": ttl ? `public, max-age=${ttl}` : "no-store, max-age=0",
+   "X-Content-Type-Options": "nosniff"
+  }
+ });
+}
