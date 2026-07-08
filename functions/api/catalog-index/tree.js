@@ -1,4 +1,4 @@
-import { baseIndexParams, clampLimit, dedupeRows, json, mapArtwork, mapFolder, norm, productKey, readIndex } from '../_catalog_index.js';
+import { baseIndexParams, catalogProductKey, catalogProductLabel, clampLimit, dedupeRows, json, mapArtwork, mapFolder, norm, readIndex } from '../_catalog_index.js';
 
 const THEME_PAGE_SIZE = 500;
 const THEME_MAX_ROWS = 5000;
@@ -69,7 +69,10 @@ async function artworkRowsBy(env, filter, limit){
     params.set('theme', 'ilike.' + escapeIlike(filter.theme));
   }
   if(filter.product){
-    params.set('product', 'ilike.' + escapeIlike(filter.product));
+    const wanted = norm(filter.product);
+    if(wanted && !wanted.includes('bolinha') && wanted !== '50x50'){
+      params.set('product', 'ilike.' + escapeIlike(filter.product));
+    }
   }
   const rows = await readIndex(env, params);
   return dedupeRows(rows);
@@ -79,8 +82,9 @@ function productFoldersFromRows(rows){
   const seen = new Set();
   const out = [];
   for(const row of rows){
-    const label = row.product || 'Artes';
-    const key = norm(label);
+    const label = catalogProductLabel(row);
+    const product = catalogProductKey(row);
+    const key = product || norm(label);
     if(seen.has(key)) continue;
     seen.add(key);
     out.push({
@@ -89,7 +93,7 @@ function productFoldersFromRows(rows){
       rawName: label,
       label,
       kind: 'product',
-      product: productKey(label),
+      product,
       productName: label,
       theme: row.theme || '',
       path: [row.theme, label].filter(Boolean).join(' / ')
