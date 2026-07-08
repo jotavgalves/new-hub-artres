@@ -44,12 +44,13 @@
       var role=d.sessionUser&&d.sessionUser.role;
       if(role==='vendedora'){
         document.body.dataset.userRole='vendedora';
-        loadScript('adminVendorPanelScript','/assets/admin-vendor-panel.js?v=5');
+        loadScript('adminVendorPanelScript','/assets/admin-vendor-panel.js?v=6');
         return;
       }
     }catch(e){}
+    document.body.dataset.userRole='admin';
     loadScript('adminPedidosSidebarScript','/assets/pedidos-sidebar.js?v=4');
-    loadScript('adminOrdersUnifiedScript','/assets/admin-orders-unified.js?v=3');
+    loadScript('adminOrdersUnifiedScript','/assets/admin-orders-unified.js?v=4');
     loadScript('adminCampaignDiscountScript','/assets/admin-campaign-discount.js?v=1');
     loadScript('adminProductionScript','/assets/admin-production.js?v=1');
     loadScript('adminWhatsappRealScript','/assets/admin-whatsapp-real.js?v=1');
