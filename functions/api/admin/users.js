@@ -1,6 +1,6 @@
 import { json, loadConfig, saveConfig } from "../_config.js";
 import { supabaseReady, supabaseRequest } from "../_supabase.js";
-import { hashPassword, normalizeUsers, requireRole, safeUser, sanitizeUsers } from "./_auth.js";
+import { hashPassword, normalizeUsers, requireRole, safeUser } from "./_auth.js";
 
 export async function onRequestGet(context) {
   const auth = await requireRole(context.request, context.env, ["admin"]);
@@ -15,7 +15,7 @@ export async function onRequestGet(context) {
     storageReady,
     supabaseReady: supabaseReady(context.env),
     migrated,
-    users: sanitizeUsers(users),
+    users: users.map(publicUser),
     sellers: config.sellers || [],
     roles: ["vendedora"]
   });
@@ -60,7 +60,7 @@ export async function onRequestPost(context) {
   await upsertUser(context.env, user);
   await ensureConfigMode(context.env, config);
   const savedUsers = await listUsers(context.env, config);
-  return json({ ok: true, user: safeUser(user), users: sanitizeUsers(savedUsers), source: supabaseReady(context.env) ? "supabase" : "kv" });
+  return json({ ok: true, user: safeUser(user), users: savedUsers.map(publicUser), source: supabaseReady(context.env) ? "supabase" : "kv" });
 }
 
 export async function onRequestDelete(context) {
@@ -76,7 +76,7 @@ export async function onRequestDelete(context) {
   await migrateKvUsersToSupabase(context.env, config);
   await deleteUser(context.env, config, id);
   const users = await listUsers(context.env, config);
-  return json({ ok: true, deleted: true, id, users: sanitizeUsers(users), source: supabaseReady(context.env) ? "supabase" : "kv" });
+  return json({ ok: true, deleted: true, id, users: users.map(publicUser), source: supabaseReady(context.env) ? "supabase" : "kv" });
 }
 
 async function listUsers(env, config) {
@@ -150,6 +150,19 @@ function userFromRow(row = {}) {
     passwordHash: clean(row.password_hash || row.passwordHash || ""),
     createdAt: clean(row.created_at || row.createdAt || ""),
     updatedAt: clean(row.updated_at || row.updatedAt || "")
+  };
+}
+
+function publicUser(user = {}) {
+  return {
+    id: sanitizeId(user.id || user.username),
+    username: sanitizeId(user.username || user.id),
+    name: clean(user.name || user.username || user.id),
+    role: user.role === "admin" ? "admin" : "vendedora",
+    sellerId: sanitizeId(user.sellerId || user.seller || user.username || user.id),
+    active: user.active !== false,
+    createdAt: clean(user.createdAt || ""),
+    updatedAt: clean(user.updatedAt || "")
   };
 }
 
