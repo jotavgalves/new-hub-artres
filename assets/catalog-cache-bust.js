@@ -11,7 +11,7 @@
     document.head.appendChild(script);
   }
 
-  var CACHE_SCHEMA = 'catalog-index-v1';
+  var CACHE_SCHEMA = 'catalog-index-v2-bolinhas';
   var META_KEY = 'catalog-meta-version';
   var rawVersion = localStorage.getItem(META_KEY) || 'boot';
   var version = CACHE_SCHEMA + '-' + rawVersion;
