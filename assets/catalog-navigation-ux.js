@@ -75,6 +75,28 @@
     }
     return '← Voltar para temas';
   }
+  function hardBackToThemes(){
+    var search = byId('search');
+    if(search) search.value = '';
+
+    var allThemeButtons = Array.prototype.slice.call(document.querySelectorAll('#breadcrumbs button,.breadcrumbs button,.pathPill,.crumb,.backBtn'));
+    var themeButton = allThemeButtons.find(function(el){ return norm(el.textContent) === 'temas'; });
+    if(themeButton){
+      themeButton.dispatchEvent(new MouseEvent('click', { bubbles:true, cancelable:true, view:window }));
+      setTimeout(function(){
+        var stillSearch = isSearchView();
+        if(stillSearch) location.assign(location.pathname + location.search);
+      }, 120);
+      return;
+    }
+
+    if(typeof window.loadThemes === 'function'){
+      window.loadThemes();
+      return;
+    }
+
+    location.assign(location.pathname + location.search);
+  }
   function ensureGuide(){
     var top = document.querySelector('.topControls');
     if(!top || !top.parentNode) return null;
@@ -88,11 +110,7 @@
       var btn = guide.querySelector('#catalogSmartBack');
       btn.addEventListener('click', function(){
         if(isSearchView()){
-          var search = byId('search');
-          if(search) search.value = '';
-          var tema = visiblePills().filter(function(el){ return el.style.display !== 'none'; })[0];
-          if(tema) tema.click();
-          else if(typeof window.loadThemes === 'function') window.loadThemes();
+          hardBackToThemes();
           return;
         }
         if(typeof window.smartBack === 'function'){
