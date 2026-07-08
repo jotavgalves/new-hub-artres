@@ -10,7 +10,7 @@ const HERO_LOGO_CENTER_RE = /<style\s+id=["']heroLogoCenterStyle["']>[^<]*<\/sty
 const ORDER_TOOLS_RE = /<script\s+src=["']\/assets\/order-action-tools\.js\?v=[^"']+["']\s+defer><\/script>/g;
 const ADMIN_UI_FIX_RE = /<script\s+src=["']\/assets\/admin-ui-fix\.js\?v=[^"']+["']\s+defer><\/script>/g;
 const PERMISSIONS_REAL_RE = /<script\s+src=["']\/assets\/admin-permissions-real\.js\?v=[^"']+["']\s+defer><\/script>/g;
-const VENDOR_PANEL_RE = /<script\s+src=["']\/assets\/admin-vendor-panel\.js\?v=[^"']+["]\s+defer><\/script>/g;
+const VENDOR_PANEL_RE = /<script\s+src=["']\/assets\/admin-vendor-panel\.js\?v=[^"']+["']\s+defer><\/script>/g;
 const ORDERS_UNIFIED_RE = /<script\s+src=["']\/assets\/admin-orders-unified\.js\?v=[^"']+["']\s+defer><\/script>/g;
 
 export async function onRequest(context) {
