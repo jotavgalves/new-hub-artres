@@ -1,5 +1,8 @@
 import { baseIndexParams, clampLimit, dedupeRows, json, mapArtwork, mapFolder, norm, productKey, readIndex } from '../_catalog_index.js';
 
+const THEME_PAGE_SIZE = 500;
+const THEME_MAX_ROWS = 5000;
+
 export async function onRequestGet(context){
   try{
     const url = new URL(context.request.url);
@@ -7,7 +10,7 @@ export async function onRequestGet(context){
     const limit = clampLimit(url.searchParams.get('limit') || 300);
 
     if(mode === 'themes'){
-      const folders = await themeFolders(context.env, limit);
+      const folders = await themeFolders(context.env);
       return json({ ok:true, mode, source:'catalog_index', total:folders.length, folders });
     }
 
@@ -38,12 +41,18 @@ export async function onRequestGet(context){
   }
 }
 
-async function themeFolders(env, limit){
-  const params = baseIndexParams(limit);
-  params.set('type', 'eq.folder');
-  params.set('depth', 'eq.1');
-  const rows = await readIndex(env, params);
-  return rows.map(mapFolder);
+async function themeFolders(env){
+  const rows = [];
+  for(let offset = 0; offset < THEME_MAX_ROWS; offset += THEME_PAGE_SIZE){
+    const params = baseIndexParams(THEME_PAGE_SIZE);
+    params.set('offset', String(offset));
+    params.set('type', 'eq.folder');
+    params.set('depth', 'eq.1');
+    const batch = await readIndex(env, params);
+    rows.push(...batch);
+    if(batch.length < THEME_PAGE_SIZE) break;
+  }
+  return dedupeRows(rows).map(mapFolder);
 }
 
 async function childrenRows(env, parentDriveId, limit){
