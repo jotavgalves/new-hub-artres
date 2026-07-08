@@ -28,6 +28,16 @@
     return Array.prototype.slice.call(b.querySelectorAll('button,.pathPill,.crumb,.backBtn'))
       .filter(function(el){ return !el.hidden && el.style.display !== 'none'; });
   }
+  function viewTitle(){
+    return clean((byId('viewTitle') || {}).textContent || '');
+  }
+  function searchValue(){
+    return clean((byId('search') || {}).value || '');
+  }
+  function isSearchView(){
+    var title = norm(viewTitle());
+    return title.indexOf('resultado da busca') !== -1 || title.indexOf('resultado') !== -1 && searchValue();
+  }
   function simplifyBreadcrumbs(){
     var pills = visiblePills();
     var seen = [];
@@ -57,6 +67,7 @@
       .filter(Boolean);
   }
   function backLabel(labels){
+    if(isSearchView()) return '← Voltar para temas';
     if(labels.length <= 1) return '';
     var last = norm(labels[labels.length - 1]);
     if(last.indexOf('bolinha') !== -1 || last.indexOf('sacolinha') !== -1 || last.indexOf('cilind') !== -1 || last.indexOf('romano') !== -1 || last.indexOf('painel') !== -1){
@@ -76,6 +87,14 @@
       top.parentNode.insertBefore(guide, top);
       var btn = guide.querySelector('#catalogSmartBack');
       btn.addEventListener('click', function(){
+        if(isSearchView()){
+          var search = byId('search');
+          if(search) search.value = '';
+          var tema = visiblePills().filter(function(el){ return el.style.display !== 'none'; })[0];
+          if(tema) tema.click();
+          else if(typeof window.loadThemes === 'function') window.loadThemes();
+          return;
+        }
         if(typeof window.smartBack === 'function'){
           window.smartBack();
           return;
@@ -100,6 +119,10 @@
     }
     guide.style.display = '';
     btn.textContent = label;
+    if(isSearchView()){
+      where.textContent = searchValue() ? 'Resultado para ' + searchValue() : 'Resultado da busca';
+      return;
+    }
     where.textContent = labels.filter(function(x){ return norm(x) !== 'temas'; }).join(' · ');
   }
   function installStyle(){
