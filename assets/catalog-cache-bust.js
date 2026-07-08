@@ -16,7 +16,6 @@
   var metaPromise = null;
 
   function isDriveCacheKey(key){ return String(key || '').indexOf('drive-cache:') === 0; }
-  function isVersionedKey(key){ return String(key || '').indexOf('drive-cache:v') === 0; }
   function baseKey(key){ return String(key || '').replace(/^drive-cache:v[^:]+:/, 'drive-cache:'); }
   function versionedKey(key){
     var raw = baseKey(key);
@@ -48,7 +47,7 @@
     return metaPromise;
   }
 
-  loadScript('catalogRuntimeScript','/assets/catalog-runtime.js?v=2');
+  loadScript('catalogRuntimeSafeScript','/assets/catalog-runtime-safe.js?v=1');
   loadMeta();
 
   try {
