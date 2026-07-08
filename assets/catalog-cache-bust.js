@@ -11,8 +11,10 @@
     document.head.appendChild(script);
   }
 
+  var CACHE_SCHEMA = 'catalog-index-v1';
   var META_KEY = 'catalog-meta-version';
-  var version = localStorage.getItem(META_KEY) || 'boot';
+  var rawVersion = localStorage.getItem(META_KEY) || 'boot';
+  var version = CACHE_SCHEMA + '-' + rawVersion;
   var metaPromise = null;
 
   function isDriveCacheKey(key){ return String(key || '').indexOf('drive-cache:') === 0; }
@@ -35,15 +37,18 @@
     metaPromise = fetch('/api/catalog-meta?_ts=' + Date.now(), { cache:'no-store', headers:{ 'Cache-Control':'no-store' } })
       .then(function(r){ return r.json(); })
       .then(function(meta){
-        var next = String(meta.catalogVersion || meta.version || '1');
+        var nextRaw = String(meta.catalogVersion || meta.version || '1');
+        var next = CACHE_SCHEMA + '-' + nextRaw;
         if (next !== version) {
           version = next;
-          localStorage.setItem(META_KEY, version);
+          localStorage.setItem(META_KEY, nextRaw);
+          purgeOldCaches(version);
+        } else {
           purgeOldCaches(version);
         }
         return meta;
       })
-      .catch(function(){ return { catalogVersion: version }; });
+      .catch(function(){ purgeOldCaches(version); return { catalogVersion: version }; });
     return metaPromise;
   }
 
