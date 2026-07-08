@@ -1,4 +1,4 @@
-const CACHE_BUST_SCRIPT = '<script src="/assets/catalog-cache-bust.js?v=7"></script>';
+const CACHE_BUST_SCRIPT = '<script src="/assets/catalog-cache-bust.js?v=8"></script>';
 const CUSTOMER_CHECKOUT_SCRIPT = '<script src="/assets/customer-checkout.js?v=6" defer></script>';
 const CATALOG_DRIVE_SEARCH_SCRIPT = '<scr' + 'ipt src="/assets/catalog-drive-search.js?v=3" defer></scr' + 'ipt>';
 const HERO_LOGO_CENTER_STYLE = '<style id="heroLogoCenterStyle">.brand .logo{margin-left:auto;margin-right:auto}</style>';
@@ -10,7 +10,7 @@ const HERO_LOGO_CENTER_RE = /<style\s+id=["']heroLogoCenterStyle["']>[^<]*<\/sty
 const ORDER_TOOLS_RE = /<script\s+src=["']\/assets\/order-action-tools\.js\?v=[^"']+["']\s+defer><\/script>/g;
 const ADMIN_UI_FIX_RE = /<script\s+src=["']\/assets\/admin-ui-fix\.js\?v=[^"']+["']\s+defer><\/script>/g;
 const PERMISSIONS_REAL_RE = /<script\s+src=["']\/assets\/admin-permissions-real\.js\?v=[^"']+["']\s+defer><\/script>/g;
-const VENDOR_PANEL_RE = /<script\s+src=["']\/assets\/admin-vendor-panel\.js\?v=[^"']+["']\s+defer><\/script>/g;
+const VENDOR_PANEL_RE = /<script\s+src=["']\/assets\/admin-vendor-panel\.js\?v=[^"']+["]\s+defer><\/script>/g;
 const ORDERS_UNIFIED_RE = /<script\s+src=["']\/assets\/admin-orders-unified\.js\?v=[^"']+["']\s+defer><\/script>/g;
 
 export async function onRequest(context) {
