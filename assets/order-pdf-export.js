@@ -1,5 +1,5 @@
 (function(){
-  if(window.ArmazemOrderPdf&&window.ArmazemOrderPdf.version==='4')return;
+  if(window.ArmazemOrderPdf&&window.ArmazemOrderPdf.version==='5')return;
   var LOGO='https://acompanhe-armazem.pages.dev/assets/logo.svg';
   function s(v){return String(v==null?'':v).trim()}
   function asc(v){return s(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\x20-\x7E]/g,'')}
@@ -35,7 +35,7 @@
   }
   async function eachLimit(list,limit,fn){var out=Array(list.length),n=0;async function run(){while(n<list.length){var i=n++;out[i]=await fn(list[i],i)}}var a=[];for(var i=0;i<Math.min(limit,list.length);i++)a.push(run());await Promise.all(a);return out}
   function rgb(r,g,b){return (r/255).toFixed(3)+' '+(g/255).toFixed(3)+' '+(b/255).toFixed(3)}
-  function widthOf(txt,sz){return asc(txt).length*sz*.49}
+  function widthOf(txt,sz){return asc(txt).length*sz*.60}
   function T(txt,x,y,sz,bold,col){col=col||[34,33,36];return 'BT /'+(bold?'F2':'F1')+' '+sz+' Tf '+rgb(col[0],col[1],col[2])+' rg '+x.toFixed(2)+' '+y.toFixed(2)+' Td ('+pdfEsc(txt)+') Tj ET\n'}
   function TR(txt,right,y,sz,bold,col){return T(txt,right-widthOf(txt,sz),y,sz,bold,col)}
   function R(x,y,w,h,fill,stroke,lw){var a='';if(lw)a+=lw+' w ';if(fill)a+=rgb(fill[0],fill[1],fill[2])+' rg ';if(stroke)a+=rgb(stroke[0],stroke[1],stroke[2])+' RG ';return a+x+' '+y+' '+w+' '+h+' re '+(fill&&stroke?'B':fill?'f':'S')+'\n'}
@@ -71,6 +71,6 @@
   }
   async function download(order){var arts=arr(order);if(!arts.length){alert('Este pedido nao tem artes para gerar PDF.');return false}try{status('Gerando PDF... carregando imagens');var imgs=await eachLimit(arts,2,function(i){return thumb(imgUrl(i),1200,1164,.90)});var logo=await thumb(LOGO,1200,585,.90);status('Gerando PDF... montando arquivo');var bytes=build(order,arts,imgs,logo);var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));a.download=name(order);document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},1200);status('PDF baixado.');setTimeout(hide,1400);return true}catch(e){hide();alert('Nao consegui gerar o PDF.');return false}}
   function bridge(){if(window.ArmazemOrderTools){window.ArmazemOrderTools.openPdf=download;window.__ARMAZEM_REAL_PDF_BRIDGE__=true;return true}return false}
-  window.ArmazemOrderPdf={version:'4',download:download};
+  window.ArmazemOrderPdf={version:'5',download:download};
   if(!bridge()){var tries=0,t=setInterval(function(){tries++;if(bridge()||tries>40)clearInterval(t)},250)}
 })();
