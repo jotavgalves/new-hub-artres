@@ -48,7 +48,7 @@
     return metaPromise;
   }
 
-  loadScript('catalogRuntimeScript','/assets/catalog-runtime.js?v=1');
+  loadScript('catalogRuntimeScript','/assets/catalog-runtime.js?v=2');
   loadMeta();
 
   try {
