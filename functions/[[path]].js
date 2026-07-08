@@ -1,11 +1,13 @@
 const CACHE_BUST_SCRIPT = '<script src="/assets/catalog-cache-bust.js?v=9"></script>';
 const CUSTOMER_CHECKOUT_SCRIPT = '<script src="/assets/customer-checkout.js?v=6" defer></script>';
 const CATALOG_DRIVE_SEARCH_SCRIPT = '<scr' + 'ipt src="/assets/catalog-drive-search.js?v=4" defer></scr' + 'ipt>';
+const CATALOG_NAV_UX_SCRIPT = '<script src="/assets/catalog-navigation-ux.js?v=1" defer></script>';
 const HERO_LOGO_CENTER_STYLE = '<style id="heroLogoCenterStyle">.brand .logo{margin-left:auto;margin-right:auto}</style>';
 const ORDER_TOOLS_SCRIPT = '<script src="/assets/order-action-tools.js?v=4" defer></script>';
 const CACHE_BUST_RE = /<script\s+src=["']\/assets\/catalog-cache-bust\.js\?v=[^"']+["']><\/script>/g;
 const CUSTOMER_CHECKOUT_RE = /<script\s+src=["']\/assets\/customer-checkout\.js\?v=[^"']+["']\s+defer><\/script>/g;
 const CATALOG_DRIVE_SEARCH_RE = new RegExp("<scr" + "ipt\\s+src=[\"']\\/assets\\/catalog-drive-search\\.js\\?v=[^\"']+[\"']\\s+defer><\\/scr" + "ipt>", "g");
+const CATALOG_NAV_UX_RE = /<script\s+src=["']\/assets\/catalog-navigation-ux\.js\?v=[^"']+["']\s+defer><\/script>/g;
 const HERO_LOGO_CENTER_RE = /<style\s+id=["']heroLogoCenterStyle["']>[^<]*<\/style>/g;
 const ORDER_TOOLS_RE = /<script\s+src=["']\/assets\/order-action-tools\.js\?v=[^"']+["']\s+defer><\/script>/g;
 const ADMIN_UI_FIX_RE = /<script\s+src=["']\/assets\/admin-ui-fix\.js\?v=[^"']+["']\s+defer><\/script>/g;
@@ -38,6 +40,7 @@ export async function onRequest(context) {
   } else {
     html = html.replace(HERO_LOGO_CENTER_RE, '');
     html = html.replace(CATALOG_DRIVE_SEARCH_RE, '');
+    html = html.replace(CATALOG_NAV_UX_RE, '');
     html = html.replace('</head>', `${HERO_LOGO_CENTER_STYLE}</head>`);
 
     if (CACHE_BUST_RE.test(html)) html = html.replace(CACHE_BUST_RE, CACHE_BUST_SCRIPT);
@@ -46,7 +49,7 @@ export async function onRequest(context) {
     if (CUSTOMER_CHECKOUT_RE.test(html)) html = html.replace(CUSTOMER_CHECKOUT_RE, CUSTOMER_CHECKOUT_SCRIPT);
     else html = html.replace('</head>', `${CUSTOMER_CHECKOUT_SCRIPT}</head>`);
 
-    html = html.replace('</head>', `${CATALOG_DRIVE_SEARCH_SCRIPT}</head>`);
+    html = html.replace('</head>', `${CATALOG_DRIVE_SEARCH_SCRIPT}${CATALOG_NAV_UX_SCRIPT}</head>`);
   }
 
   const headers = new Headers(assetResponse.headers);
