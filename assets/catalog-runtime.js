@@ -4,9 +4,13 @@
   var memory = new Map();
   var rules = { hiddenArtCodes:[], hiddenThemeKeys:[], hiddenProducts:[], rulesHash:'' };
   var rulesPromise = null;
+  var searchTimer = null;
+  var searchSeq = 0;
+  var searchActive = false;
   function norm(v){ return String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[_-]+/g,' ').replace(/\s+/g,' ').trim(); }
   function code(v){ return String(v || '').replace(/\D/g,''); }
   function key(params){ return new URLSearchParams(params || {}).toString(); }
+  function escHtml(v){ return String(v == null ? '' : v).replace(/[&<>'"]/g, function(m){ return {'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]; }); }
   function escSel(v){ return (window.CSS && CSS.escape) ? CSS.escape(v) : String(v).replace(/[^a-zA-Z0-9_-]/g,'\\$&'); }
   function currentThemeName(){ try { return typeof fullThemeName === 'function' ? fullThemeName() : ((selectedTheme && selectedTheme.name) || ''); } catch(e) { return ''; } }
   function itemSource(id){ return (Array.isArray(items) && items.find(function(x){return x.id===id;})) || (Array.isArray(cart) && cart.find(function(x){return x.id===id;})) || (favItems && favItems[id]) || null; }
@@ -141,10 +145,71 @@
       loadProducts.__memory = true;
     }
   }
-  function boot(){ wrapActions(); wrapCache(); refreshRules(false).then(applyRules); }
+  function driveJson(params){ return fetch('/api/drive?' + new URLSearchParams(params).toString(), { cache:'no-store' }).then(function(r){ return r.json(); }); }
+  function artCard(item){
+    var id = escHtml(item.id || item.code || '');
+    var image = escHtml(item.thumbnail || item.image || '');
+    var itemCode = escHtml(item.code || '');
+    var theme = escHtml(item.theme || item.embeddedTheme || 'Sem tema');
+    var productName = escHtml(item.productName || item.productLabel || item.product || 'Arte');
+    var price = escHtml(item.priceLabel || '');
+    return '<article class="card" data-card="'+id+'"><div class="thumbWrap"><img class="thumb" src="'+image+'" loading="lazy" alt="Arte #'+itemCode+'"><span class="code">#'+itemCode+'</span><span class="badge">Toque para ver melhor</span><button class="favBtn" data-fav="'+id+'" type="button">♡</button></div><div class="info"><h3 class="codeTitle">Arte #'+itemCode+'</h3><div class="miniRow"><span class="mini">'+theme+'</span><span class="mini">'+productName+'</span></div>'+(price?'<span class="artPrice">'+price+'</span>':'')+'<div class="cardActions"><button class="selBtn" data-select="'+id+'" type="button">Adicionar arte</button></div></div></article>';
+  }
+  function renderGlobalResults(q, folders, arts){
+    var body = document.querySelector('.catBody');
+    if(!body) return;
+    try{ items = arts || []; view = 'items'; showFavs = false; }catch(e){}
+    var html = '<div class="searchGlobal"><div class="sectionHead" style="margin-bottom:14px"><div><h3 style="margin:0;font-family:Montserrat">Resultados da busca</h3><p class="caption">Busca por subtemas, pastas, código da arte e ID real da imagem: <b>'+escHtml(q)+'</b></p></div></div>';
+    if(folders && folders.length){
+      html += '<div class="productGrid" style="margin-bottom:18px">' + folders.map(function(f,idx){ return '<button class="productCard" type="button" data-search-folder="'+idx+'"><b>'+escHtml(f.name || f.label || 'Subtema')+'</b><span>'+escHtml(f.path || f.theme || 'Abrir subtema')+'</span></button>'; }).join('') + '</div>';
+    }
+    if(arts && arts.length){ html += '<div class="grid">' + arts.map(artCard).join('') + '</div>'; }
+    if((!folders || !folders.length) && (!arts || !arts.length)) html += '<p class="hint">Nada encontrado. Tente o código da arte, o nome do subtema ou o ID da imagem do Drive.</p>';
+    html += '</div>';
+    body.innerHTML = html;
+    document.querySelectorAll('[data-search-folder]').forEach(function(btn){ btn.onclick = function(){ openSearchFolder(folders[Number(btn.dataset.searchFolder)]); }; });
+    document.querySelectorAll('[data-card]').forEach(function(card){ bindCard(card); updateCard(card.getAttribute('data-card')); });
+  }
+  function openSearchFolder(folder){
+    if(!folder) return;
+    try{ document.getElementById('search').value = ''; }catch(e){}
+    searchActive = false;
+    if(typeof loadProducts === 'function') loadProducts(folder, 'root');
+  }
+  function restoreCurrent(){
+    try{
+      if(typeof renderItems === 'function' && view === 'items') renderItems();
+      else if(typeof showProducts === 'function' && view === 'products') showProducts();
+      else if(typeof showThemes === 'function') showThemes();
+    }catch(e){}
+  }
+  function bindGlobalSearch(){
+    var input = document.getElementById('search');
+    if(!input || input.__globalCatalogSearch) return;
+    input.__globalCatalogSearch = true;
+    input.addEventListener('input', function(e){
+      var q = String(input.value || '').trim();
+      if(q.length < 2){ if(searchActive){ searchActive=false; setTimeout(restoreCurrent,0); } return; }
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      searchActive = true;
+      clearTimeout(searchTimer);
+      var seq = ++searchSeq;
+      searchTimer = setTimeout(function(){
+        var hasImageQuery = /\d{2,}/.test(q) || /^[A-Za-z0-9_-]{10,}$/.test(q);
+        var folderPromise = driveJson({mode:'folderSearch', q:q}).catch(function(){ return {results:[]}; });
+        var artPromise = hasImageQuery ? driveJson({mode:'search', q:q}).catch(function(){ return {items:[]}; }) : Promise.resolve({items:[]});
+        Promise.all([folderPromise, artPromise]).then(function(all){
+          if(seq !== searchSeq || !searchActive) return;
+          renderGlobalResults(q, all[0].results || [], all[1].items || []);
+        });
+      }, 260);
+    }, true);
+  }
+  function boot(){ wrapActions(); wrapCache(); bindGlobalSearch(); refreshRules(false).then(applyRules); }
   document.addEventListener('DOMContentLoaded', boot);
   window.addEventListener('load', boot);
   document.addEventListener('visibilitychange', function(){ if(!document.hidden) refreshRules(true); });
-  setInterval(function(){ refreshRules(true); }, 15000);
+  setInterval(function(){ refreshRules(true); bindGlobalSearch(); }, 15000);
   boot();
 })();
