@@ -1,4 +1,5 @@
 import { loadConfig } from "../_config.js";
+import { supabaseReady, supabaseRequest } from "../_supabase.js";
 
 const COOKIE_NAME = "armazem_admin_session";
 const SESSION_MAX_AGE = 60 * 60 * 12;
@@ -70,6 +71,13 @@ export async function authenticateUser(env, username, password) {
     return { ok: true, user: adminUser() };
   }
 
+  const supabaseUser = await findSupabaseStaffUser(env, login);
+  if (supabaseUser) {
+    const verified = await verifyPassword(pass, supabaseUser.passwordHash || "");
+    if (!verified) return { ok: false, status: 401, error: "USUARIO_OU_SENHA_INVALIDOS" };
+    return { ok: true, user: safeUser(supabaseUser) };
+  }
+
   const { config } = await loadConfig(env);
   const users = normalizeUsers(config.permissions && config.permissions.users);
   const user = users.find(u => u.active !== false && [u.username, u.id].map(x => clean(x).toLowerCase()).includes(login));
@@ -77,6 +85,30 @@ export async function authenticateUser(env, username, password) {
   const verified = await verifyPassword(pass, user.passwordHash || "");
   if (!verified) return { ok: false, status: 401, error: "USUARIO_OU_SENHA_INVALIDOS" };
   return { ok: true, user: safeUser(user) };
+}
+
+async function findSupabaseStaffUser(env, login) {
+  if (!supabaseReady(env)) return null;
+  const wanted = sanitizeId(login);
+  if (!wanted) return null;
+  try {
+    const rows = await supabaseRequest(env, `/staff_users?select=*&active=eq.true&or=(username.eq.${encodeURIComponent(wanted)},id.eq.${encodeURIComponent(wanted)})&limit=1`);
+    const row = Array.isArray(rows) && rows[0] ? rows[0] : null;
+    if (!row) return null;
+    return {
+      id: sanitizeId(row.id),
+      username: sanitizeId(row.username || row.id),
+      name: clean(row.name || row.username || row.id),
+      role: row.role === "admin" ? "admin" : "vendedora",
+      sellerId: sanitizeId(row.seller_id || row.sellerId || row.username || row.id),
+      active: row.active !== false,
+      passwordHash: clean(row.password_hash || row.passwordHash || ""),
+      createdAt: clean(row.created_at || row.createdAt || ""),
+      updatedAt: clean(row.updated_at || row.updatedAt || "")
+    };
+  } catch (_) {
+    return null;
+  }
 }
 
 export function adminUser() {
