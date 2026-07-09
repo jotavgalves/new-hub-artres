@@ -1,3 +1,4 @@
+import { baseIndexParams, readIndex, norm as normalizeText } from "../_catalog_index.js";
 import { loadConfig } from "../_config.js";
 import { hydrateOrderNumbers } from "../_order_numbers.js";
 import { findOrderInSupabase, saveOrderToSupabase, supabaseReady } from "../_supabase.js";
@@ -75,8 +76,9 @@ export async function findOrderByNumber(env, number) {
   return hit || { order: null, key: "", error: "PEDIDO_NAO_ENCONTRADO" };
 }
 
-export function buildProductionPayload(order) {
+export async function buildProductionPayload(order, env) {
   const items = normalizeItems(order.items || []);
+  const artworkNames = await artworkNamesByCode(env, items);
   const customer = order.customer || {};
   const seller = order.seller || {};
   const orderNumber = order.orderNumber || order.orderCode || order.displayId || order.id;
@@ -87,8 +89,58 @@ export function buildProductionPayload(order) {
     createdAt: order.createdAt || "",
     createdAtFormatted: formatDate(order.createdAt),
     sellerName: clean(seller.label || seller.name || seller.nome || ""),
-    items: items.map(item => ({ id: item.id, quantity: item.quantity }))
+    items: items.map(item => ({ id: item.id, name: artworkNames.get(item.id) || item.name || "", quantity: item.quantity }))
   };
+}
+
+async function artworkNamesByCode(env, items) {
+  const out = new Map();
+  const codes = unique((Array.isArray(items) ? items : []).map(item => item.id));
+  if (!codes.length) return out;
+
+  try {
+    const params = baseIndexParams(Math.min(codes.length * 8, 500));
+    params.set("type", "eq.artwork");
+    params.set("code", `in.(${codes.join(",")})`);
+    const rows = await readIndex(env, params);
+    const byCode = new Map();
+
+    (Array.isArray(rows) ? rows : []).forEach(row => {
+      const code = cleanCode(row && row.code);
+      if (!code) return;
+      if (!byCode.has(code)) byCode.set(code, []);
+      byCode.get(code).push(row);
+    });
+
+    items.forEach(item => {
+      const row = chooseArtworkRow(byCode.get(item.id) || [], item);
+      const name = clean(row && row.name || "");
+      if (name) out.set(item.id, name);
+    });
+  } catch (_) {}
+
+  return out;
+}
+
+function chooseArtworkRow(rows, item) {
+  if (!Array.isArray(rows) || !rows.length) return null;
+  return rows.slice().sort((a, b) => artworkMatchScore(b, item) - artworkMatchScore(a, item))[0];
+}
+
+function artworkMatchScore(row, item) {
+  const text = normalizeText([row && row.theme, row && row.product, row && row.path, row && row.name].join(" "));
+  const theme = normalizeText(item && item.theme);
+  const product = normalizeText(item && (item.productName || item.product));
+  let score = 0;
+
+  if (theme && normalizeText(row && row.theme) === theme) score += 80;
+  else if (theme && text.includes(theme)) score += 40;
+
+  if (product && normalizeText(row && row.product) === product) score += 30;
+  else if (product && text.includes(product)) score += 10;
+
+  if (clean(row && row.name)) score += 1;
+  return score;
 }
 
 export async function updateOrderProductionStatus(env, found, status, actorName, message = "") {
@@ -142,12 +194,18 @@ export function productionStatuses(config = {}) {
 function normalizeItems(items) {
   const map = new Map();
   (Array.isArray(items) ? items : []).forEach(item => {
-    const id = cleanCode(item.code || item.codigo || item.id);
+    const id = cleanCode(item && (item.code || item.codigo || item.id));
     if (!id) return;
-    const qty = Number(item.qty || item.quantity || item.quantidade || 1) || 1;
-    map.set(id, (map.get(id) || 0) + qty);
+
+    const current = map.get(id) || { id, name: "", theme: "", product: "", productName: "", quantity: 0 };
+    current.quantity += Number(item.qty || item.quantity || item.quantidade || 1) || 1;
+    if (!current.name) current.name = clean(item.originalName || item.name || item.nome || item.fileName || item.filename || "");
+    if (!current.theme) current.theme = clean(item.theme || item.tema || "");
+    if (!current.product) current.product = clean(item.product || item.produto || "");
+    if (!current.productName) current.productName = clean(item.productName || item.product_name || item.produtoNome || "");
+    map.set(id, current);
   });
-  return [...map.entries()].map(([id, quantity]) => ({ id, quantity }));
+  return [...map.values()];
 }
 function orderMatches(order, wanted) {
   return [order.id, order.orderNumber, order.orderCode, order.displayId, order.legacyId]
