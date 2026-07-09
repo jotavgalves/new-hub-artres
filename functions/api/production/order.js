@@ -16,7 +16,7 @@ async function handle(context) {
   const token = await requireDesktopToken(context.request, context.env);
   if (!token.ok) return jsonCors({ ok: false, error: token.error }, token.status);
 
-  const { config, production } = await loadProductionConfig(context.env);
+  const { production } = await loadProductionConfig(context.env);
   if (!production.enabled) return jsonCors({ ok: false, error: "API_DE_PRODUCAO_DESATIVADA" }, 403);
 
   const url = new URL(context.request.url);
@@ -31,5 +31,5 @@ async function handle(context) {
     found.order = await updateOrderProductionStatus(context.env, found, production.statusOnFetch, production.actorName, "Pedido consultado pelo app desktop.") || found.order;
   }
 
-  return jsonCors(buildProductionPayload(found.order, config));
+  return jsonCors(await buildProductionPayload(found.order, context.env));
 }
