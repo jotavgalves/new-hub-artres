@@ -28,7 +28,9 @@ async function handle(context) {
   if (!found.order) return jsonCors({ ok: false, error: found.error || "PEDIDO_NAO_ENCONTRADO" }, found.error === "CONFIG_KV_NAO_CONFIGURADO" ? 500 : 404);
 
   if (production.allowStatusUpdate && production.statusOnFetch) {
-    found.order = await updateOrderProductionStatus(context.env, found, production.statusOnFetch, production.actorName, "Pedido consultado pelo app desktop.") || found.order;
+    try {
+      found.order = await updateOrderProductionStatus(context.env, found, production.statusOnFetch, production.actorName, "Pedido consultado pelo app desktop.") || found.order;
+    } catch (_) {}
   }
 
   return jsonCors(await buildProductionPayload(found.order, context.env));
