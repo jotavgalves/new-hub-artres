@@ -23,8 +23,7 @@ export async function onRequestPost(context) {
   const body = await context.request.json().catch(() => ({}));
   const number = String(body.number || body.orderNumber || body.pedido || "").trim();
   if (!number) return json({ ok: false, error: "NUMERO_DO_PEDIDO_OBRIGATORIO" }, 400);
-  const { config } = await loadConfig(context.env);
   const found = await findOrderByNumber(context.env, number);
   if (!found.order) return json({ ok: false, error: found.error || "PEDIDO_NAO_ENCONTRADO" }, 404);
-  return json({ ok: true, payload: buildProductionPayload(found.order, config) });
+  return json({ ok: true, payload: await buildProductionPayload(found.order, context.env) });
 }
