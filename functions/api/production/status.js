@@ -8,7 +8,7 @@ export async function onRequestPost(context) {
   const token = await requireDesktopToken(context.request, context.env);
   if (!token.ok) return jsonCors({ ok: false, error: token.error }, token.status);
 
-  const { config, production } = await loadProductionConfig(context.env);
+  const { production } = await loadProductionConfig(context.env);
   if (!production.enabled) return jsonCors({ ok: false, error: "API_DE_PRODUCAO_DESATIVADA" }, 403);
   if (!production.allowStatusUpdate) return jsonCors({ ok: false, error: "ATUALIZACAO_DE_STATUS_DESATIVADA" }, 403);
 
@@ -21,5 +21,5 @@ export async function onRequestPost(context) {
 
   const status = String(body.status || production.statusOnComplete || "Separado").trim();
   const order = await updateOrderProductionStatus(context.env, found, status, production.actorName, body.message || "Status atualizado pelo app desktop.");
-  return jsonCors(buildProductionPayload(order || found.order, config));
+  return jsonCors(await buildProductionPayload(order || found.order, context.env));
 }
