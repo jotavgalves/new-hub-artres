@@ -1,0 +1,31 @@
+name: Site V2 Baseline
+
+on:
+  pull_request:
+    paths:
+      - 'src/v2/**'
+      - 'tests/v2/**'
+      - 'docs/**'
+      - '.github/workflows/site-v2-baseline.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  product-registry:
+    name: Registro passivo de produtos
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Executar testes do registro passivo
+        run: node --test tests/v2/product-registry.test.mjs
