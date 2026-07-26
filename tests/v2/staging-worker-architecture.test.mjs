@@ -26,6 +26,12 @@ test('configuração é exclusivamente de staging e não declara rota de produç
   assert.equal(config.workers_dev, true);
 });
 
+test('secret interno é obrigatório, mas não possui valor no arquivo', () => {
+  assert.deepEqual(config.secrets, { required: ['STAGING_API_TOKEN'] });
+  assert.equal(Object.hasOwn(config.vars, 'STAGING_API_TOKEN'), false);
+  assert.equal(configText.includes('local-staging-token-0123456789abcdef'), false);
+});
+
 test('Durable Object usa SQLite e migration explícita', () => {
   assert.deepEqual(config.durable_objects.bindings, [
     { name: 'ORDER_LEDGER', class_name: 'OrderLedger' }
@@ -35,17 +41,16 @@ test('Durable Object usa SQLite e migration explícita', () => {
   ]);
 });
 
-test('configuração não contém segredos ou IDs de recursos de produção', () => {
+test('configuração não contém valores ou IDs de recursos de produção', () => {
   const forbidden = [
-    'STAGING_API_TOKEN',
     'ADMIN_SECRET_KEY',
     'SERVICE_ROLE',
-    'API_KEY',
     'namespace_id',
     'database_id',
     'account_id',
-    'route',
-    'zone_name'
+    'zone_name',
+    'new-hub-artres.pages.dev',
+    'drive.google.com'
   ];
 
   for (const term of forbidden) {
