@@ -47,7 +47,6 @@ export function applyStatusTransition(order = {}, input = {}, policy) {
 
   if (existingEvent) {
     if (
-      existingEvent.from === currentStatus &&
       existingEvent.to === targetStatus &&
       existingEvent.actor === actor
     ) {
@@ -55,6 +54,7 @@ export function applyStatusTransition(order = {}, input = {}, policy) {
         action: 'REPLAY_EVENT',
         changed: false,
         replayed: true,
+        event: existingEvent,
         order: deepFreeze({ ...order, events })
       });
     }
