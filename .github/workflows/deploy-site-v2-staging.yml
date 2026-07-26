@@ -40,6 +40,7 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       SITE_V2_STAGING_API_TOKEN: ${{ secrets.SITE_V2_STAGING_API_TOKEN }}
+      STAGING_SECRETS_FILE: /tmp/site-v2-staging-secrets.json
 
     steps:
       - name: Baixar repositório
@@ -63,6 +64,17 @@ jobs:
             exit 1
           fi
 
+      - name: Preparar secret temporário do Worker
+        run: |
+          umask 077
+          node -e '
+            const fs = require("fs");
+            const target = process.env.STAGING_SECRETS_FILE;
+            const token = process.env.SITE_V2_STAGING_API_TOKEN;
+            if (!token || token.length < 32) throw new Error("SITE_V2_STAGING_API_TOKEN_TOO_SHORT");
+            fs.writeFileSync(target, JSON.stringify({ STAGING_API_TOKEN: token }));
+          '
+
       - name: Executar testes isolados
         run: node --test tests/v2/*.test.mjs
 
@@ -70,19 +82,23 @@ jobs:
         run: >-
           npx --yes wrangler@4.114.0 deploy
           --dry-run
+          --strict
           --config wrangler.site-v2-staging.jsonc
+          --secrets-file "$STAGING_SECRETS_FILE"
           --outdir /tmp/site-v2-staging-dry-run
 
-      - name: Publicar Worker com escrita desabilitada
+      - name: Publicar Worker, migration e secret com escrita desabilitada
         run: >-
           npx --yes wrangler@4.114.0 deploy
+          --strict
           --config wrangler.site-v2-staging.jsonc
+          --secrets-file "$STAGING_SECRETS_FILE"
+          --message "Staging V2 inicial com escrita desabilitada"
+          --tag "staging-writes-disabled"
 
-      - name: Configurar token exclusivo do staging
-        run: |
-          printf '%s' "$SITE_V2_STAGING_API_TOKEN" |
-            npx --yes wrangler@4.114.0 secret put STAGING_API_TOKEN \
-              --config wrangler.site-v2-staging.jsonc
+      - name: Remover arquivo temporário de secret
+        if: always()
+        run: rm -f "$STAGING_SECRETS_FILE"
 
       - name: Registrar garantia de isolamento
         run: |
