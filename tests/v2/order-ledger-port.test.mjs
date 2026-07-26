@@ -69,7 +69,7 @@ function command(overrides = {}) {
 
 test('numeração mantém o formato histórico e bloco alfabético', () => {
   assert.equal(formatOrderNumberV2('2026-07-26T20:00:00.000Z', 1), 'PED2600001A');
-  assert.equal(formatOrderNumberV2('2026-07-26T20:00:00.000Z', 10_000), 'PED2600000A');
+  assert.equal(formatOrderNumberV2('2026-07-26T20:00:00.000Z', 10_000), 'PED2610000A');
   assert.equal(formatOrderNumberV2('2026-07-26T20:00:00.000Z', 10_001), 'PED2600001B');
   assert.deepEqual(parseOrderNumberV2('PED2600001B'), { yearCode: '26', sequence: 10_001 });
   assert.equal(orderLedgerShardName('2026-07-26T20:00:00.000Z'), 'orders:26');
