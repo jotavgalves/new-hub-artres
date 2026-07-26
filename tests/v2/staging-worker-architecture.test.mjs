@@ -6,11 +6,13 @@ const root = new URL('../../', import.meta.url);
 const configUrl = new URL('wrangler.site-v2-staging.jsonc', root);
 const workerUrl = new URL('staging/site-v2-worker/src/index.js', root);
 const ledgerUrl = new URL('staging/site-v2-worker/src/order-ledger-do.js', root);
+const fixtureUrl = new URL('staging/site-v2-worker/src/staging-catalog-fixture.js', root);
 
 const configText = await readFile(configUrl, 'utf8');
 const config = JSON.parse(configText);
 const workerSource = await readFile(workerUrl, 'utf8');
 const ledgerSource = await readFile(ledgerUrl, 'utf8');
+const fixtureSource = await readFile(fixtureUrl, 'utf8');
 
 test('configuração é exclusivamente de staging e não declara rota de produção', () => {
   assert.equal(config.name, 'new-hub-artres-v2-staging');
@@ -51,13 +53,26 @@ test('configuração não contém segredos ou IDs de recursos de produção', ()
   }
 });
 
-test('Worker expõe somente saúde e rotas internas do ledger', () => {
+test('Worker expõe somente saúde e rotas internas de staging', () => {
   assert.ok(workerSource.includes("url.pathname === '/health'"));
-  assert.ok(workerSource.includes("url.pathname.startsWith('/internal/v2/ledger/')"));
+  assert.ok(workerSource.includes("url.pathname.startsWith('/internal/v2/')"));
+  assert.ok(workerSource.includes("url.pathname === '/internal/v2/orders/submit'"));
+  assert.ok(workerSource.includes("url.pathname === '/internal/v2/ledger/submit'"));
   assert.equal(workerSource.includes("'/api/orders/v2'"), false);
   assert.ok(workerSource.includes("env.STAGING_WRITE_ENABLED !== 'true'"));
   assert.ok(workerSource.includes("request.headers.get('x-staging-token')"));
   assert.ok(workerSource.includes('constantTimeEqualSecrets'));
+});
+
+test('rota comercial usa comando atômico e catálogo sintético', () => {
+  assert.ok(workerSource.includes('createAtomicLedgerCommandV2'));
+  assert.ok(workerSource.includes('STAGING_CATALOG_ITEMS'));
+  assert.ok(workerSource.includes('STAGING_PRODUCT_SNAPSHOT'));
+  assert.ok(workerSource.includes("source: 'catalog-v2-staging-synthetic'"));
+  assert.ok(fixtureSource.includes('staging-artwork-2657'));
+  assert.ok(fixtureSource.includes('example.invalid'));
+  assert.equal(fixtureSource.includes('new-hub-artres.pages.dev'), false);
+  assert.equal(fixtureSource.includes('drive.google.com'), false);
 });
 
 test('Worker não importa Functions legadas nem arquivos ativos da produção', () => {
