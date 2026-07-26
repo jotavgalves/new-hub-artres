@@ -1,7 +1,9 @@
 name: Atual Versão de Segurança Baseline
 
 on:
-  pull_request:
+  push:
+    branches:
+      - 'agent/site-v2-*'
     paths:
       - 'tests/e2e/**'
       - '.github/workflows/current-safety-baseline.yml'
