@@ -97,8 +97,12 @@ export class SupabaseOrderProjection {
     if (!response.ok) {
       const error = projectionError('SUPABASE_PROJECTION_REQUEST_FAILED');
       error.status = response.status;
-      error.remoteCode = clean(payload?.code).slice(0, 80);
-      error.remoteMessage = clean(payload?.message || payload?.details || payload?.hint).slice(0, 240);
+      error.remoteCode = safeRemoteText(payload?.code, this.#key, 80);
+      error.remoteMessage = safeRemoteText(
+        payload?.message || payload?.details || payload?.hint,
+        this.#key,
+        240
+      );
       throw error;
     }
 
@@ -180,6 +184,13 @@ function parsePayload(text) {
   } catch (_) {
     return text;
   }
+}
+
+function safeRemoteText(value, secret, maxLength) {
+  const text = clean(value);
+  if (!text) return '';
+  const redacted = secret ? text.split(secret).join('[REDACTED]') : text;
+  return redacted.slice(0, maxLength);
 }
 
 function validIsoDate(value) {
