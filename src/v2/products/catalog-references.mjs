@@ -1,6 +1,10 @@
 import { PRODUCT_REGISTRY, resolveProductKey } from './registry.mjs';
 
-const REFERENCE_INDEX = deepFreeze(buildReferenceIndex(PRODUCT_REGISTRY));
+const EXPLICIT_REFERENCES = Object.freeze({
+  bolinhas: '50x50'
+});
+
+const REFERENCE_INDEX = deepFreeze(buildReferenceIndex(PRODUCT_REGISTRY, EXPLICIT_REFERENCES));
 
 export function resolveCatalogProductKey(value) {
   const direct = resolveProductKey(value);
@@ -18,7 +22,7 @@ export function catalogProductReferences(productKey) {
     .sort();
 }
 
-function buildReferenceIndex(registry) {
+function buildReferenceIndex(registry, explicitReferences) {
   const index = {};
 
   for (const definition of Object.values(registry || {})) {
@@ -28,17 +32,25 @@ function buildReferenceIndex(registry) {
       ...(definition.aliases || [])
     ];
 
-    for (const reference of references) {
-      const normalized = normalizeReference(reference);
-      if (!normalized) continue;
-      if (index[normalized] && index[normalized] !== definition.key) {
-        throw new Error(`CATALOG_PRODUCT_REFERENCE_COLLISION:${normalized}`);
-      }
-      index[normalized] = definition.key;
-    }
+    for (const reference of references) addReference(index, reference, definition.key);
+  }
+
+  for (const [reference, productKey] of Object.entries(explicitReferences || {})) {
+    const canonical = resolveProductKey(productKey);
+    if (!canonical) throw new Error(`CATALOG_PRODUCT_REFERENCE_TARGET_INVALID:${reference}`);
+    addReference(index, reference, canonical);
   }
 
   return index;
+}
+
+function addReference(index, reference, productKey) {
+  const normalized = normalizeReference(reference);
+  if (!normalized) return;
+  if (index[normalized] && index[normalized] !== productKey) {
+    throw new Error(`CATALOG_PRODUCT_REFERENCE_COLLISION:${normalized}`);
+  }
+  index[normalized] = productKey;
 }
 
 function normalizeReference(value) {
