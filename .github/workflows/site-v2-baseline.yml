@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   product-registry:
-    name: Registro passivo de produtos
+    name: Registro passivo e isolamento
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
