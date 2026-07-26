@@ -20,12 +20,12 @@ export function compareCatalogShadow(input = {}) {
     v2Folders: v2.folders.length,
     legacyArtworks: legacy.artworks.length,
     v2Artworks: v2.artworks.length,
-    missingFoldersInV2: folderDiff.missing.length,
-    extraFoldersInV2: folderDiff.extra.length,
-    changedFolders: folderDiff.changed.length,
-    missingArtworksInV2: artworkDiff.missing.length,
-    extraArtworksInV2: artworkDiff.extra.length,
-    changedArtworks: artworkDiff.changed.length,
+    missingFoldersInV2: folderDiff.totals.missing,
+    extraFoldersInV2: folderDiff.totals.extra,
+    changedFolders: folderDiff.totals.changed,
+    missingArtworksInV2: artworkDiff.totals.missing,
+    extraArtworksInV2: artworkDiff.totals.extra,
+    changedArtworks: artworkDiff.totals.changed,
     detailLimit: maxDetails
   };
 
