@@ -21,6 +21,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    env:
+      DRY_RUN_SECRETS_FILE: /tmp/site-v2-staging-dry-run-secrets.json
+
     steps:
       - name: Baixar repositório
         uses: actions/checkout@v4
@@ -38,12 +41,23 @@ jobs:
           node --check staging/site-v2-worker/src/index.js
           node --check staging/site-v2-worker/src/order-ledger-do.js
 
+      - name: Preparar secret sintético do dry-run
+        run: |
+          umask 077
+          printf '%s' '{"STAGING_API_TOKEN":"ci-dry-run-token-0123456789abcdef"}' > "$DRY_RUN_SECRETS_FILE"
+
       - name: Validar bundle Cloudflare sem publicar
         run: >-
           npx --yes wrangler@4.114.0 deploy
           --dry-run
+          --strict
           --config wrangler.site-v2-staging.jsonc
+          --secrets-file "$DRY_RUN_SECRETS_FILE"
           --outdir /tmp/site-v2-staging-dry-run
+
+      - name: Remover secret sintético do dry-run
+        if: always()
+        run: rm -f "$DRY_RUN_SECRETS_FILE"
 
       - name: Executar Worker e Durable Object localmente
         run: bash tests/v2/run-staging-worker-smoke.sh
