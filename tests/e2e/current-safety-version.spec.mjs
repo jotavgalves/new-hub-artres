@@ -92,6 +92,92 @@ async function attachRuntimeSnapshot(page, testInfo, diagnostics) {
   });
 }
 
+function collectObjectKeys(value, path = '', keys = []) {
+  if (!value || typeof value !== 'object') return keys;
+
+  for (const [key, nested] of Object.entries(value)) {
+    const currentPath = path ? `${path}.${key}` : key;
+    keys.push({ key, path: currentPath });
+    collectObjectKeys(nested, currentPath, keys);
+  }
+
+  return keys;
+}
+
+function summarizeConfig(payload) {
+  const config = payload?.config || {};
+  const products = Object.fromEntries(
+    Object.entries(config.products || {}).map(([key, definition]) => [key, {
+      label: definition?.label || '',
+      productKey: definition?.productKey || '',
+      unitPrice: definition?.unitPrice ?? null,
+      minQty: definition?.minQty ?? null,
+      step: definition?.step ?? null,
+      disableCustomization: definition?.disableCustomization ?? null,
+      skipProductsStep: definition?.skipProductsStep ?? null
+    }])
+  );
+
+  return {
+    ok: payload?.ok === true,
+    source: payload?.source || '',
+    storageReady: payload?.storageReady === true,
+    warning: payload?.warning || '',
+    version: config.version ?? null,
+    sellers: (config.sellers || []).map(seller => ({
+      id: seller.id || '',
+      label: seller.label || '',
+      active: seller.active !== false,
+      phoneConfigured: Boolean(String(seller.phone || '').trim())
+    })),
+    products,
+    productCatalog: (config.productCatalog || []).map(item => ({
+      id: item.id || '',
+      label: item.label || '',
+      productKey: item.productKey || '',
+      active: item.active !== false,
+      editable: item.editable !== false
+    })),
+    drives: (config.drives || []).map(drive => ({
+      id: drive.id || '',
+      name: drive.name || '',
+      active: drive.active !== false,
+      type: drive.type || '',
+      productKey: drive.productKey || '',
+      structure: drive.structure || '',
+      filenamePattern: drive.filenamePattern || '',
+      folderIdConfigured: Boolean(String(drive.folderId || '').trim()),
+      folderIdLength: String(drive.folderId || '').length
+    })),
+    ui: config.ui || {},
+    campaign: config.campaign || {},
+    maintenance: config.maintenance || {},
+    orderSettings: config.orderSettings || {},
+    productionApi: config.productionApi || {},
+    hero: config.content?.hero || {},
+    promo: config.content?.promo || {},
+    catalogContent: config.content?.catalog || {},
+    cartContent: config.content?.cart || {},
+    appearance: config.appearance || {}
+  };
+}
+
+function summarizeRules(payload) {
+  const rules = payload?.rules || payload || {};
+  const themeBlocks = Array.isArray(rules.themeBlocks) ? rules.themeBlocks : [];
+  const artBlocks = Array.isArray(rules.artBlocks) ? rules.artBlocks : [];
+
+  return {
+    ok: payload?.ok !== false,
+    topLevelKeys: Object.keys(payload || {}).sort(),
+    ruleKeys: Object.keys(rules || {}).sort(),
+    version: rules.version ?? payload?.version ?? null,
+    themeBlockCount: themeBlocks.length,
+    artBlockCount: artBlocks.length,
+    updatedAt: rules.updatedAt || payload?.updatedAt || ''
+  };
+}
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     try {
@@ -143,4 +229,61 @@ test('navega até uma arte e adiciona ao carrinho sem finalizar pedido', async (
   });
 
   await attachRuntimeSnapshot(page, testInfo, diagnostics);
+});
+
+test('registra contratos públicos sem persistir dados sensíveis', async ({ request }, testInfo) => {
+  const [configResponse, metaResponse, rulesResponse] = await Promise.all([
+    request.get('/api/config'),
+    request.get('/api/catalog-meta'),
+    request.get('/api/catalog-rules')
+  ]);
+
+  expect(configResponse.status()).toBe(200);
+  expect(metaResponse.status()).toBe(200);
+  expect(rulesResponse.status()).toBe(200);
+
+  const [configPayload, metaPayload, rulesPayload] = await Promise.all([
+    configResponse.json(),
+    metaResponse.json(),
+    rulesResponse.json()
+  ]);
+
+  const forbiddenExactKeys = new Set([
+    'secret',
+    'token',
+    'password',
+    'apikey',
+    'api_key',
+    'service_role_key',
+    'servicerolekey',
+    'private_key',
+    'privatekey',
+    'admin_secret',
+    'adminsecret'
+  ]);
+
+  const exposedSensitivePaths = collectObjectKeys(configPayload)
+    .filter(({ key }) => forbiddenExactKeys.has(String(key).toLowerCase()))
+    .map(({ path }) => path);
+
+  expect(exposedSensitivePaths).toEqual([]);
+
+  const publicContracts = {
+    capturedAt: new Date().toISOString(),
+    config: summarizeConfig(configPayload),
+    catalogMeta: {
+      ok: metaPayload?.ok !== false,
+      keys: Object.keys(metaPayload || {}).sort(),
+      version: metaPayload?.version || metaPayload?.catalogVersion || '',
+      schema: metaPayload?.schema || '',
+      updatedAt: metaPayload?.updatedAt || ''
+    },
+    catalogRules: summarizeRules(rulesPayload),
+    exposedSensitivePaths
+  };
+
+  await testInfo.attach('public-api-contracts.json', {
+    body: Buffer.from(JSON.stringify(publicContracts, null, 2)),
+    contentType: 'application/json'
+  });
 });
