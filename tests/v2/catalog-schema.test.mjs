@@ -60,10 +60,11 @@ function artwork(overrides = {}) {
 test('referências de produto são exatas, não heurísticas', () => {
   assert.equal(resolveCatalogProductKey('50x50'), '50x50');
   assert.equal(resolveCatalogProductKey('Bolinhas 50x50'), '50x50');
-  assert.equal(resolveCatalogProductKey('Bolinhas'), null);
+  assert.equal(resolveCatalogProductKey('Bolinhas'), '50x50');
   assert.equal(resolveCatalogProductKey('Sacolinha de Festa'), 'sacolinha');
   assert.equal(resolveCatalogProductKey('bolinhas especiais'), null);
   assert.ok(catalogProductReferences('50x50').includes('bolinhas 50x50'));
+  assert.ok(catalogProductReferences('50x50').includes('bolinhas'));
 });
 
 test('contexto do catálogo permanece passivo e versionado', () => {
