@@ -25,7 +25,7 @@ jobs:
       - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Executar testes isolados da V2
         run: node --test tests/v2/*.test.mjs
