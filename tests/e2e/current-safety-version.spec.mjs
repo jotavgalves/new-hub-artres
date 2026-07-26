@@ -1,7 +1,9 @@
 import { test, expect } from '@playwright/test';
 
 async function waitForThemes(page) {
-  await expect(page.getByRole('heading', { name: 'Vamos montar sua festa?' })).toBeVisible();
+  const heroTitle = page.locator('h1').first();
+  await expect(heroTitle).toBeVisible();
+  await expect(heroTitle).toContainText(/vamos montar.*festa/i);
   await expect(page.locator('[data-theme]').first()).toBeVisible({ timeout: 25_000 });
 }
 
@@ -62,6 +64,9 @@ async function attachRuntimeSnapshot(page, testInfo, diagnostics) {
   const runtime = await page.evaluate(() => ({
     title: document.title,
     url: location.href,
+    heroTitle: document.querySelector('h1')?.textContent?.trim() || '',
+    promoTitle: document.querySelector('.promo h3')?.textContent?.trim() || '',
+    themeCountLabel: document.querySelector('#count')?.textContent?.trim() || '',
     themeCards: document.querySelectorAll('[data-theme]').length,
     productCards: document.querySelectorAll('[data-product]').length,
     artworkCards: document.querySelectorAll('[data-card]').length,
