@@ -25,29 +25,41 @@ test('usa ambiente protegido e concorrência exclusiva', () => {
   assert.ok(workflow.includes('cancel-in-progress: false'));
 });
 
-test('exige credenciais distintas e nunca as grava em arquivo', () => {
+test('exige credenciais distintas e nunca contém valor literal', () => {
   assert.ok(workflow.includes('secrets.CLOUDFLARE_API_TOKEN'));
   assert.ok(workflow.includes('secrets.CLOUDFLARE_ACCOUNT_ID'));
   assert.ok(workflow.includes('secrets.SITE_V2_STAGING_API_TOKEN'));
-  assert.ok(workflow.includes('secret put STAGING_API_TOKEN'));
-  assert.equal(/STAGING_API_TOKEN:\s*['"][^$]/.test(workflow), false);
+  assert.ok(workflow.includes('SITE_V2_STAGING_API_TOKEN_TOO_SHORT'));
+  assert.equal(workflow.includes('local-staging-token-0123456789abcdef'), false);
+  assert.equal(workflow.includes('CLOUDFLARE_API_TOKEN="'), false);
 });
 
-test('publica exclusivamente o arquivo de configuração de staging', () => {
+test('secret do Worker é enviado junto com o deploy e removido depois', () => {
+  assert.ok(workflow.includes('STAGING_SECRETS_FILE: /tmp/site-v2-staging-secrets.json'));
+  assert.ok(workflow.includes('umask 077'));
+  assert.ok(workflow.includes('JSON.stringify({ STAGING_API_TOKEN: token })'));
+  assert.ok(workflow.includes('--secrets-file "$STAGING_SECRETS_FILE"'));
+  assert.ok(workflow.includes('if: always()'));
+  assert.ok(workflow.includes('rm -f "$STAGING_SECRETS_FILE"'));
+  assert.equal(workflow.includes('secret put STAGING_API_TOKEN'), false);
+});
+
+test('publica exclusivamente o arquivo de configuração de staging em modo estrito', () => {
   const deployCommands = workflow.match(/npx --yes wrangler@4\.114\.0 deploy[\s\S]*?(?=\n\s{6}- name:|$)/g) || [];
   assert.ok(deployCommands.length >= 2);
   for (const command of deployCommands) {
     assert.ok(command.includes('--config wrangler.site-v2-staging.jsonc'));
+    assert.ok(command.includes('--strict'));
+    assert.ok(command.includes('--secrets-file "$STAGING_SECRETS_FILE"'));
   }
   assert.equal(workflow.includes('wrangler.toml'), false);
-  assert.equal(workflow.includes('wrangler.jsonc'), false);
   assert.equal(workflow.includes('--env production'), false);
 });
 
 test('valida testes e bundle antes do deploy real', () => {
   const testsIndex = workflow.indexOf('node --test tests/v2/*.test.mjs');
   const dryRunIndex = workflow.indexOf('--dry-run');
-  const deployNameIndex = workflow.indexOf('Publicar Worker com escrita desabilitada');
+  const deployNameIndex = workflow.indexOf('Publicar Worker, migration e secret com escrita desabilitada');
 
   assert.ok(testsIndex >= 0);
   assert.ok(dryRunIndex > testsIndex);
@@ -55,7 +67,7 @@ test('valida testes e bundle antes do deploy real', () => {
 });
 
 test('o próprio workflow declara que a escrita continua desabilitada', () => {
-  assert.ok(workflow.includes('Publicar Worker com escrita desabilitada'));
+  assert.ok(workflow.includes('com escrita desabilitada'));
   assert.ok(workflow.includes('Escrita: desabilitada'));
   assert.equal(workflow.includes('STAGING_WRITE_ENABLED=true'), false);
 });
