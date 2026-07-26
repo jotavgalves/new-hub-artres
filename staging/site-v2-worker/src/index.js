@@ -1,6 +1,13 @@
 import { constantTimeEqualSecrets, validateBodyByteLength } from '../../../src/v2/http/request-guard.mjs';
+import { createAtomicLedgerCommandV2 } from '../../../src/v2/orders/atomic-command.mjs';
 import { orderLedgerShardName } from '../../../src/v2/orders/order-number.mjs';
 import { OrderLedger } from './order-ledger-do.js';
+import {
+  STAGING_CATALOG_ITEMS,
+  STAGING_CATALOG_VERSION,
+  STAGING_CONFIG_VERSION,
+  STAGING_PRODUCT_SNAPSHOT
+} from './staging-catalog-fixture.js';
 
 export { OrderLedger };
 
@@ -20,11 +27,13 @@ export default {
           environment: env.ENVIRONMENT || 'staging',
           writesEnabled: env.STAGING_WRITE_ENABLED === 'true',
           persistence: 'durable-object-sqlite',
+          catalog: 'synthetic-staging-only',
+          catalogVersion: STAGING_CATALOG_VERSION,
           requestId
         });
       }
 
-      if (!url.pathname.startsWith('/internal/v2/ledger/')) {
+      if (!url.pathname.startsWith('/internal/v2/')) {
         return json({ ok: false, error: 'ROUTE_NOT_FOUND', requestId }, 404);
       }
 
@@ -34,33 +43,49 @@ export default {
       );
       if (!authorized) return json({ ok: false, error: 'STAGING_TOKEN_INVALID', requestId }, 401);
 
+      if (url.pathname === '/internal/v2/orders/submit') {
+        if (request.method !== 'POST') return methodNotAllowed(['POST'], requestId);
+        if (env.STAGING_WRITE_ENABLED !== 'true') {
+          return json({ ok: false, error: 'STAGING_WRITES_DISABLED', requestId }, 503);
+        }
+
+        const body = await readJsonBody(request);
+        const command = await createAtomicLedgerCommandV2({
+          idempotencyKey: request.headers.get('idempotency-key'),
+          submissionCreatedAt: body.submissionCreatedAt,
+          body,
+          catalogItems: STAGING_CATALOG_ITEMS,
+          productSnapshot: STAGING_PRODUCT_SNAPSHOT,
+          catalogVersion: STAGING_CATALOG_VERSION,
+          configVersion: STAGING_CONFIG_VERSION,
+          serverDiscountPercent: 0,
+          productRegistryVersion: 1,
+          mode: 'active',
+          source: 'catalog-v2-staging-synthetic',
+          requestId,
+          actor: 'staging-synthetic'
+        });
+
+        const result = await ledgerStub(env, command.submissionCreatedAt).submit(command);
+        return json({
+          ok: true,
+          requestId,
+          action: result.action,
+          replayed: result.replayed,
+          orderNumber: result.orderNumber,
+          pricing: result.order.pricing,
+          itemCount: result.order.items.length,
+          warnings: command.quoteWarnings
+        }, result.replayed ? 200 : 201);
+      }
+
       if (url.pathname === '/internal/v2/ledger/submit') {
         if (request.method !== 'POST') return methodNotAllowed(['POST'], requestId);
         if (env.STAGING_WRITE_ENABLED !== 'true') {
           return json({ ok: false, error: 'STAGING_WRITES_DISABLED', requestId }, 503);
         }
 
-        const contentType = String(request.headers.get('content-type') || '').toLowerCase();
-        if (!contentType.startsWith('application/json')) {
-          return json({ ok: false, error: 'CONTENT_TYPE_NOT_JSON', requestId }, 415);
-        }
-
-        const declaredLength = Number.parseInt(request.headers.get('content-length') || '', 10);
-        if (Number.isFinite(declaredLength) && declaredLength > MAX_JSON_BYTES) {
-          return json({ ok: false, error: 'REQUEST_BODY_TOO_LARGE', requestId }, 413);
-        }
-
-        const rawBody = await request.text();
-        const bodyLength = validateBodyByteLength(rawBody, MAX_JSON_BYTES);
-        if (!bodyLength.ok) return json({ ok: false, error: bodyLength.error, requestId }, 413);
-
-        let command;
-        try {
-          command = JSON.parse(rawBody);
-        } catch (_) {
-          return json({ ok: false, error: 'INVALID_JSON', requestId }, 400);
-        }
-
+        const command = await readJsonBody(request);
         const stub = ledgerStub(env, command.submissionCreatedAt);
         const result = await stub.submit({ ...command, requestId });
         return json({ ok: true, requestId, ...result }, result.replayed ? 200 : 201);
@@ -105,6 +130,28 @@ export default {
   }
 };
 
+async function readJsonBody(request) {
+  const contentType = String(request.headers.get('content-type') || '').toLowerCase();
+  if (!contentType.startsWith('application/json')) throw workerError('CONTENT_TYPE_NOT_JSON');
+
+  const declaredLength = Number.parseInt(request.headers.get('content-length') || '', 10);
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_JSON_BYTES) {
+    throw workerError('REQUEST_BODY_TOO_LARGE');
+  }
+
+  const rawBody = await request.text();
+  const bodyLength = validateBodyByteLength(rawBody, MAX_JSON_BYTES);
+  if (!bodyLength.ok) throw workerError(bodyLength.error);
+
+  try {
+    const body = JSON.parse(rawBody);
+    if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('INVALID_BODY');
+    return body;
+  } catch (_) {
+    throw workerError('INVALID_JSON');
+  }
+}
+
 function ledgerStub(env, createdAt) {
   const shardName = orderLedgerShardName(createdAt);
   return env.ORDER_LEDGER.getByName(shardName);
@@ -118,9 +165,19 @@ function methodNotAllowed(methods, requestId) {
 
 function statusForError(code) {
   if (code === 'IDEMPOTENCY_KEY_CONFLICT') return 409;
+  if (code === 'CONTENT_TYPE_NOT_JSON') return 415;
+  if (code === 'REQUEST_BODY_TOO_LARGE') return 413;
+  if (code === 'INVALID_JSON') return 400;
   if (code.includes('INVALID') || code.includes('REQUIRED') || code.includes('MISMATCH')) return 422;
-  if (code === 'ORDER_NOT_FOUND') return 404;
+  if (code === 'ORDER_NOT_FOUND' || code === 'ARTWORK_NOT_FOUND') return 404;
+  if (code.includes('DISABLED')) return 503;
   return 500;
+}
+
+function workerError(code) {
+  const error = new Error(code);
+  error.code = code;
+  return error;
 }
 
 function json(payload, status = 200, extraHeaders = {}) {
