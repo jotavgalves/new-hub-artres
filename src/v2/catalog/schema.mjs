@@ -1,4 +1,5 @@
-import { requireProductDefinition, resolveProductKey } from '../products/registry.mjs';
+import { requireProductDefinition } from '../products/registry.mjs';
+import { resolveCatalogProductKey } from '../products/catalog-references.mjs';
 
 export const CATALOG_SCHEMA_VERSION = 2;
 
@@ -61,7 +62,7 @@ export function mapCatalogRowV2(row = {}, context, options = {}) {
 
   const explicitProduct = clean(row.product);
   if (explicitProduct) {
-    const explicitProductKey = resolveProductKey(explicitProduct);
+    const explicitProductKey = resolveCatalogProductKey(explicitProduct);
     if (!explicitProductKey) throw rowError('PRODUCT_NOT_CONFIGURED', row, explicitProduct);
     if (explicitProductKey !== root.productKey) {
       throw rowError('PRODUCT_ROOT_MISMATCH', row, `${explicitProductKey}:${root.productKey}`);
@@ -145,7 +146,7 @@ export function validateCatalogContext(context) {
 
   for (const root of roots) {
     if (!identity(root.rootDriveId)) errors.push('ROOT_DRIVE_ID_REQUIRED');
-    if (!resolveProductKey(root.productKey)) errors.push(`PRODUCT_NOT_CONFIGURED:${clean(root.productKey)}`);
+    if (!resolveCatalogProductKey(root.productKey)) errors.push(`PRODUCT_NOT_CONFIGURED:${clean(root.productKey)}`);
   }
 
   return {
