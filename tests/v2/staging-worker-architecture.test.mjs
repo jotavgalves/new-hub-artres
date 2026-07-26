@@ -1,0 +1,95 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+
+const root = new URL('../../', import.meta.url);
+const configUrl = new URL('wrangler.site-v2-staging.jsonc', root);
+const workerUrl = new URL('staging/site-v2-worker/src/index.js', root);
+const ledgerUrl = new URL('staging/site-v2-worker/src/order-ledger-do.js', root);
+
+const configText = await readFile(configUrl, 'utf8');
+const config = JSON.parse(configText);
+const workerSource = await readFile(workerUrl, 'utf8');
+const ledgerSource = await readFile(ledgerUrl, 'utf8');
+
+test('configuração é exclusivamente de staging e não declara rota de produção', () => {
+  assert.equal(config.name, 'new-hub-artres-v2-staging');
+  assert.equal(config.main, 'staging/site-v2-worker/src/index.js');
+  assert.equal(config.compatibility_date, '2026-07-26');
+  assert.ok(config.compatibility_flags.includes('nodejs_compat'));
+  assert.equal(config.vars.ENVIRONMENT, 'staging');
+  assert.equal(config.vars.STAGING_WRITE_ENABLED, 'false');
+  assert.equal(config.routes, undefined);
+  assert.equal(config.env, undefined);
+  assert.equal(config.workers_dev, true);
+});
+
+test('Durable Object usa SQLite e migration explícita', () => {
+  assert.deepEqual(config.durable_objects.bindings, [
+    { name: 'ORDER_LEDGER', class_name: 'OrderLedger' }
+  ]);
+  assert.deepEqual(config.migrations, [
+    { tag: 'v1', new_sqlite_classes: ['OrderLedger'] }
+  ]);
+});
+
+test('configuração não contém segredos ou IDs de recursos de produção', () => {
+  const forbidden = [
+    'STAGING_API_TOKEN',
+    'ADMIN_SECRET_KEY',
+    'SERVICE_ROLE',
+    'API_KEY',
+    'namespace_id',
+    'database_id',
+    'account_id',
+    'route',
+    'zone_name'
+  ];
+
+  for (const term of forbidden) {
+    assert.equal(configText.toLowerCase().includes(term.toLowerCase()), false, `Encontrado: ${term}`);
+  }
+});
+
+test('Worker expõe somente saúde e rotas internas do ledger', () => {
+  assert.ok(workerSource.includes("url.pathname === '/health'"));
+  assert.ok(workerSource.includes("url.pathname.startsWith('/internal/v2/ledger/')"));
+  assert.equal(workerSource.includes("'/api/orders/v2'"), false);
+  assert.ok(workerSource.includes("env.STAGING_WRITE_ENABLED !== 'true'"));
+  assert.ok(workerSource.includes("request.headers.get('x-staging-token')"));
+  assert.ok(workerSource.includes('constantTimeEqualSecrets'));
+});
+
+test('Worker não importa Functions legadas nem arquivos ativos da produção', () => {
+  assert.equal(workerSource.includes('/functions/'), false);
+  assert.equal(ledgerSource.includes('/functions/'), false);
+  assert.equal(workerSource.includes('CONFIG_KV'), false);
+  assert.equal(ledgerSource.includes('CONFIG_KV'), false);
+  assert.equal(workerSource.includes('SUPABASE_SERVICE_ROLE_KEY'), false);
+  assert.equal(ledgerSource.includes('SUPABASE_SERVICE_ROLE_KEY'), false);
+});
+
+test('ledger usa transação síncrona para pedido, idempotência e outbox', () => {
+  assert.ok(ledgerSource.includes('this.ctx.storage.transactionSync'));
+  assert.ok(ledgerSource.includes('INSERT INTO orders'));
+  assert.ok(ledgerSource.includes('INSERT INTO idempotency'));
+  assert.ok(ledgerSource.includes('INSERT INTO outbox'));
+  assert.ok(ledgerSource.includes('PRAGMA optimize'));
+});
+
+test('callback transacional não contém await ou chamada externa', () => {
+  const start = ledgerSource.indexOf('#submitTransaction(command)');
+  const end = ledgerSource.indexOf('\n  #ensureYear', start);
+  const transactionBody = ledgerSource.slice(start, end);
+
+  assert.ok(start >= 0 && end > start);
+  assert.equal(/\bawait\b/.test(transactionBody), false);
+  assert.equal(/\bfetch\s*\(/.test(transactionBody), false);
+});
+
+test('estado crítico é persistido, não mantido em variável global mutável', () => {
+  assert.equal(/^(let|var)\s+/m.test(ledgerSource), false);
+  assert.ok(ledgerSource.includes('CREATE TABLE IF NOT EXISTS orders'));
+  assert.ok(ledgerSource.includes('CREATE TABLE IF NOT EXISTS idempotency'));
+  assert.ok(ledgerSource.includes('CREATE TABLE IF NOT EXISTS outbox'));
+});
