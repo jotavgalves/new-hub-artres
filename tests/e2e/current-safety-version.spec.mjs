@@ -13,10 +13,16 @@ async function openFirstArtworkList(page) {
 
   for (let depth = 0; depth < 6; depth += 1) {
     const artwork = page.locator('[data-card]').first();
+    const productOrFolder = page.locator('[data-product]').first();
+
+    await page.locator('[data-card], [data-product]').first().waitFor({
+      state: 'visible',
+      timeout: 25_000
+    });
+
     if (await artwork.isVisible().catch(() => false)) return artwork;
 
-    const productOrFolder = page.locator('[data-product]').first();
-    await expect(productOrFolder).toBeVisible({ timeout: 20_000 });
+    await expect(productOrFolder).toBeVisible();
     await productOrFolder.click();
   }
 
