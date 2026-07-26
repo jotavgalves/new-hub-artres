@@ -27,5 +27,5 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Executar testes do registro passivo
-        run: node --test tests/v2/product-registry.test.mjs
+      - name: Executar testes isolados da V2
+        run: node --test tests/v2/*.test.mjs
