@@ -35,9 +35,10 @@ Características:
 6. ambiente GitHub `site-v2-staging`;
 7. concorrência exclusiva;
 8. testes completos antes do deploy;
-9. dry-run do Wrangler antes do deploy;
-10. Worker publicado com escrita desligada;
-11. secret configurado depois da primeira publicação.
+9. dry-run estrito do Wrangler antes do deploy;
+10. Worker, migration e secret enviados juntos;
+11. Worker publicado com escrita desligada;
+12. arquivo temporário do secret removido mesmo em falha.
 
 ## Condição para o botão manual aparecer
 
@@ -90,13 +91,15 @@ Requisitos recomendados:
 - não reutilizar token do aplicativo desktop;
 - armazenar somente como secret.
 
-O workflow envia esse valor ao Wrangler por entrada padrão e o grava como:
+O workflow cria um arquivo JSON temporário com permissão restrita em `/tmp`, envia o valor ao Wrangler por `--secrets-file` e remove o arquivo em uma etapa `always()`.
+
+No Worker, o nome da variável será:
 
 ```text
 STAGING_API_TOKEN
 ```
 
-O valor não aparece no arquivo de configuração.
+O valor nunca aparece no arquivo de configuração ou no repositório.
 
 ## Publicação inicial
 
