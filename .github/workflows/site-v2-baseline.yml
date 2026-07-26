@@ -4,8 +4,10 @@ on:
   pull_request:
     paths:
       - 'src/v2/**'
+      - 'staging/site-v2-worker/**'
       - 'tests/v2/**'
       - 'docs/**'
+      - 'wrangler.site-v2-staging.jsonc'
       - '.github/workflows/site-v2-baseline.yml'
   workflow_dispatch:
 
@@ -13,10 +15,10 @@ permissions:
   contents: read
 
 jobs:
-  product-registry:
-    name: Registro passivo e isolamento
+  defensive-foundation:
+    name: Contratos, isolamento e staging dry-run
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 12
 
     steps:
       - name: Baixar repositório
@@ -29,3 +31,15 @@ jobs:
 
       - name: Executar testes isolados da V2
         run: node --test tests/v2/*.test.mjs
+
+      - name: Verificar sintaxe do Worker de staging
+        run: |
+          node --check staging/site-v2-worker/src/index.js
+          node --check staging/site-v2-worker/src/order-ledger-do.js
+
+      - name: Validar bundle Cloudflare sem publicar
+        run: >-
+          npx --yes wrangler@4.114.0 deploy
+          --dry-run
+          --config wrangler.site-v2-staging.jsonc
+          --outdir /tmp/site-v2-staging-dry-run
