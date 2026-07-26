@@ -19,7 +19,7 @@ jobs:
   defensive-foundation:
     name: Contratos, isolamento e staging dry-run
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
 
     steps:
       - name: Baixar repositório
@@ -44,3 +44,6 @@ jobs:
           --dry-run
           --config wrangler.site-v2-staging.jsonc
           --outdir /tmp/site-v2-staging-dry-run
+
+      - name: Executar Worker e Durable Object localmente
+        run: bash tests/v2/run-staging-worker-smoke.sh
