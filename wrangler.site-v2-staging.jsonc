@@ -14,6 +14,9 @@
     "ENVIRONMENT": "staging",
     "STAGING_WRITE_ENABLED": "false"
   },
+  "secrets": {
+    "required": ["STAGING_API_TOKEN"]
+  },
   "durable_objects": {
     "bindings": [
       {
