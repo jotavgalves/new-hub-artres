@@ -183,6 +183,8 @@ test('erro remoto é sanitizado sem incluir chave secreta ou corpo integral', as
       assert.equal(error.code, 'SUPABASE_PROJECTION_REQUEST_FAILED');
       assert.equal(error.status, 409);
       assert.equal(error.remoteCode, '23505');
+      assert.equal(error.remoteMessage, 'duplicate key [REDACTED]');
+      assert.equal(error.remoteMessage.includes(secret), false);
       assert.equal(Object.hasOwn(error, 'request'), false);
       assert.equal(Object.hasOwn(error, 'body'), false);
       return true;
