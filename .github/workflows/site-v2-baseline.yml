@@ -9,6 +9,7 @@ on:
       - 'docs/**'
       - 'wrangler.site-v2-staging.jsonc'
       - '.github/workflows/site-v2-baseline.yml'
+      - '.github/workflows/deploy-site-v2-staging.yml'
   workflow_dispatch:
 
 permissions:
