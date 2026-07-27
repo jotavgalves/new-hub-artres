@@ -1,4 +1,4 @@
-import { createOrderIntentFingerprint, normalizeIdempotencyKey } from './idempotency.mjs';
+import { createOrderIntentFingerprint, idempotencyStorageKey } from './idempotency.mjs';
 import { priceOrderIntentV2, validatePricingQuoteV2 } from './pricing.mjs';
 import { createCanonicalItemV2, roundMoney } from './schema.mjs';
 import { validateLedgerSubmissionCommand } from '../persistence/order-ledger-port.mjs';
@@ -7,7 +7,7 @@ export async function createAtomicLedgerCommandV2(input = {}) {
   const submissionCreatedAt = validIsoDate(input.submissionCreatedAt);
   if (!submissionCreatedAt) throw commandError('SUBMISSION_CREATED_AT_INVALID');
 
-  const idempotencyKey = normalizeIdempotencyKey(input.idempotencyKey);
+  const idempotencyKey = await idempotencyStorageKey(input.idempotencyKey);
   const body = input.body && typeof input.body === 'object' && !Array.isArray(input.body)
     ? input.body
     : {};
