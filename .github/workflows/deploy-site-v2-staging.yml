@@ -1,6 +1,15 @@
 name: Publicar Site V2 Staging Sintético
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/v2/**'
+      - 'staging/site-v2-worker/**'
+      - 'wrangler.site-v2-staging.jsonc'
+      - 'tests/v2/run-staging-synthetic-remote-smoke.mjs'
+      - '.github/workflows/deploy-site-v2-staging.yml'
   workflow_dispatch:
     inputs:
       confirmacao:
@@ -16,22 +25,34 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  validate-confirmation:
-    name: Validar confirmação manual
+  authorize-deploy:
+    name: Autorizar deploy automático ou manual
     runs-on: ubuntu-latest
     steps:
-      - name: Exigir frase exata
+      - name: Validar origem do gatilho
         env:
-          CONFIRMACAO: ${{ inputs.confirmacao }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          CONFIRMACAO: ${{ inputs.confirmacao || '' }}
         run: |
-          if [ "$CONFIRMACAO" != "PUBLICAR STAGING SINTETICO" ]; then
-            echo "Confirmação inválida. Nenhuma publicação foi realizada."
-            exit 1
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" = "push" ] && [ "$REF_NAME" = "main" ]; then
+            echo "Deploy automático autorizado por alteração da V2 incorporada à main."
+            exit 0
           fi
 
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$CONFIRMACAO" = "PUBLICAR STAGING SINTETICO" ]; then
+            echo "Deploy manual de contingência autorizado."
+            exit 0
+          fi
+
+          echo "Gatilho não autorizado. Nenhuma publicação foi realizada."
+          exit 1
+
   deploy-staging:
-    name: Publicar e validar escrita sintética
-    needs: validate-confirmation
+    name: Publicar e validar staging sintético
+    needs: authorize-deploy
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: site-v2-staging
@@ -54,6 +75,13 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
+
+      - name: Registrar contexto sem expor segredos
+        run: |
+          echo "Evento: ${{ github.event_name }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Destino: staging isolado"
 
       - name: Validar segredos obrigatórios
         run: |
@@ -120,10 +148,10 @@ jobs:
           --strict
           --config wrangler.site-v2-staging.jsonc
           --secrets-file "$STAGING_SECRETS_FILE"
-          --message "Staging V2 com escrita exclusivamente sintética"
+          --message "Staging V2 automático com escrita exclusivamente sintética"
           --tag "staging-synthetic-writes-enabled"
 
-      - name: Criar pedido sintético, repetir e inspecionar
+      - name: Validar pedido, replay, painel e bloqueios
         id: remote-smoke
         run: node tests/v2/run-staging-synthetic-remote-smoke.mjs
 
@@ -145,6 +173,7 @@ jobs:
         if: success()
         run: |
           echo "Worker: new-hub-artres-v2-staging"
+          echo "Painel: /admin"
           echo "Rotas de domínio de produção: nenhuma"
           echo "Escrita comercial: habilitada somente para catálogo sintético"
           echo "Rota técnica do ledger: desabilitada"

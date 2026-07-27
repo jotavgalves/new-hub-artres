@@ -7,19 +7,31 @@ const smokeUrl = new URL('./run-staging-synthetic-remote-smoke.mjs', import.meta
 const workflow = await readFile(workflowUrl, 'utf8');
 const smoke = await readFile(smokeUrl, 'utf8');
 
-test('deploy só pode ser iniciado manualmente', () => {
+test('deploy automático reage somente a mudanças V2 incorporadas à main e mantém contingência manual', () => {
+  assert.ok(workflow.includes('push:'));
+  assert.ok(workflow.includes('branches:'));
+  assert.ok(workflow.includes('- main'));
+  assert.ok(workflow.includes("- 'src/v2/**'"));
+  assert.ok(workflow.includes("- 'staging/site-v2-worker/**'"));
+  assert.ok(workflow.includes("- 'wrangler.site-v2-staging.jsonc'"));
+  assert.ok(workflow.includes("- 'tests/v2/run-staging-synthetic-remote-smoke.mjs'"));
+  assert.ok(workflow.includes("- '.github/workflows/deploy-site-v2-staging.yml'"));
   assert.ok(workflow.includes('workflow_dispatch:'));
-  assert.equal(/^\s+push:/m.test(workflow), false);
   assert.equal(/^\s+pull_request:/m.test(workflow), false);
   assert.equal(/^\s+schedule:/m.test(workflow), false);
   assert.equal(/^\s+workflow_run:/m.test(workflow), false);
 });
 
-test('exige confirmação textual específica para escrita sintética', () => {
+test('autoriza automaticamente apenas push na main e exige frase no modo manual', () => {
+  assert.ok(workflow.includes('EVENT_NAME: ${{ github.event_name }}'));
+  assert.ok(workflow.includes('REF_NAME: ${{ github.ref_name }}'));
+  assert.ok(workflow.includes('CONFIRMACAO: ${{ inputs.confirmacao || \'\' }}'));
+  assert.ok(workflow.includes('[ "$EVENT_NAME" = "push" ] && [ "$REF_NAME" = "main" ]'));
+  assert.ok(workflow.includes('[ "$EVENT_NAME" = "workflow_dispatch" ]'));
+  assert.ok(workflow.includes('[ "$CONFIRMACAO" = "PUBLICAR STAGING SINTETICO" ]'));
+  assert.ok(workflow.includes('needs: authorize-deploy'));
   assert.ok(workflow.includes('Digite PUBLICAR STAGING SINTETICO para confirmar'));
-  assert.ok(workflow.includes('"PUBLICAR STAGING SINTETICO"'));
-  assert.ok(workflow.includes('needs: validate-confirmation'));
-  assert.equal(workflow.includes('"PUBLICAR STAGING"'), false);
+  assert.equal(workflow.includes('needs: validate-confirmation'), false);
 });
 
 test('usa ambiente protegido e concorrência exclusiva', () => {
@@ -56,7 +68,7 @@ test('secret e configuração de rollback são temporários e removidos sempre',
   assert.equal(workflow.includes('secret put STAGING_API_TOKEN'), false);
 });
 
-test('valida bundles ativo e de rollback antes do deploy real', () => {
+test('valida testes e bundles ativo e de rollback antes do deploy real', () => {
   const testsIndex = workflow.indexOf('node --test tests/v2/*.test.mjs');
   const activeDryRunIndex = workflow.indexOf('Validar bundle ativo sem publicar');
   const rollbackDryRunIndex = workflow.indexOf('Validar bundle de rollback sem publicar');
@@ -72,11 +84,12 @@ test('valida bundles ativo e de rollback antes do deploy real', () => {
   assert.equal(workflow.includes('--env production'), false);
 });
 
-test('deploy ativo declara escrita sintética e mantém rota técnica desligada', () => {
+test('deploy ativo declara escrita sintética, painel e rota técnica desligada', () => {
   assert.ok(workflow.includes('staging-synthetic-writes-enabled'));
   assert.ok(workflow.includes('Escrita comercial: habilitada somente para catálogo sintético'));
   assert.ok(workflow.includes('Rota técnica do ledger: desabilitada'));
-  assert.ok(smoke.includes("health?.catalog === 'synthetic-staging-only'") || smoke.includes("result.payload?.catalog === 'synthetic-staging-only'"));
+  assert.ok(workflow.includes('Painel: /admin'));
+  assert.ok(smoke.includes("result.payload?.catalog === 'synthetic-staging-only'"));
   assert.ok(smoke.includes('catalogVersion === 9001'));
   assert.ok(smoke.includes("lowLevelResult.payload?.error === 'LOW_LEVEL_LEDGER_DISABLED'"));
 });
@@ -93,12 +106,27 @@ test('smoke remoto cria, repete e inspeciona somente pedido sintético', () => {
   assert.ok(smoke.includes('CLIENT_ORDER_TOTALS_IGNORED'));
 });
 
-test('smoke aguarda propagação estável e repete somente erro transitório de escrita desativada', () => {
+test('smoke remoto valida painel e API administrativa somente leitura', () => {
+  assert.ok(smoke.includes("`${base}/admin?rolloutProbe="));
+  assert.ok(smoke.includes("adminPageResult.text.includes('Pedidos sintéticos')"));
+  assert.ok(smoke.includes("adminPageResult.text.includes('SOMENTE LEITURA')"));
+  assert.ok(smoke.includes("`${base}/internal/v2/admin/orders?limit=100`"));
+  assert.ok(smoke.includes('adminResult.payload?.readOnly === true'));
+  assert.ok(smoke.includes("adminOrder?.customer?.redacted === true"));
+  assert.ok(smoke.includes('ADMIN_CUSTOMER_NAME_EXPOSED'));
+  assert.ok(smoke.includes('ADMIN_CUSTOMER_PHONE_EXPOSED'));
+  assert.ok(smoke.includes("adminPostResult.response.status === 405"));
+  assert.ok(smoke.includes("adminPostResult.payload?.error === 'METHOD_NOT_ALLOWED'"));
+});
+
+test('smoke aguarda propagação estável e repete somente respostas transitórias conhecidas', () => {
   assert.ok(smoke.includes('waitForStableActiveDeployment'));
   assert.ok(smoke.includes('consecutive >= 3'));
   assert.ok(smoke.includes("transientErrors: ['STAGING_WRITES_DISABLED']"));
-  assert.ok(smoke.includes("response.status === 503 && transientErrors.has(payload?.error)"));
+  assert.ok(smoke.includes('transientStatuses: [404]'));
+  assert.ok(smoke.includes('transientStatuses.has(response.status)'));
   assert.ok(smoke.includes("event: 'staging-rollout-transient-retry'"));
+  assert.ok(smoke.includes("event: 'staging-rollout-static-retry'"));
   assert.ok(smoke.includes("statusError('REPLAY', replayResult)"));
   assert.ok(smoke.includes('`${label}_STATUS_${result.response.status}_ERROR_${safeCode(result.payload?.error)}`'));
 });
@@ -111,9 +139,10 @@ test('falha posterior ao deploy aciona rollback automático para escrita desativ
   assert.ok(workflow.includes('--config "$ROLLBACK_CONFIG_FILE"'));
 });
 
-test('workflow não referencia recursos ou rotas do site público atual', () => {
+test('workflow automático não referencia recursos ou rotas do site público atual', () => {
   assert.equal(workflow.includes('new-hub-artres.pages.dev'), false);
   assert.equal(workflow.includes('CONFIG_KV'), false);
   assert.equal(workflow.includes('SUPABASE'), false);
   assert.equal(workflow.includes('ADMIN_SECRET_KEY'), false);
+  assert.equal(workflow.includes('environment: production'), false);
 });
