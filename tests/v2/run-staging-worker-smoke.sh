@@ -15,6 +15,7 @@ FIRST_FILE="/tmp/site-v2-staging-first.json"
 REPLAY_FILE="/tmp/site-v2-staging-replay.json"
 ORDER_FILE="/tmp/site-v2-staging-order.json"
 OUTBOX_FILE="/tmp/site-v2-staging-outbox.json"
+LOW_LEVEL_FILE="/tmp/site-v2-staging-low-level.json"
 
 cleanup() {
   status=$?
@@ -22,7 +23,7 @@ cleanup() {
     kill "$WRANGLER_PID" 2>/dev/null || true
     wait "$WRANGLER_PID" 2>/dev/null || true
   fi
-  rm -f .dev.vars "$BODY_FILE" "$FIRST_FILE" "$REPLAY_FILE" "$ORDER_FILE" "$OUTBOX_FILE"
+  rm -f .dev.vars "$BODY_FILE" "$FIRST_FILE" "$REPLAY_FILE" "$ORDER_FILE" "$OUTBOX_FILE" "$LOW_LEVEL_FILE"
   rm -rf .wrangler
   if [ "$status" -ne 0 ]; then
     echo "Falha no smoke test. Log do Wrangler:"
@@ -95,6 +96,7 @@ node -e '
   if (!health.ok) throw new Error("HEALTH_NOT_OK");
   if (health.environment !== "staging") throw new Error("ENVIRONMENT_NOT_STAGING");
   if (health.writesEnabled !== true) throw new Error("LOCAL_WRITES_NOT_ENABLED");
+  if (health.lowLevelLedgerEnabled !== false) throw new Error("LOW_LEVEL_LEDGER_NOT_DISABLED");
   if (health.persistence !== "durable-object-sqlite") throw new Error("PERSISTENCE_INVALID");
   if (health.catalog !== "synthetic-staging-only") throw new Error("CATALOG_NOT_SYNTHETIC");
 '
@@ -151,6 +153,25 @@ node -e '
   if (replay.orderNumber !== first.orderNumber) throw new Error("REPLAY_ORDER_NUMBER_CHANGED");
 ' "$FIRST_FILE" "$REPLAY_FILE"
 
+LOW_LEVEL_STATUS=$(curl --silent --show-error \
+  --output "$LOW_LEVEL_FILE" \
+  --write-out '%{http_code}' \
+  --request POST \
+  --header "X-Staging-Token: $TOKEN" \
+  "$BASE_URL/internal/v2/ledger/submit")
+
+if [ "$LOW_LEVEL_STATUS" != "503" ]; then
+  echo "Rota técnica retornou HTTP $LOW_LEVEL_STATUS"
+  cat "$LOW_LEVEL_FILE"
+  exit 1
+fi
+
+node -e '
+  const fs = require("fs");
+  const result = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  if (result.error !== "LOW_LEVEL_LEDGER_DISABLED") throw new Error("LOW_LEVEL_LEDGER_GUARD_INVALID");
+' "$LOW_LEVEL_FILE"
+
 ENCODED_CREATED_AT=$(node -p 'encodeURIComponent(process.argv[1])' "$CREATED_AT")
 curl --fail --silent --show-error \
   --header "X-Staging-Token: $TOKEN" \
@@ -169,9 +190,12 @@ node -e '
   if (!orderResult.ok || orderResult.order?.orderNumber !== "PED2600001A") throw new Error("ORDER_QUERY_INVALID");
   if (orderResult.order?.items?.[0]?.driveFileId !== "staging-artwork-2657") throw new Error("DRIVE_FILE_ID_LOST");
   if (orderResult.order?.pricing?.total !== 58.5) throw new Error("ORDER_TOTAL_INVALID");
+  if (orderResult.order?.customer?.redacted !== true) throw new Error("ORDER_CUSTOMER_NOT_REDACTED");
+  if (Object.hasOwn(orderResult.order?.customer || {}, "whatsapp")) throw new Error("ORDER_PHONE_EXPOSED");
   if (!outboxResult.ok || outboxResult.events?.length !== 1) throw new Error("OUTBOX_COUNT_INVALID");
   if (outboxResult.events[0]?.eventType !== "order.created.v2") throw new Error("OUTBOX_EVENT_INVALID");
   if (outboxResult.events[0]?.aggregateId !== "PED2600001A") throw new Error("OUTBOX_AGGREGATE_INVALID");
+  if (outboxResult.events[0]?.payload?.order?.customer?.redacted !== true) throw new Error("OUTBOX_CUSTOMER_NOT_REDACTED");
 ' "$ORDER_FILE" "$OUTBOX_FILE"
 
 echo "Smoke test do staging concluído com sucesso."
