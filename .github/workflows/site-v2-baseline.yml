@@ -5,6 +5,7 @@ on:
     paths:
       - 'src/v2/**'
       - 'staging/site-v2-worker/**'
+      - 'supabase/**'
       - 'tests/v2/**'
       - 'docs/**'
       - 'wrangler.site-v2-staging.jsonc'
