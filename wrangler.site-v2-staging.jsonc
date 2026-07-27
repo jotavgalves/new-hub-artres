@@ -12,7 +12,7 @@
   },
   "vars": {
     "ENVIRONMENT": "staging",
-    "STAGING_WRITE_ENABLED": "false",
+    "STAGING_WRITE_ENABLED": "true",
     "STAGING_LOW_LEVEL_LEDGER_ENABLED": "false"
   },
   "secrets": {
