@@ -99,8 +99,8 @@ test('smoke aguarda propagação estável e repete somente erro transitório de 
   assert.ok(smoke.includes("transientErrors: ['STAGING_WRITES_DISABLED']"));
   assert.ok(smoke.includes("response.status === 503 && transientErrors.has(payload?.error)"));
   assert.ok(smoke.includes("event: 'staging-rollout-transient-retry'"));
-  assert.ok(smoke.includes('REPLAY_STATUS_'));
-  assert.ok(smoke.includes('_ERROR_'));
+  assert.ok(smoke.includes("statusError('REPLAY', replayResult)"));
+  assert.ok(smoke.includes('`${label}_STATUS_${result.response.status}_ERROR_${safeCode(result.payload?.error)}`'));
 });
 
 test('falha posterior ao deploy aciona rollback automático para escrita desativada', () => {
