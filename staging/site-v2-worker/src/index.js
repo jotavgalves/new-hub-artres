@@ -3,6 +3,11 @@ import { createAtomicLedgerCommandV2 } from '../../../src/v2/orders/atomic-comma
 import { orderLedgerShardName } from '../../../src/v2/orders/order-number.mjs';
 import { OrderLedger } from './order-ledger-do.js';
 import {
+  ADMIN_READONLY_CSS,
+  ADMIN_READONLY_HTML,
+  ADMIN_READONLY_JS
+} from './admin-readonly-page.js';
+import {
   STAGING_CATALOG_ITEMS,
   STAGING_CATALOG_VERSION,
   STAGING_CONFIG_VERSION,
@@ -12,6 +17,7 @@ import {
 export { OrderLedger };
 
 const MAX_JSON_BYTES = 128 * 1024;
+const MAX_ADMIN_ORDERS = 100;
 
 export default {
   async fetch(request, env) {
@@ -34,6 +40,21 @@ export default {
         });
       }
 
+      if (url.pathname === '/admin' || url.pathname === '/admin/') {
+        if (request.method !== 'GET') return methodNotAllowed(['GET'], requestId);
+        return staticAsset(ADMIN_READONLY_HTML, 'text/html; charset=utf-8', true);
+      }
+
+      if (url.pathname === '/admin/app.css') {
+        if (request.method !== 'GET') return methodNotAllowed(['GET'], requestId);
+        return staticAsset(ADMIN_READONLY_CSS, 'text/css; charset=utf-8');
+      }
+
+      if (url.pathname === '/admin/app.js') {
+        if (request.method !== 'GET') return methodNotAllowed(['GET'], requestId);
+        return staticAsset(ADMIN_READONLY_JS, 'text/javascript; charset=utf-8');
+      }
+
       if (!url.pathname.startsWith('/internal/v2/')) {
         return json({ ok: false, error: 'ROUTE_NOT_FOUND', requestId }, 404);
       }
@@ -43,6 +64,35 @@ export default {
         env.STAGING_API_TOKEN
       );
       if (!authorized) return json({ ok: false, error: 'STAGING_TOKEN_INVALID', requestId }, 401);
+
+      if (url.pathname === '/internal/v2/admin/orders') {
+        if (request.method !== 'GET') return methodNotAllowed(['GET'], requestId);
+        const limit = boundedPositiveInteger(url.searchParams.get('limit'), 50, MAX_ADMIN_ORDERS);
+        const year = new Date().getUTCFullYear();
+        const shardDate = `${year}-01-01T00:00:00.000Z`;
+        const stub = ledgerStub(env, shardDate);
+        const [events, ledgerHealth] = await Promise.all([
+          stub.listPendingOutbox(limit),
+          stub.health()
+        ]);
+        const orders = events
+          .filter(event => event.eventType === 'order.created.v2' && event.payload?.order)
+          .slice()
+          .reverse()
+          .map(event => orderInspectionView(event.payload.order));
+
+        return json({
+          ok: true,
+          requestId,
+          readOnly: true,
+          environment: env.ENVIRONMENT || 'staging',
+          catalog: 'synthetic-staging-only',
+          catalogVersion: STAGING_CATALOG_VERSION,
+          year,
+          summary: adminSummary(orders, ledgerHealth),
+          orders
+        });
+      }
 
       if (url.pathname === '/internal/v2/orders/submit') {
         if (request.method !== 'POST') return methodNotAllowed(['POST'], requestId);
@@ -230,6 +280,27 @@ function outboxInspectionView(event = {}) {
   };
 }
 
+function adminSummary(orders, ledgerHealth = {}) {
+  return {
+    orderCount: Number(ledgerHealth.orderCount || 0),
+    returned: orders.length,
+    totalValue: orders.reduce((sum, order) => sum + finiteNumber(order.pricing?.total), 0),
+    itemQuantity: orders.reduce((sum, order) => sum + finiteNumber(order.qty), 0),
+    pendingOutbox: Number(ledgerHealth.pendingOutbox || 0)
+  };
+}
+
+function boundedPositiveInteger(value, fallback, maximum) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(parsed, maximum);
+}
+
+function finiteNumber(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function methodNotAllowed(methods, requestId) {
   return json({ ok: false, error: 'METHOD_NOT_ALLOWED', requestId }, 405, {
     Allow: methods.join(', ')
@@ -263,6 +334,24 @@ function workerError(code) {
   const error = new Error(code);
   error.code = code;
   return error;
+}
+
+function staticAsset(body, contentType, isHtml = false) {
+  return new Response(body, {
+    status: 200,
+    headers: {
+      'Content-Type': contentType,
+      'Cache-Control': 'no-store, max-age=0',
+      'Content-Security-Policy': isHtml
+        ? "default-src 'none'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+        : "default-src 'none'; frame-ancestors 'none'",
+      'Cross-Origin-Resource-Policy': 'same-origin',
+      'X-Content-Type-Options': 'nosniff',
+      'Referrer-Policy': 'no-referrer',
+      'X-Frame-Options': 'DENY',
+      'X-Robots-Tag': 'noindex, nofollow, noarchive'
+    }
+  });
 }
 
 function json(payload, status = 200, extraHeaders = {}) {
