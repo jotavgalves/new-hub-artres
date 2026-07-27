@@ -57,7 +57,7 @@ function preparedOrder(overrides = {}) {
 
 function command(overrides = {}) {
   return {
-    idempotencyKey: 'idem_0123456789abcdef',
+    idempotencyKey: `idempotency:v2:${'1'.repeat(64)}`,
     fingerprint: 'a'.repeat(64),
     submissionCreatedAt: '2026-07-26T20:00:00.000Z',
     requestId: 'req-1',
@@ -94,6 +94,16 @@ test('comando válido não permite número antecipado pelo cliente', () => {
   }));
   assert.equal(invalid.ok, false);
   assert.ok(invalid.errors.includes('PREPARED_ORDER_NUMBER_MUST_BE_EMPTY'));
+});
+
+test('ledger rejeita chave bruta e aceita apenas chave derivada', () => {
+  const invalid = validateLedgerSubmissionCommand(command({ idempotencyKey: 'idem_0123456789abcdef' }));
+  assert.equal(invalid.ok, false);
+  assert.ok(invalid.errors.includes('IDEMPOTENCY_STORAGE_KEY_INVALID'));
+
+  const valid = validateLedgerSubmissionCommand(command());
+  assert.equal(valid.ok, true);
+  assert.match(valid.command.idempotencyKey, /^idempotency:v2:[a-f0-9]{64}$/);
 });
 
 test('submissão cria pedido, idempotência e outbox em uma única operação lógica', async () => {
