@@ -42,6 +42,7 @@ jobs:
         run: |
           node --check staging/site-v2-worker/src/index.js
           node --check staging/site-v2-worker/src/order-ledger-do.js
+          node --check staging/site-v2-worker/src/admin-readonly-page.js
 
       - name: Preparar secret sintético do dry-run
         run: |
@@ -63,3 +64,6 @@ jobs:
 
       - name: Executar Worker e Durable Object localmente
         run: bash tests/v2/run-staging-worker-smoke.sh
+
+      - name: Validar painel administrativo somente leitura
+        run: bash tests/v2/run-staging-admin-readonly-smoke.sh
