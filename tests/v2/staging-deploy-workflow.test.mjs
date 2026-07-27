@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const workflowUrl = new URL('../../.github/workflows/deploy-site-v2-staging.yml', import.meta.url);
+const preparationUrl = new URL('../../scripts/v2/prepare-site-v2-staging-deploy.mjs', import.meta.url);
 const smokeUrl = new URL('./run-staging-synthetic-remote-smoke.mjs', import.meta.url);
 const wranglerUrl = new URL('../../wrangler.site-v2-staging.jsonc', import.meta.url);
 const workflow = await readFile(workflowUrl, 'utf8');
+const preparation = await readFile(preparationUrl, 'utf8');
 const smoke = await readFile(smokeUrl, 'utf8');
 const wrangler = await readFile(wranglerUrl, 'utf8');
 
@@ -14,6 +16,7 @@ test('deploy automático reage somente a mudanças V2 incorporadas à main e man
   assert.ok(workflow.includes('branches:'));
   assert.ok(workflow.includes('- main'));
   assert.ok(workflow.includes("- 'src/v2/**'"));
+  assert.ok(workflow.includes("- 'scripts/v2/**'"));
   assert.ok(workflow.includes("- 'staging/site-v2-worker/**'"));
   assert.ok(workflow.includes("- 'wrangler.site-v2-staging.jsonc'"));
   assert.ok(workflow.includes("- 'tests/v2/run-staging-synthetic-remote-smoke.mjs'"));
@@ -55,35 +58,40 @@ test('exige credenciais base e referencia segredo sombra sem valor literal', () 
   assert.ok(workflow.includes('secrets.CLOUDFLARE_ACCOUNT_ID'));
   assert.ok(workflow.includes('secrets.SITE_V2_STAGING_API_TOKEN'));
   assert.ok(workflow.includes('secrets.SUPABASE_V2_STAGING_SERVICE_ROLE_KEY'));
-  assert.ok(workflow.includes('SITE_V2_STAGING_API_TOKEN_TOO_SHORT'));
-  assert.ok(workflow.includes('SUPABASE_V2_STAGING_SERVICE_ROLE_KEY_MISSING_OR_SHORT'));
+  assert.ok(preparation.includes('SITE_V2_STAGING_API_TOKEN_TOO_SHORT'));
+  assert.ok(preparation.includes('SUPABASE_V2_STAGING_SERVICE_ROLE_KEY_MISSING_OR_SHORT'));
   assert.equal(workflow.includes('local-staging-token-0123456789abcdef'), false);
   assert.equal(workflow.includes('CLOUDFLARE_API_TOKEN="'), false);
   assert.equal(workflow.includes('sb_secret_'), false);
   assert.equal(workflow.includes('eyJhbGciOi'), false);
+  assert.equal(preparation.includes('sb_secret_'), false);
+  assert.equal(preparation.includes('eyJhbGciOi'), false);
 });
 
-test('secrets e configuração de rollback são temporários e removidos sempre', () => {
+test('preparação de secrets e rollback é testável, temporária e removida sempre', () => {
   assert.ok(workflow.includes('STAGING_SECRETS_FILE: /tmp/site-v2-staging-secrets.json'));
   assert.ok(workflow.includes('ROLLBACK_CONFIG_FILE: wrangler.site-v2-staging.rollback.runtime.jsonc'));
   assert.ok(workflow.includes('umask 077'));
-  assert.ok(workflow.includes('const secrets = { STAGING_API_TOKEN: token };'));
-  assert.ok(workflow.includes('secrets.SUPABASE_V2_SERVICE_ROLE_KEY = shadowKey'));
-  assert.ok(workflow.includes('JSON.stringify(secrets)'));
-  assert.ok(workflow.includes('"STAGING_WRITE_ENABLED": "false"'));
-  assert.ok(workflow.includes('"SUPABASE_SHADOW_ENABLED": "false"'));
+  assert.ok(workflow.includes('node scripts/v2/prepare-site-v2-staging-deploy.mjs'));
+  assert.ok(preparation.includes('const secrets = { STAGING_API_TOKEN: stagingApiToken };'));
+  assert.ok(preparation.includes('secrets.SUPABASE_V2_SERVICE_ROLE_KEY = supabaseServiceRoleKey'));
+  assert.ok(preparation.includes('writePrivateFile(secretsPath'));
+  assert.ok(preparation.includes('STAGING_WRITE_ENABLED'));
+  assert.ok(preparation.includes('SUPABASE_SHADOW_ENABLED'));
   assert.ok(workflow.includes('if: always()'));
   assert.ok(workflow.includes('rm -f "$STAGING_SECRETS_FILE" "$ROLLBACK_CONFIG_FILE"'));
   assert.equal(workflow.includes('secret put STAGING_API_TOKEN'), false);
 });
 
 test('valida testes e bundles ativo e de rollback antes do deploy real', () => {
+  const preparationIndex = workflow.indexOf('node scripts/v2/prepare-site-v2-staging-deploy.mjs');
   const testsIndex = workflow.indexOf('node --test tests/v2/*.test.mjs');
   const activeDryRunIndex = workflow.indexOf('Validar bundle ativo sem publicar');
   const rollbackDryRunIndex = workflow.indexOf('Validar bundle de rollback sem publicar');
   const deployIndex = workflow.indexOf('Publicar Worker com escrita exclusivamente sintética');
 
-  assert.ok(testsIndex >= 0);
+  assert.ok(preparationIndex >= 0);
+  assert.ok(testsIndex > preparationIndex);
   assert.ok(activeDryRunIndex > testsIndex);
   assert.ok(rollbackDryRunIndex > activeDryRunIndex);
   assert.ok(deployIndex > rollbackDryRunIndex);
