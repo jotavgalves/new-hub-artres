@@ -1,12 +1,17 @@
+import {
+  DEFAULT_SUPABASE_RPC_RESPONSE_BYTES,
+  normalizeSupabaseUrl,
+  SupabaseRpcClient
+} from '../../../src/v2/persistence/supabase-rpc-client.mjs';
+
 const DEFAULT_TIMEOUT_MS = 3500;
 const MIN_TIMEOUT_MS = 500;
 const MAX_TIMEOUT_MS = 10000;
-const MAX_RESPONSE_BYTES = 64 * 1024;
-const RPC_PATH = '/rest/v1/rpc/armazem_v2_project_order_v1';
+const RPC_FUNCTION = 'armazem_v2_project_order_v1';
 
 export function supabaseShadowStatus(env = {}) {
   const enabled = String(env.SUPABASE_SHADOW_ENABLED || '') === 'true';
-  const url = normalizedBaseUrl(env.SUPABASE_V2_URL);
+  const url = normalizeSupabaseUrl(env.SUPABASE_V2_URL);
   const serviceRoleKey = String(env.SUPABASE_V2_SERVICE_ROLE_KEY || '').trim();
 
   return {
@@ -106,102 +111,68 @@ export async function projectOrderToSupabase({
   if (typeof fetchImpl !== 'function') throw shadowError('SUPABASE_SHADOW_FETCH_UNAVAILABLE');
 
   const projection = buildSupabaseOrderProjection({ command, result });
-  const baseUrl = normalizedBaseUrl(env.SUPABASE_V2_URL);
-  const serviceRoleKey = String(env.SUPABASE_V2_SERVICE_ROLE_KEY || '').trim();
-  const timeoutMs = boundedTimeout(env.SUPABASE_SHADOW_TIMEOUT_MS);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
   const startedAt = Date.now();
+  let payload;
 
   try {
-    const response = await fetchImpl(new URL(RPC_PATH, `${baseUrl}/`).toString(), {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${serviceRoleKey}`,
-        apikey: serviceRoleKey,
-        'X-Client-Info': 'new-hub-artres-v2-staging-shadow/1'
-      },
-      body: JSON.stringify({ p_projection: projection }),
-      signal: controller.signal
+    const client = new SupabaseRpcClient({
+      url: env.SUPABASE_V2_URL,
+      serviceKey: env.SUPABASE_V2_SERVICE_ROLE_KEY,
+      fetch: fetchImpl,
+      schema: 'public',
+      timeoutMs: boundedTimeout(env.SUPABASE_SHADOW_TIMEOUT_MS),
+      maxResponseBytes: DEFAULT_SUPABASE_RPC_RESPONSE_BYTES
     });
 
-    const responseText = await readLimitedResponseText(response, MAX_RESPONSE_BYTES);
-    if (!response.ok) throw shadowError(`SUPABASE_SHADOW_HTTP_${response.status}`);
-
-    let payload;
-    try {
-      payload = responseText ? JSON.parse(responseText) : null;
-    } catch (_) {
-      throw shadowError('SUPABASE_SHADOW_RESPONSE_INVALID');
-    }
-
-    if (
-      payload?.ok !== true ||
-      !['CREATED', 'REPLAY'].includes(payload?.action) ||
-      payload?.orderNumber !== projection.order.orderNumber
-    ) {
-      throw shadowError('SUPABASE_SHADOW_RESPONSE_MISMATCH');
-    }
-
-    return {
-      ok: true,
-      action: payload.action,
-      replayed: payload.replayed === true,
-      orderNumber: payload.orderNumber,
-      latencyMs: Date.now() - startedAt
-    };
+    payload = await client.call(RPC_FUNCTION, { p_projection: projection });
   } catch (error) {
-    if (error?.name === 'AbortError') throw shadowError('SUPABASE_SHADOW_TIMEOUT');
-    if (String(error?.code || '').startsWith('SUPABASE_SHADOW_')) throw error;
-    throw shadowError('SUPABASE_SHADOW_REQUEST_FAILED');
-  } finally {
-    clearTimeout(timer);
+    throw mapRpcError(error);
   }
+
+  const normalized = Array.isArray(payload) && payload.length === 1 ? payload[0] : payload;
+  if (
+    normalized?.ok !== true ||
+    !['CREATED', 'REPLAY'].includes(normalized?.action) ||
+    normalized?.orderNumber !== projection.order.orderNumber
+  ) {
+    throw shadowError('SUPABASE_SHADOW_RESPONSE_MISMATCH');
+  }
+
+  return {
+    ok: true,
+    action: normalized.action,
+    replayed: normalized.replayed === true,
+    orderNumber: normalized.orderNumber,
+    latencyMs: Date.now() - startedAt
+  };
 }
 
-async function readLimitedResponseText(response, maxBytes) {
-  const declaredLength = Number.parseInt(response.headers.get('content-length') || '', 10);
-  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
-    throw shadowError('SUPABASE_SHADOW_RESPONSE_TOO_LARGE');
+function mapRpcError(error) {
+  if (error?.code === 'SUPABASE_RPC_RESPONSE_TOO_LARGE') {
+    return shadowError('SUPABASE_SHADOW_RESPONSE_TOO_LARGE');
   }
-
-  if (!response.body) return '';
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  const chunks = [];
-  let totalBytes = 0;
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      totalBytes += value.byteLength;
-      if (totalBytes > maxBytes) {
-        await reader.cancel('SUPABASE_SHADOW_RESPONSE_TOO_LARGE').catch(() => {});
-        throw shadowError('SUPABASE_SHADOW_RESPONSE_TOO_LARGE');
-      }
-      chunks.push(decoder.decode(value, { stream: true }));
-    }
-    chunks.push(decoder.decode());
-    return chunks.join('');
-  } finally {
-    reader.releaseLock();
+  if (error?.code === 'SUPABASE_RPC_TIMEOUT') {
+    return shadowError('SUPABASE_SHADOW_TIMEOUT');
   }
-}
-
-function normalizedBaseUrl(value) {
-  const text = String(value || '').trim().replace(/\/+$/, '');
-  if (!text.startsWith('https://')) return '';
-  try {
-    const url = new URL(text);
-    const rootPath = url.pathname === '' || url.pathname === '/';
-    const cleanAuthority = !url.username && !url.password && !url.search && !url.hash;
-    return url.protocol === 'https:' && rootPath && cleanAuthority ? url.origin : '';
-  } catch (_) {
-    return '';
+  if (error?.code === 'SUPABASE_RPC_REQUEST_FAILED') {
+    const status = Number(error.status || 0);
+    return shadowError(
+      Number.isInteger(status) && status >= 100 && status <= 599
+        ? `SUPABASE_SHADOW_HTTP_${status}`
+        : 'SUPABASE_SHADOW_REQUEST_FAILED'
+    );
   }
+  if (
+    error?.code === 'SUPABASE_URL_INVALID' ||
+    error?.code === 'SUPABASE_SECRET_KEY_INVALID' ||
+    error?.code === 'SUPABASE_SCHEMA_INVALID'
+  ) {
+    return shadowError('SUPABASE_SHADOW_NOT_CONFIGURED');
+  }
+  if (error?.code === 'SUPABASE_FETCH_REQUIRED') {
+    return shadowError('SUPABASE_SHADOW_FETCH_UNAVAILABLE');
+  }
+  return shadowError('SUPABASE_SHADOW_REQUEST_FAILED');
 }
 
 function boundedTimeout(value) {
