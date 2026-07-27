@@ -12,7 +12,8 @@
   },
   "vars": {
     "ENVIRONMENT": "staging",
-    "STAGING_WRITE_ENABLED": "false"
+    "STAGING_WRITE_ENABLED": "false",
+    "STAGING_LOW_LEVEL_LEDGER_ENABLED": "false"
   },
   "secrets": {
     "required": ["STAGING_API_TOKEN"]
