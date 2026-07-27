@@ -24,6 +24,13 @@ export default {
       shadowStatus.enabled &&
       shadowStatus.configured;
     const submissionRequest = captureSubmission ? request.clone() : null;
+    const submissionBodyTask = submissionRequest
+      ? submissionRequest.json().then(
+          body => ({ ok: true, body }),
+          error => ({ ok: false, error })
+        )
+      : null;
+    const idempotencyKey = submissionRequest?.headers.get('idempotency-key') || '';
 
     const response = await baseWorker.fetch(request, env, ctx);
 
@@ -33,7 +40,8 @@ export default {
 
     if (captureSubmission && (response.status === 200 || response.status === 201)) {
       const task = projectSuccessfulSubmission({
-        request: submissionRequest,
+        bodyTask: submissionBodyTask,
+        idempotencyKey,
         response: response.clone(),
         env
       }).catch(error => {
@@ -52,11 +60,15 @@ export default {
   }
 };
 
-async function projectSuccessfulSubmission({ request, response, env }) {
-  const [body, submission] = await Promise.all([
-    request.json(),
+async function projectSuccessfulSubmission({ bodyTask, idempotencyKey, response, env }) {
+  const [bodyResult, submission] = await Promise.all([
+    bodyTask,
     response.json()
   ]);
+  if (!bodyResult?.ok || !bodyResult.body || typeof bodyResult.body !== 'object') {
+    throw shadowError('SUPABASE_SHADOW_SUBMISSION_BODY_INVALID');
+  }
+  const body = bodyResult.body;
 
   const orderNumber = String(submission?.orderNumber || '').trim().toUpperCase();
   if (!submission?.ok || !/^PED\d{7}[A-Z]$/.test(orderNumber)) {
@@ -64,7 +76,7 @@ async function projectSuccessfulSubmission({ request, response, env }) {
   }
 
   const command = await createAtomicLedgerCommandV2({
-    idempotencyKey: request.headers.get('idempotency-key'),
+    idempotencyKey,
     submissionCreatedAt: body.submissionCreatedAt,
     body,
     catalogItems: STAGING_CATALOG_ITEMS,
