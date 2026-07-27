@@ -1,0 +1,132 @@
+name: Verificar Proteções Remotas do Staging V2
+
+on:
+  push:
+    branches:
+      - 'agent/staging-remote-protection-check'
+    paths:
+      - '.github/workflows/staging-remote-protection-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-staging-protections:
+    name: Confirmar bloqueios remotos
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: site-v2-staging
+
+    env:
+      STAGING_URL: https://new-hub-artres-v2-staging.jvgacontato.workers.dev
+      SITE_V2_STAGING_API_TOKEN: ${{ secrets.SITE_V2_STAGING_API_TOKEN }}
+
+    steps:
+      - name: Consultar health e confirmar bloqueios
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const base = String(process.env.STAGING_URL || '').replace(/\/$/, '');
+          const token = String(process.env.SITE_V2_STAGING_API_TOKEN || '');
+
+          if (!base.startsWith('https://')) throw new Error('STAGING_URL_INVALID');
+          if (token.length < 32) throw new Error('SITE_V2_STAGING_API_TOKEN_MISSING_OR_SHORT');
+
+          async function readJson(response) {
+            const text = await response.text();
+            try {
+              return text ? JSON.parse(text) : null;
+            } catch {
+              throw new Error(`INVALID_JSON_RESPONSE:${response.status}`);
+            }
+          }
+
+          function assert(condition, code) {
+            if (!condition) throw new Error(code);
+          }
+
+          const healthResponse = await fetch(`${base}/health`, {
+            headers: { Accept: 'application/json' }
+          });
+          const health = await readJson(healthResponse);
+          assert(healthResponse.status === 200, `HEALTH_STATUS_${healthResponse.status}`);
+          assert(health?.ok === true, 'HEALTH_NOT_OK');
+          assert(health?.environment === 'staging', 'HEALTH_ENVIRONMENT_INVALID');
+          assert(health?.writesEnabled === false, 'WRITES_MUST_REMAIN_DISABLED');
+          assert(health?.lowLevelLedgerEnabled === false, 'LOW_LEVEL_LEDGER_MUST_REMAIN_DISABLED');
+          assert(health?.catalog === 'synthetic-staging-only', 'CATALOG_MUST_BE_SYNTHETIC');
+
+          const createdAt = encodeURIComponent('2026-07-27T00:00:00.000Z');
+          const unauthenticatedResponse = await fetch(
+            `${base}/internal/v2/ledger/outbox?createdAt=${createdAt}`,
+            { headers: { Accept: 'application/json' } }
+          );
+          const unauthenticated = await readJson(unauthenticatedResponse);
+          assert(unauthenticatedResponse.status === 401, `UNAUTHENTICATED_STATUS_${unauthenticatedResponse.status}`);
+          assert(unauthenticated?.error === 'STAGING_TOKEN_INVALID', 'UNAUTHENTICATED_ERROR_INVALID');
+
+          const syntheticBody = {
+            submissionCreatedAt: '2026-07-27T00:00:00.000Z',
+            seller: { id: 'remote-check', label: 'Remote Check' },
+            customer: { name: 'Cliente Sintético', whatsapp: '5581999999999' },
+            items: [{
+              driveFileId: 'staging-artwork-2657',
+              productKey: '50x50',
+              variantKey: 'default',
+              sizeKey: '50x50',
+              quantity: 6
+            }]
+          };
+
+          const disabledWriteResponse = await fetch(`${base}/internal/v2/orders/submit`, {
+            method: 'POST',
+            headers: {
+              Accept: 'application/json',
+              'Content-Type': 'application/json',
+              'X-Staging-Token': token,
+              'Idempotency-Key': 'remote_check_0123456789abcdef'
+            },
+            body: JSON.stringify(syntheticBody)
+          });
+          const disabledWrite = await readJson(disabledWriteResponse);
+          assert(disabledWriteResponse.status === 503, `DISABLED_WRITE_STATUS_${disabledWriteResponse.status}`);
+          assert(disabledWrite?.error === 'STAGING_WRITES_DISABLED', 'DISABLED_WRITE_ERROR_INVALID');
+
+          const lowLevelResponse = await fetch(`${base}/internal/v2/ledger/submit`, {
+            method: 'POST',
+            headers: {
+              Accept: 'application/json',
+              'Content-Type': 'application/json',
+              'X-Staging-Token': token
+            },
+            body: '{}'
+          });
+          const lowLevel = await readJson(lowLevelResponse);
+          assert(lowLevelResponse.status === 503, `LOW_LEVEL_STATUS_${lowLevelResponse.status}`);
+          assert(
+            ['STAGING_WRITES_DISABLED', 'STAGING_LOW_LEVEL_LEDGER_DISABLED'].includes(lowLevel?.error),
+            'LOW_LEVEL_ERROR_INVALID'
+          );
+
+          console.log(JSON.stringify({
+            ok: true,
+            health: {
+              writesEnabled: health.writesEnabled,
+              lowLevelLedgerEnabled: health.lowLevelLedgerEnabled,
+              catalog: health.catalog
+            },
+            unauthenticated: {
+              status: unauthenticatedResponse.status,
+              error: unauthenticated.error
+            },
+            authenticatedWrite: {
+              status: disabledWriteResponse.status,
+              error: disabledWrite.error
+            },
+            lowLevelWrite: {
+              status: lowLevelResponse.status,
+              error: lowLevel.error
+            }
+          }, null, 2));
+          NODE
