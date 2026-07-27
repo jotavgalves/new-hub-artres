@@ -27,41 +27,42 @@ A projeção do Supabase é:
 
 ## Arquitetura
 
-O entrypoint do Worker passa a ser:
+O entrypoint do Worker é:
 
 ```text
 staging/site-v2-worker/src/index-shadow.js
 ```
 
-Esse arquivo envolve o Worker consolidado em `index.js`, mas não substitui suas rotas ou sua implementação do Durable Object.
+O arquivo envolve o Worker consolidado em `index.js`, sem substituir suas rotas ou a implementação do Durable Object.
 
-A montagem do contrato específico do staging fica isolada em:
+A montagem do contrato específico do staging fica em:
 
 ```text
 staging/site-v2-worker/src/supabase-shadow-projector.js
 ```
 
-O transporte HTTP, a validação HTTPS, os headers privilegiados, o limite de resposta e a sanitização de erros são compartilhados com o adaptador Supabase já existente por meio de:
+O transporte HTTP é compartilhado com o adaptador Supabase V2 existente:
 
 ```text
 src/v2/persistence/supabase-rpc-client.mjs
 ```
 
-O adaptador genérico de pedidos continua em:
+Esse cliente concentra HTTPS, headers privilegiados, timeout, limite de resposta e sanitização de erros.
 
-```text
-src/v2/persistence/supabase-order-projection.mjs
-```
-
-Assim, o staging não mantém uma segunda implementação de transporte Supabase.
-
-RPC utilizada pelo modo sombra:
+RPC de projeção:
 
 ```text
 public.armazem_v2_project_order_v1(jsonb)
 ```
 
-Destino de staging:
+RPCs usadas no smoke remoto:
+
+```text
+public.armazem_v2_projection_health_v1()
+public.armazem_v2_list_orders_redacted_v1(integer)
+```
+
+Destino exclusivo do staging:
 
 ```text
 https://kueklnkznwpbobqwugns.supabase.co
@@ -85,93 +86,113 @@ A chave bruta de idempotência não é enviada ao Supabase.
 
 ## Segurança
 
-A RPC permanece executável apenas pelo papel `service_role`.
+As RPCs permanecem executáveis apenas pelo papel `service_role`.
 
 O frontend não recebe:
 
-- URL de RPC privilegiada;
 - chave de serviço;
 - chave de idempotência derivada;
-- dados técnicos do outbox.
+- dados técnicos do outbox;
+- acesso direto às tabelas privadas.
 
-Os logs do modo sombra registram somente:
+Os logs registram somente códigos técnicos, request ID sanitizado, número do pedido, ação e latência.
 
-- código de erro público;
-- request ID sanitizado;
-- número do pedido;
-- ação CREATED ou REPLAY;
-- latência.
+Nome, telefone, WhatsApp, corpo integral do pedido e credencial não são registrados.
 
-Nome, telefone, WhatsApp, corpo do pedido e credencial não são registrados.
+## Estado de ativação do staging
 
-## Estado inicial
-
-O recurso entra versionado com:
+A configuração proposta para o staging é:
 
 ```json
-"SUPABASE_SHADOW_ENABLED": "false"
+"SUPABASE_SHADOW_ENABLED": "true"
 ```
 
-Portanto, o merge e o deploy não enviam pedidos ao Supabase.
+A escrita continua limitada ao catálogo sintético e a rota técnica de baixo nível permanece desativada:
 
-O endpoint `/health` informa o estado usando:
+```json
+"STAGING_WRITE_ENABLED": "true"
+"STAGING_LOW_LEVEL_LEDGER_ENABLED": "false"
+```
+
+O endpoint `/health` deve informar:
 
 ```json
 {
   "supabaseShadow": {
-    "enabled": false,
-    "configured": false,
+    "enabled": true,
+    "configured": true,
     "mode": "best-effort",
     "target": "supabase-v2-staging"
   }
 }
 ```
 
-O campo `configured` poderá ficar `true` quando a credencial existir, mesmo que a flag continue desativada.
+O deploy não pode prosseguir quando `enabled` estiver ativo e `configured` não puder ser obtido pela credencial protegida.
 
-## Credencial necessária para ativação
+## Credencial obrigatória
 
-Será necessário cadastrar uma única vez no ambiente protegido `site-v2-staging` do GitHub:
+O ambiente protegido `site-v2-staging` do GitHub precisa conter:
 
 ```text
 SUPABASE_V2_STAGING_SERVICE_ROLE_KEY
 ```
 
-O valor deve ser obtido diretamente no painel do projeto `Armazem V2 Staging` e inserido no GitHub sem ser enviado pelo chat, por commit ou por arquivo.
+O valor deve ser obtido diretamente no painel do projeto `Armazem V2 Staging` e inserido no GitHub. Ele não deve ser enviado pelo chat, por commit ou por arquivo.
 
-A integração disponível nesta conversa não possui permissão para ler ou gravar segredos do GitHub, e o conector do Supabase não expõe chaves de serviço.
+A integração disponível nesta conversa não possui permissão para ler ou gravar secrets do GitHub, e o conector do Supabase não expõe a chave de serviço.
 
-## Ativação futura
+## Validações anteriores ao deploy
 
-Depois da credencial cadastrada, a ativação será feita em PR separado alterando somente:
+O workflow exige:
 
-```json
-"SUPABASE_SHADOW_ENABLED": "true"
-```
-
-Antes do deploy, o workflow exige:
-
-- credencial com tamanho mínimo;
-- URL exata do Supabase V2 Staging;
+- credenciais Cloudflare do staging;
+- token interno do Worker;
+- credencial de serviço do Supabase V2 Staging;
+- URL exata do projeto de staging;
 - ledger técnico desativado;
 - testes locais;
-- bundle ativo e bundle de rollback.
+- bundle ativo sem publicação;
+- bundle de rollback sem publicação.
 
-O rollback troca automaticamente:
+## Smoke remoto após o deploy
+
+O primeiro smoke valida:
+
+1. estabilidade do Worker;
+2. pedido sintético criado;
+3. replay com o mesmo número;
+4. cálculo do servidor;
+5. painel somente leitura;
+6. cliente redigido;
+7. low-level ledger bloqueado.
+
+O segundo smoke valida diretamente no Supabase:
+
+1. `enabled=true` e `configured=true` no health do Worker;
+2. health privilegiado da projeção;
+3. pedido sintético exclusivo criado pelo Worker;
+4. replay com o mesmo número;
+5. pedido visível na RPC redigida;
+6. total e item preservados;
+7. nome e WhatsApp ausentes da resposta;
+8. exatamente uma ocorrência do pedido após o replay.
+
+## Rollback
+
+Qualquer falha após a publicação aciona um bundle separado que troca:
 
 ```text
 STAGING_WRITE_ENABLED=true   -> false
 SUPABASE_SHADOW_ENABLED=true -> false
 ```
 
-## Critério de validação quando ativado
+O rollback não altera produção, domínio público, Supabase antigo ou dados reais.
 
-O smoke remoto deverá confirmar:
+## Limites desta fase
 
-1. pedido sintético criado no Durable Object;
-2. replay com o mesmo número;
-3. pedido projetado no Supabase;
-4. cliente redigido na leitura administrativa;
-5. nenhuma duplicação no Supabase;
-6. falha simulada do Supabase sem alterar a resposta do ledger;
-7. produção pública inalterada.
+- somente catálogo sintético;
+- somente staging isolado;
+- Durable Object ainda é a fonte principal;
+- painel administrativo ainda lê o ledger do staging;
+- nenhuma rota de produção;
+- nenhum pedido real.
