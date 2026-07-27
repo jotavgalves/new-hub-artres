@@ -5,10 +5,12 @@ import { readFile } from 'node:fs/promises';
 const workflowUrl = new URL('../../.github/workflows/deploy-site-v2-staging.yml', import.meta.url);
 const preparationUrl = new URL('../../scripts/v2/prepare-site-v2-staging-deploy.mjs', import.meta.url);
 const smokeUrl = new URL('./run-staging-synthetic-remote-smoke.mjs', import.meta.url);
+const shadowSmokeUrl = new URL('./run-staging-supabase-shadow-remote-smoke.mjs', import.meta.url);
 const wranglerUrl = new URL('../../wrangler.site-v2-staging.jsonc', import.meta.url);
 const workflow = await readFile(workflowUrl, 'utf8');
 const preparation = await readFile(preparationUrl, 'utf8');
 const smoke = await readFile(smokeUrl, 'utf8');
+const shadowSmoke = await readFile(shadowSmokeUrl, 'utf8');
 const wrangler = await readFile(wranglerUrl, 'utf8');
 
 test('deploy automático reage somente a mudanças V2 incorporadas à main e mantém contingência manual', () => {
@@ -20,6 +22,7 @@ test('deploy automático reage somente a mudanças V2 incorporadas à main e man
   assert.ok(workflow.includes("- 'staging/site-v2-worker/**'"));
   assert.ok(workflow.includes("- 'wrangler.site-v2-staging.jsonc'"));
   assert.ok(workflow.includes("- 'tests/v2/run-staging-synthetic-remote-smoke.mjs'"));
+  assert.ok(workflow.includes("- 'tests/v2/run-staging-supabase-shadow-remote-smoke.mjs'"));
   assert.ok(workflow.includes("- '.github/workflows/deploy-site-v2-staging.yml'"));
   assert.ok(workflow.includes('workflow_dispatch:'));
   assert.equal(/^\s+pull_request:/m.test(workflow), false);
@@ -53,11 +56,13 @@ test('actions críticas usam SHA imutável e checkout sem credencial persistida'
   assert.equal(workflow.includes('actions/setup-node@v4'), false);
 });
 
-test('exige credenciais base e referencia segredo sombra sem valor literal', () => {
+test('ativação exige credenciais base e segredo sombra sem valor literal', () => {
   assert.ok(workflow.includes('secrets.CLOUDFLARE_API_TOKEN'));
   assert.ok(workflow.includes('secrets.CLOUDFLARE_ACCOUNT_ID'));
   assert.ok(workflow.includes('secrets.SITE_V2_STAGING_API_TOKEN'));
   assert.ok(workflow.includes('secrets.SUPABASE_V2_STAGING_SERVICE_ROLE_KEY'));
+  assert.ok(workflow.includes('SUPABASE_V2_URL: https://kueklnkznwpbobqwugns.supabase.co'));
+  assert.ok(workflow.includes('SITE_V2_STAGING_API_TOKEN SUPABASE_V2_STAGING_SERVICE_ROLE_KEY'));
   assert.ok(preparation.includes('SITE_V2_STAGING_API_TOKEN_TOO_SHORT'));
   assert.ok(preparation.includes('SUPABASE_V2_STAGING_SERVICE_ROLE_KEY_MISSING_OR_SHORT'));
   assert.equal(workflow.includes('local-staging-token-0123456789abcdef'), false);
@@ -66,6 +71,8 @@ test('exige credenciais base e referencia segredo sombra sem valor literal', () 
   assert.equal(workflow.includes('eyJhbGciOi'), false);
   assert.equal(preparation.includes('sb_secret_'), false);
   assert.equal(preparation.includes('eyJhbGciOi'), false);
+  assert.equal(shadowSmoke.includes('sb_secret_'), false);
+  assert.equal(shadowSmoke.includes('eyJhbGciOi'), false);
 });
 
 test('preparação de secrets e rollback é testável, temporária e removida sempre', () => {
@@ -101,17 +108,18 @@ test('valida testes e bundles ativo e de rollback antes do deploy real', () => {
   assert.equal(workflow.includes('--env production'), false);
 });
 
-test('deploy ativo declara escrita sintética, painel, rota técnica desligada e sombra controlada', () => {
-  assert.ok(workflow.includes('staging-synthetic-writes-enabled'));
+test('deploy ativo declara escrita sintética, painel, rota técnica desligada e sombra habilitada', () => {
+  assert.ok(workflow.includes('staging-synthetic-supabase-shadow-enabled'));
   assert.ok(workflow.includes('Escrita comercial: habilitada somente para catálogo sintético'));
   assert.ok(workflow.includes('Rota técnica do ledger: desabilitada'));
-  assert.ok(workflow.includes('Projeção Supabase sombra: controlada por flag e desativada por padrão'));
+  assert.ok(workflow.includes('Projeção Supabase sombra: habilitada e validada por pedido sintético'));
   assert.ok(workflow.includes('Painel: /admin'));
   assert.ok(smoke.includes("result.payload?.catalog === 'synthetic-staging-only'"));
   assert.ok(smoke.includes('catalogVersion === 9001'));
   assert.ok(smoke.includes("lowLevelResult.payload?.error === 'LOW_LEVEL_LEDGER_DISABLED'"));
   assert.ok(wrangler.includes('"main": "staging/site-v2-worker/src/index-shadow.js"'));
-  assert.ok(wrangler.includes('"SUPABASE_SHADOW_ENABLED": "false"'));
+  assert.ok(wrangler.includes('"SUPABASE_SHADOW_ENABLED": "true"'));
+  assert.equal(wrangler.includes('"SUPABASE_SHADOW_ENABLED": "false"'), false);
 });
 
 test('smoke remoto cria, repete e inspeciona somente pedido sintético', () => {
@@ -124,6 +132,23 @@ test('smoke remoto cria, repete e inspeciona somente pedido sintético', () => {
   assert.ok(smoke.includes("event?.eventType === 'order.created.v2'"));
   assert.ok(smoke.includes('CLIENT_ITEM_PRICE_IGNORED:staging-artwork-2657'));
   assert.ok(smoke.includes('CLIENT_ORDER_TOTALS_IGNORED'));
+});
+
+test('smoke da sombra confirma health, projeção única e dados redigidos no Supabase', () => {
+  assert.ok(workflow.includes('node tests/v2/run-staging-supabase-shadow-remote-smoke.mjs'));
+  assert.ok(shadowSmoke.includes("supabaseShadow?.enabled === true"));
+  assert.ok(shadowSmoke.includes("supabaseShadow?.configured === true"));
+  assert.ok(shadowSmoke.includes("supabaseRpc('armazem_v2_projection_health_v1')"));
+  assert.ok(shadowSmoke.includes("supabaseRpc('armazem_v2_list_orders_redacted_v1'"));
+  assert.ok(shadowSmoke.includes("first?.action === 'CREATED'"));
+  assert.ok(shadowSmoke.includes("replay?.action === 'REPLAY'"));
+  assert.ok(shadowSmoke.includes("order?.customer?.redacted === true"));
+  assert.ok(shadowSmoke.includes('duplicateCount === 1'));
+  assert.ok(shadowSmoke.includes('SUPABASE_CUSTOMER_NAME_EXPOSED'));
+  assert.ok(shadowSmoke.includes('SUPABASE_CUSTOMER_PHONE_EXPOSED'));
+  assert.ok(shadowSmoke.includes('SUPABASE_SERVICE_KEY_EXPOSED'));
+  assert.ok(shadowSmoke.includes('Authorization: `Bearer ${serviceRoleKey}`'));
+  assert.equal(shadowSmoke.includes('console.log(serviceRoleKey)'), false);
 });
 
 test('smoke remoto valida painel e API administrativa somente leitura', () => {
@@ -153,6 +178,7 @@ test('smoke aguarda propagação estável e repete somente respostas transitóri
 
 test('falha posterior ao deploy aciona rollback automático para escrita e sombra desativadas', () => {
   assert.ok(workflow.includes('id: deploy'));
+  assert.ok(workflow.includes('id: shadow-smoke'));
   assert.ok(workflow.includes("if: failure() && steps.deploy.outcome == 'success'"));
   assert.ok(workflow.includes('Rollback automático: escrita e sombra do staging desativadas'));
   assert.ok(workflow.includes('staging-writes-disabled-automatic-rollback'));
