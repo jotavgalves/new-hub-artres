@@ -68,6 +68,7 @@ jobs:
           node --check staging/site-v2-worker/src/supabase-shadow-projector.js
           node --check staging/site-v2-worker/src/order-ledger-do.js
           node --check staging/site-v2-worker/src/admin-readonly-page.js
+          node --check tests/v2/run-staging-supabase-shadow-remote-smoke.mjs
 
       - name: Preparar secret sintético do dry-run
         run: |
