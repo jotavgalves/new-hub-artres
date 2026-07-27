@@ -37,6 +37,7 @@ jobs:
           node-version: '22'
 
       - name: Executar testes isolados da V2
+        id: node-tests
         run: |
           set -euo pipefail
           TEST_LOG=/tmp/site-v2-node-tests.log
@@ -46,6 +47,15 @@ jobs:
             exit 1
           fi
           tail -n 30 "$TEST_LOG"
+
+      - name: Anexar diagnóstico temporário dos testes
+        if: failure() && steps.node-tests.outcome == 'failure'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: site-v2-node-test-failure
+          path: /tmp/site-v2-node-tests.log
+          retention-days: 1
+          if-no-files-found: error
 
       - name: Verificar sintaxe do Worker de staging
         run: |
