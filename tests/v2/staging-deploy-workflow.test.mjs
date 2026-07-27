@@ -13,10 +13,11 @@ test('deploy só pode ser iniciado manualmente', () => {
   assert.equal(/^\s+workflow_run:/m.test(workflow), false);
 });
 
-test('exige confirmação textual exata antes da publicação', () => {
-  assert.ok(workflow.includes('Digite PUBLICAR STAGING para confirmar'));
-  assert.ok(workflow.includes('"PUBLICAR STAGING"'));
+test('exige confirmação textual específica para escrita sintética', () => {
+  assert.ok(workflow.includes('Digite PUBLICAR STAGING SINTETICO para confirmar'));
+  assert.ok(workflow.includes('"PUBLICAR STAGING SINTETICO"'));
   assert.ok(workflow.includes('needs: validate-confirmation'));
+  assert.equal(workflow.includes('"PUBLICAR STAGING"'), false);
 });
 
 test('usa ambiente protegido e concorrência exclusiva', () => {
@@ -42,40 +43,64 @@ test('exige credenciais distintas e nunca contém valor literal', () => {
   assert.equal(workflow.includes('CLOUDFLARE_API_TOKEN="'), false);
 });
 
-test('secret do Worker é enviado junto com o deploy e removido depois', () => {
+test('secret e configuração de rollback são temporários e removidos sempre', () => {
   assert.ok(workflow.includes('STAGING_SECRETS_FILE: /tmp/site-v2-staging-secrets.json'));
+  assert.ok(workflow.includes('ROLLBACK_CONFIG_FILE: wrangler.site-v2-staging.rollback.runtime.jsonc'));
   assert.ok(workflow.includes('umask 077'));
   assert.ok(workflow.includes('JSON.stringify({ STAGING_API_TOKEN: token })'));
-  assert.ok(workflow.includes('--secrets-file "$STAGING_SECRETS_FILE"'));
+  assert.ok(workflow.includes('"STAGING_WRITE_ENABLED": "false"'));
   assert.ok(workflow.includes('if: always()'));
-  assert.ok(workflow.includes('rm -f "$STAGING_SECRETS_FILE"'));
+  assert.ok(workflow.includes('rm -f "$STAGING_SECRETS_FILE" "$ROLLBACK_CONFIG_FILE"'));
   assert.equal(workflow.includes('secret put STAGING_API_TOKEN'), false);
 });
 
-test('publica exclusivamente o arquivo de configuração de staging em modo estrito', () => {
-  const deployCommands = workflow.match(/npx --yes wrangler@4\.114\.0 deploy[\s\S]*?(?=\n\s{6}- name:|$)/g) || [];
-  assert.ok(deployCommands.length >= 2);
-  for (const command of deployCommands) {
-    assert.ok(command.includes('--config wrangler.site-v2-staging.jsonc'));
-    assert.ok(command.includes('--strict'));
-    assert.ok(command.includes('--secrets-file "$STAGING_SECRETS_FILE"'));
-  }
+test('valida bundles ativo e de rollback antes do deploy real', () => {
+  const testsIndex = workflow.indexOf('node --test tests/v2/*.test.mjs');
+  const activeDryRunIndex = workflow.indexOf('Validar bundle ativo sem publicar');
+  const rollbackDryRunIndex = workflow.indexOf('Validar bundle de rollback sem publicar');
+  const deployIndex = workflow.indexOf('Publicar Worker com escrita exclusivamente sintética');
+
+  assert.ok(testsIndex >= 0);
+  assert.ok(activeDryRunIndex > testsIndex);
+  assert.ok(rollbackDryRunIndex > activeDryRunIndex);
+  assert.ok(deployIndex > rollbackDryRunIndex);
+  assert.ok(workflow.includes('--config wrangler.site-v2-staging.jsonc'));
+  assert.ok(workflow.includes('--config "$ROLLBACK_CONFIG_FILE"'));
   assert.equal(workflow.includes('wrangler.toml'), false);
   assert.equal(workflow.includes('--env production'), false);
 });
 
-test('valida testes e bundle antes do deploy real', () => {
-  const testsIndex = workflow.indexOf('node --test tests/v2/*.test.mjs');
-  const dryRunIndex = workflow.indexOf('--dry-run');
-  const deployNameIndex = workflow.indexOf('Publicar Worker, migration e secret com escrita desabilitada');
-
-  assert.ok(testsIndex >= 0);
-  assert.ok(dryRunIndex > testsIndex);
-  assert.ok(deployNameIndex > dryRunIndex);
+test('deploy ativo declara escrita sintética e mantém rota técnica desligada', () => {
+  assert.ok(workflow.includes('staging-synthetic-writes-enabled'));
+  assert.ok(workflow.includes('Escrita comercial: habilitada somente para catálogo sintético'));
+  assert.ok(workflow.includes('Rota técnica do ledger: desabilitada'));
+  assert.ok(workflow.includes('synthetic-staging-only'));
+  assert.ok(workflow.includes('catalogVersion === 9001'));
+  assert.ok(workflow.includes("lowLevel?.error === 'LOW_LEVEL_LEDGER_DISABLED'"));
 });
 
-test('o próprio workflow declara que a escrita continua desabilitada', () => {
-  assert.ok(workflow.includes('com escrita desabilitada'));
-  assert.ok(workflow.includes('Escrita: desabilitada'));
-  assert.equal(workflow.includes('STAGING_WRITE_ENABLED=true'), false);
+test('smoke remoto cria, repete e inspeciona somente pedido sintético', () => {
+  assert.ok(workflow.includes('staging-artwork-2657'));
+  assert.ok(workflow.includes("first?.action === 'CREATED'"));
+  assert.ok(workflow.includes("replay?.action === 'REPLAY'"));
+  assert.ok(workflow.includes('first?.pricing?.total === 58.5'));
+  assert.ok(workflow.includes('customer?.redacted === true'));
+  assert.ok(workflow.includes("event?.eventType === 'order.created.v2'"));
+  assert.ok(workflow.includes('CLIENT_ITEM_PRICE_IGNORED:staging-artwork-2657'));
+  assert.ok(workflow.includes('CLIENT_ORDER_TOTALS_IGNORED'));
+});
+
+test('falha posterior ao deploy aciona rollback automático para escrita desativada', () => {
+  assert.ok(workflow.includes("id: deploy"));
+  assert.ok(workflow.includes("if: failure() && steps.deploy.outcome == 'success'"));
+  assert.ok(workflow.includes('Rollback automático: escrita do staging desativada'));
+  assert.ok(workflow.includes('staging-writes-disabled-automatic-rollback'));
+  assert.ok(workflow.includes('--config "$ROLLBACK_CONFIG_FILE"'));
+});
+
+test('workflow não referencia recursos ou rotas do site público atual', () => {
+  assert.equal(workflow.includes('new-hub-artres.pages.dev'), false);
+  assert.equal(workflow.includes('CONFIG_KV'), false);
+  assert.equal(workflow.includes('SUPABASE'), false);
+  assert.equal(workflow.includes('ADMIN_SECRET_KEY'), false);
 });
