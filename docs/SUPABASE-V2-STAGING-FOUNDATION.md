@@ -1,28 +1,31 @@
 # Fundação do Supabase para o Armazem V2 Staging
 
-## Estado desta etapa
+## Estado atual
 
-Este bloco apenas versiona a estrutura proposta no GitHub.
+A fundação foi aplicada e validada no projeto isolado `Armazem V2 Staging`, na região `sa-east-1`.
 
-Não executa migration, não cria tabela remota, não grava pedido e não altera nenhum projeto anterior.
+O identificador concreto do projeto, chaves e segredos permanecem fora do repositório.
 
-Projeto destinado à futura aplicação controlada:
+Migrations aplicadas no staging:
 
 ```text
-Armazem V2 Staging
-Região: sa-east-1
+armazem_v2_projection_foundation
+armazem_v2_rpc_role_guard
+armazem_v2_projection_fk_indexes
 ```
 
-O identificador concreto do projeto não é registrado no repositório.
+Nenhum pedido de teste permaneceu gravado. A validação sintética foi executada em subtransação e revertida integralmente.
 
-## Arquivos
+## Arquivos versionados
 
 ```text
 supabase/migrations/20260727193000_armazem_v2_projection_foundation.sql
 supabase/migrations/20260727193100_armazem_v2_rpc_role_guard.sql
+supabase/migrations/20260727193200_armazem_v2_projection_fk_indexes.sql
 supabase/contracts/order-projection-v1.schema.json
 tests/v2/supabase-v2-schema.test.mjs
 tests/v2/supabase-v2-rpc-role-guard.test.mjs
+tests/v2/supabase-v2-fk-indexes.test.mjs
 ```
 
 ## Modelo de segurança
@@ -41,7 +44,7 @@ A comunicação do Worker com o banco ocorrerá exclusivamente por RPCs pública
 
 ### Bloqueios
 
-Todas as tabelas possuem:
+Todas as cinco tabelas possuem:
 
 - RLS habilitada;
 - RLS forçada;
@@ -53,9 +56,21 @@ O frontend não recebe chave de serviço e não consulta o Supabase diretamente.
 
 ### Contexto das RPCs
 
-As três RPCs são executáveis somente por `service_role`. A migration complementar fixa o contexto interno usado pelo guard das funções, sem conceder acesso a tabelas ou a outros papéis.
+As três RPCs são executáveis somente por `service_role`.
 
-Esse ajuste evita dependência do formato histórico de propagação individual das claims pelo PostgREST.
+O guard interno lê primeiro a claim consolidada:
+
+```text
+request.jwt.claims
+```
+
+A claim histórica individual permanece apenas como fallback compatível:
+
+```text
+request.jwt.claim.role
+```
+
+A migration não tenta configurar GUC protegido e não amplia permissões.
 
 ### Dados pessoais
 
@@ -65,13 +80,13 @@ Nome, telefone e WhatsApp ficam em tabela privada separada:
 armazem_v2_private.order_customers
 ```
 
-A função administrativa de leitura não consulta essa tabela e devolve apenas:
+A leitura administrativa não consulta essa tabela e devolve somente:
 
 ```json
 {"customer":{"redacted":true}}
 ```
 
-## Tabelas propostas
+## Tabelas
 
 ### `orders`
 
@@ -99,7 +114,7 @@ A chave bruta recebida do cliente nunca deve chegar ao Supabase.
 
 Espelho do evento `order.created.v2` para futura integração com produção e demais consumidores.
 
-## RPCs propostas
+## RPCs
 
 ### `armazem_v2_project_order_v1`
 
@@ -123,31 +138,49 @@ Lista até 100 pedidos sem consultar ou expor a tabela de clientes.
 
 Retorna somente contagens técnicas da projeção.
 
-## Contrato
+## Índices
 
-O JSON Schema `order-projection-v1.schema.json` acompanha o pedido canônico já usado pelo Worker:
+Além das chaves e índices de consulta, existem índices de cobertura para as chaves estrangeiras:
 
-- `schemaVersion: 2`;
-- `currency: BRL`;
-- até 200 itens;
-- número no formato anual `PED`;
-- arte identificada por `driveFileId`;
-- identidade completa por produto, variante e tamanho;
-- preço com duas casas decimais;
-- chave de idempotência previamente derivada.
+```text
+armazem_v2_idempotency_order_number_idx
+armazem_v2_outbox_aggregate_id_idx
+```
 
-## Aplicação futura
+## Validação realizada
 
-As migrations só deverão ser aplicadas depois de:
+O teste sintético confirmou:
 
-1. PR aprovado e mesclado;
-2. revisão do SQL final;
-3. confirmação explícita para modificar o projeto `Armazem V2 Staging`;
-4. execução controlada das migrations em ordem;
-5. advisors de segurança e performance;
-6. testes de acesso anônimo, autenticado e service role;
-7. inserção exclusivamente sintética;
-8. plano de remoção do fixture sintético.
+- criação com ação `CREATED`;
+- replay com ação `REPLAY`;
+- total de R$ 58,50 calculado e persistido durante a subtransação;
+- cliente redigido na RPC administrativa;
+- uma ordem, um item e um evento pendente durante o teste;
+- zero pedidos, clientes, itens, chaves e eventos após o rollback.
+
+As ACLs confirmaram:
+
+```text
+anon: sem EXECUTE
+authenticated: sem EXECUTE
+service_role: EXECUTE permitido
+```
+
+## Advisors
+
+Os advisors de segurança retornam somente avisos informativos de RLS sem policies, comportamento intencional para tabelas privadas e bloqueadas.
+
+Os avisos de chaves estrangeiras sem índice foram corrigidos. Avisos de índices ainda não utilizados são esperados enquanto o banco permanece sem tráfego real.
+
+## Próxima etapa
+
+Conectar o Worker de staging ao Supabase em modo sombra:
+
+1. Durable Object continua como fonte principal;
+2. Supabase recebe somente projeções sintéticas;
+3. falha no Supabase não interrompe o pedido sintético;
+4. métricas comparam ledger e projeção;
+5. nenhuma ativação de produção.
 
 ## Produção
 
