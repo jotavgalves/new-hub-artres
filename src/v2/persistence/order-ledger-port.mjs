@@ -17,12 +17,12 @@ export function assertOrderLedgerPort(value) {
 
 export function validateLedgerSubmissionCommand(input = {}) {
   const errors = [];
-  const idempotencyKey = clean(input.idempotencyKey);
+  const idempotencyKey = clean(input.idempotencyKey).toLowerCase();
   const fingerprint = clean(input.fingerprint).toLowerCase();
   const submissionCreatedAt = validIsoDate(input.submissionCreatedAt);
   const preparedOrder = input.preparedOrder;
 
-  if (!/^[a-zA-Z0-9._:-]{16,160}$/.test(idempotencyKey)) errors.push('IDEMPOTENCY_KEY_INVALID');
+  if (!/^idempotency:v2:[a-f0-9]{64}$/.test(idempotencyKey)) errors.push('IDEMPOTENCY_STORAGE_KEY_INVALID');
   if (!/^[a-f0-9]{64}$/.test(fingerprint)) errors.push('FINGERPRINT_INVALID');
   if (!submissionCreatedAt) errors.push('SUBMISSION_CREATED_AT_INVALID');
   if (!preparedOrder || typeof preparedOrder !== 'object' || Array.isArray(preparedOrder)) {
