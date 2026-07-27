@@ -29,25 +29,32 @@ async function readJson(response) {
   }
 }
 
+function requestHeaders(label, options, attempt) {
+  return {
+    ...(options.headers || {}),
+    'Cache-Control': 'no-cache',
+    'X-Request-Id': `${label.toLowerCase()}-${runId}-${runAttempt}-${attempt}`
+  };
+}
+
 async function fetchJson(label, url, options = {}, retry = {}) {
   const maxAttempts = Number(retry.maxAttempts || 1);
   const delayMs = Number(retry.delayMs || 2000);
   const transientErrors = new Set(retry.transientErrors || []);
+  const transientStatuses = new Set(retry.transientStatuses || []);
   let last = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const response = await fetch(url, {
       ...options,
-      headers: {
-        ...(options.headers || {}),
-        'Cache-Control': 'no-cache',
-        'X-Request-Id': `${label.toLowerCase()}-${runId}-${runAttempt}-${attempt}`
-      }
+      headers: requestHeaders(label, options, attempt)
     });
     const payload = await readJson(response);
     last = { response, payload, attempt };
 
-    const transient = response.status === 503 && transientErrors.has(payload?.error);
+    const transient =
+      transientStatuses.has(response.status) ||
+      (response.status === 503 && transientErrors.has(payload?.error));
     if (!transient || attempt === maxAttempts) return last;
 
     console.log(JSON.stringify({
@@ -58,6 +65,35 @@ async function fetchJson(label, url, options = {}, retry = {}) {
       status: response.status,
       error: payload?.error,
       requestId: payload?.requestId || ''
+    }));
+    await sleep(delayMs);
+  }
+
+  return last;
+}
+
+async function fetchText(label, url, options = {}, retry = {}) {
+  const maxAttempts = Number(retry.maxAttempts || 1);
+  const delayMs = Number(retry.delayMs || 2000);
+  const transientStatuses = new Set(retry.transientStatuses || []);
+  let last = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const response = await fetch(url, {
+      ...options,
+      headers: requestHeaders(label, options, attempt)
+    });
+    const text = await response.text();
+    last = { response, text, attempt };
+
+    if (!transientStatuses.has(response.status) || attempt === maxAttempts) return last;
+
+    console.log(JSON.stringify({
+      level: 'info',
+      event: 'staging-rollout-static-retry',
+      label,
+      attempt,
+      status: response.status
     }));
     await sleep(delayMs);
   }
@@ -104,7 +140,25 @@ async function waitForStableActiveDeployment() {
   })}`);
 }
 
+const rolloutRetry = {
+  maxAttempts: 30,
+  delayMs: 2000,
+  transientStatuses: [404]
+};
+
 const health = await waitForStableActiveDeployment();
+
+const adminPageResult = await fetchText(
+  'ADMIN_PAGE',
+  `${base}/admin?rolloutProbe=${encodeURIComponent(`${runId}-${runAttempt}`)}`,
+  { headers: { Accept: 'text/html' } },
+  rolloutRetry
+);
+assert(adminPageResult.response.status === 200, `ADMIN_PAGE_STATUS_${adminPageResult.response.status}`);
+assert(String(adminPageResult.response.headers.get('content-type') || '').includes('text/html'), 'ADMIN_PAGE_CONTENT_TYPE_INVALID');
+assert(adminPageResult.text.includes('Pedidos sintéticos'), 'ADMIN_PAGE_TITLE_MISSING');
+assert(adminPageResult.text.includes('SOMENTE LEITURA'), 'ADMIN_PAGE_READONLY_BADGE_MISSING');
+assert(!adminPageResult.text.includes(token), 'ADMIN_PAGE_TOKEN_EXPOSED');
 
 const body = {
   submissionCreatedAt,
@@ -181,6 +235,40 @@ const event = outboxResult.payload?.events?.find(entry => entry.aggregateId === 
 assert(event?.eventType === 'order.created.v2', 'OUTBOX_EVENT_NOT_FOUND', outboxResult.payload);
 assert(event?.payload?.order?.customer?.redacted === true, 'OUTBOX_CUSTOMER_MUST_BE_REDACTED', event);
 
+const adminResult = await fetchJson(
+  'ADMIN_ORDERS',
+  `${base}/internal/v2/admin/orders?limit=100`,
+  { headers: { Accept: 'application/json', 'X-Staging-Token': token } },
+  rolloutRetry
+);
+assert(adminResult.response.status === 200, statusError('ADMIN_ORDERS', adminResult), adminResult.payload);
+assert(adminResult.payload?.ok === true && adminResult.payload?.readOnly === true, 'ADMIN_READONLY_INVALID', adminResult.payload);
+assert(adminResult.payload?.catalog === 'synthetic-staging-only', 'ADMIN_CATALOG_INVALID', adminResult.payload);
+assert(adminResult.payload?.catalogVersion === 9001, 'ADMIN_CATALOG_VERSION_INVALID', adminResult.payload);
+const adminOrder = adminResult.payload?.orders?.find(order => order.orderNumber === first.orderNumber);
+assert(adminOrder?.customer?.redacted === true, 'ADMIN_CUSTOMER_MUST_BE_REDACTED', adminOrder);
+assert(adminOrder?.pricing?.total === 58.5, 'ADMIN_ORDER_TOTAL_INVALID', adminOrder);
+const serializedAdmin = JSON.stringify(adminResult.payload);
+assert(!serializedAdmin.includes(body.customer.name), 'ADMIN_CUSTOMER_NAME_EXPOSED');
+assert(!serializedAdmin.includes(body.customer.whatsapp), 'ADMIN_CUSTOMER_PHONE_EXPOSED');
+
+const adminPostResult = await fetchJson(
+  'ADMIN_POST_GUARD',
+  `${base}/internal/v2/admin/orders`,
+  {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      'X-Staging-Token': token
+    },
+    body: '{}'
+  },
+  rolloutRetry
+);
+assert(adminPostResult.response.status === 405, statusError('ADMIN_POST_GUARD', adminPostResult), adminPostResult.payload);
+assert(adminPostResult.payload?.error === 'METHOD_NOT_ALLOWED', 'ADMIN_POST_NOT_BLOCKED', adminPostResult.payload);
+
 const lowLevelResult = await fetchJson(
   'LOW_LEVEL_LEDGER',
   `${base}/internal/v2/ledger/submit`,
@@ -202,11 +290,14 @@ console.log(JSON.stringify({
   ok: true,
   rolloutStable: true,
   healthRequestId: health.requestId,
+  adminPage: true,
+  adminReadOnly: adminResult.payload.readOnly,
   orderNumber: first.orderNumber,
   action: first.action,
   replayAction: replay.action,
   total: first.pricing.total,
   customerRedacted: orderResult.payload.order.customer.redacted,
+  adminCustomerRedacted: adminOrder.customer.redacted,
   outboxEventType: event.eventType,
   lowLevelLedgerError: lowLevelResult.payload.error
 }, null, 2));
