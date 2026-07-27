@@ -1,5 +1,7 @@
 import { validateProjectionEvent } from './order-projection-port.mjs';
 
+const MAX_REMOTE_RESPONSE_BYTES = 64 * 1024;
+
 export class SupabaseOrderProjection {
   #url;
   #key;
@@ -91,7 +93,7 @@ export class SupabaseOrderProjection {
       }
     );
 
-    const text = await response.text().catch(() => '');
+    const text = await readLimitedResponseText(response, MAX_REMOTE_RESPONSE_BYTES);
     const payload = parsePayload(text);
 
     if (!response.ok) {
@@ -136,6 +138,43 @@ function requireEvent(input, expectedType) {
     throw projectionError('PROJECTION_EVENT_TYPE_MISMATCH');
   }
   return validation.event;
+}
+
+async function readLimitedResponseText(response, maxBytes) {
+  const declaredLength = Number.parseInt(response?.headers?.get?.('content-length') || '', 10);
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    throw projectionError('SUPABASE_PROJECTION_RESPONSE_TOO_LARGE');
+  }
+
+  if (!response?.body?.getReader) {
+    const text = await response.text().catch(() => '');
+    if (new TextEncoder().encode(text).byteLength > maxBytes) {
+      throw projectionError('SUPABASE_PROJECTION_RESPONSE_TOO_LARGE');
+    }
+    return text;
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const chunks = [];
+  let totalBytes = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        await reader.cancel('SUPABASE_PROJECTION_RESPONSE_TOO_LARGE').catch(() => {});
+        throw projectionError('SUPABASE_PROJECTION_RESPONSE_TOO_LARGE');
+      }
+      chunks.push(decoder.decode(value, { stream: true }));
+    }
+    chunks.push(decoder.decode());
+    return chunks.join('');
+  } finally {
+    reader.releaseLock();
+  }
 }
 
 function normalizeProjectionResult(value) {
