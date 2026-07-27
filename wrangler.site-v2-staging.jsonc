@@ -14,7 +14,7 @@
     "ENVIRONMENT": "staging",
     "STAGING_WRITE_ENABLED": "true",
     "STAGING_LOW_LEVEL_LEDGER_ENABLED": "false",
-    "SUPABASE_SHADOW_ENABLED": "false",
+    "SUPABASE_SHADOW_ENABLED": "true",
     "SUPABASE_V2_URL": "https://kueklnkznwpbobqwugns.supabase.co",
     "SUPABASE_SHADOW_TIMEOUT_MS": "3500"
   },
