@@ -192,6 +192,19 @@ test('erro remoto é sanitizado sem incluir chave secreta ou corpo integral', as
   );
 });
 
+test('resposta remota excessiva é interrompida antes da desserialização', async () => {
+  const projection = new SupabaseOrderProjection({
+    url: 'https://project-ref.supabase.co',
+    serviceKey: 'service-secret-key-0123456789abcdef',
+    fetch: async () => fakeResponse(200, 'x'.repeat(70 * 1024))
+  });
+
+  await assert.rejects(
+    () => projection.projectOrderCreated(createdEvent()),
+    error => error && error.code === 'SUPABASE_PROJECTION_RESPONSE_TOO_LARGE'
+  );
+});
+
 test('rejeita URL sem HTTPS, chave curta e evento incompatível', async () => {
   assert.throws(
     () => new SupabaseOrderProjection({ url: 'http://project.local', serviceKey: 'a'.repeat(30) }),
