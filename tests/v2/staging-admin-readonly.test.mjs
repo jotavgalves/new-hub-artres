@@ -18,7 +18,7 @@ test('consulta administrativa é autenticada e estritamente somente de leitura',
   assert.ok(workerSource.includes("request.headers.get('x-staging-token')"));
   assert.ok(workerSource.includes('readOnly: true'));
   assert.ok(workerSource.includes("catalog: 'synthetic-staging-only'"));
-  assert.ok(workerSource.includes('events.filter'));
+  assert.ok(workerSource.includes(".filter(event => event.eventType === 'order.created.v2'"));
   assert.ok(workerSource.includes('orderInspectionView(event.payload.order)'));
   assert.equal(workerSource.includes("'/internal/v2/admin/orders/create'"), false);
   assert.equal(workerSource.includes("'/internal/v2/admin/orders/update'"), false);
