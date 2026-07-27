@@ -25,6 +25,14 @@ test('usa ambiente protegido e concorrência exclusiva', () => {
   assert.ok(workflow.includes('cancel-in-progress: false'));
 });
 
+test('actions críticas usam SHA imutável e checkout sem credencial persistida', () => {
+  assert.match(workflow, /actions\/checkout@[a-f0-9]{40}/);
+  assert.match(workflow, /actions\/setup-node@[a-f0-9]{40}/);
+  assert.ok(workflow.includes('persist-credentials: false'));
+  assert.equal(workflow.includes('actions/checkout@v4'), false);
+  assert.equal(workflow.includes('actions/setup-node@v4'), false);
+});
+
 test('exige credenciais distintas e nunca contém valor literal', () => {
   assert.ok(workflow.includes('secrets.CLOUDFLARE_API_TOKEN'));
   assert.ok(workflow.includes('secrets.CLOUDFLARE_ACCOUNT_ID'));
