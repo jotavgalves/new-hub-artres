@@ -48,7 +48,7 @@ jobs:
           fi
           tail -n 30 "$TEST_LOG"
 
-      - name: Anexar diagnóstico temporário dos testes
+      - name: Anexar diagnóstico dos testes em caso de falha
         if: failure() && steps.node-tests.outcome == 'failure'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -57,35 +57,10 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-      - name: Mapear temporariamente adaptadores Supabase existentes
+      - name: Verificar sintaxe do Worker e persistência V2
         run: |
-          set -euo pipefail
-          {
-            echo '=== TESTES ==='
-            grep -RIl --exclude='supabase-shadow-projector.test.mjs' --exclude='supabase-shadow-wrapper.test.mjs' \
-              -e 'projeção de criação usa uma única RPC' \
-              -e 'resposta booleana false é tratada como replay idempotente' \
-              -e 'health com probe usa função específica' \
-              tests/v2 src/v2 || true
-            echo '=== MODULOS COM RPC SUPABASE ==='
-            grep -RIl \
-              -e '/rest/v1/rpc/' \
-              -e 'SUPABASE_SERVICE_ROLE_KEY' \
-              -e 'serviceRoleKey' \
-              src/v2 tests/v2 || true
-          } | sort -u > /tmp/site-v2-supabase-map.txt
-          cat /tmp/site-v2-supabase-map.txt
-
-      - name: Anexar mapa temporário do Supabase
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: site-v2-supabase-map
-          path: /tmp/site-v2-supabase-map.txt
-          retention-days: 1
-          if-no-files-found: error
-
-      - name: Verificar sintaxe do Worker de staging
-        run: |
+          node --check src/v2/persistence/supabase-rpc-client.mjs
+          node --check src/v2/persistence/supabase-order-projection.mjs
           node --check staging/site-v2-worker/src/index.js
           node --check staging/site-v2-worker/src/index-shadow.js
           node --check staging/site-v2-worker/src/supabase-shadow-projector.js
