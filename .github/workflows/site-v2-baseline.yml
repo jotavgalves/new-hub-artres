@@ -58,8 +58,9 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-      - name: Verificar sintaxe do Worker, persistência e deploy V2
+      - name: Verificar sintaxe do Worker, catálogo, persistência e deploy V2
         run: |
+          node --check src/v2/catalog/supabase-catalog-source.mjs
           node --check src/v2/persistence/supabase-rpc-client.mjs
           node --check src/v2/persistence/supabase-order-projection.mjs
           node --check scripts/v2/prepare-site-v2-staging-deploy.mjs
