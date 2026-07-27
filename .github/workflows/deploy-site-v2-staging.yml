@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'src/v2/**'
+      - 'scripts/v2/**'
       - 'staging/site-v2-worker/**'
       - 'wrangler.site-v2-staging.jsonc'
       - 'tests/v2/run-staging-synthetic-remote-smoke.mjs'
@@ -100,48 +101,7 @@ jobs:
       - name: Preparar secrets e configuração de rollback
         run: |
           umask 077
-          node - <<'NODE'
-          const fs = require('fs');
-          const token = String(process.env.SITE_V2_STAGING_API_TOKEN || '');
-          const shadowKey = String(process.env.SUPABASE_V2_STAGING_SERVICE_ROLE_KEY || '');
-          const sourcePath = 'wrangler.site-v2-staging.jsonc';
-          const rollbackPath = process.env.ROLLBACK_CONFIG_FILE;
-
-          if (token.length < 32) throw new Error('SITE_V2_STAGING_API_TOKEN_TOO_SHORT');
-
-          const source = fs.readFileSync(sourcePath, 'utf8');
-          const activeFlag = '"STAGING_WRITE_ENABLED": "true"';
-          const safeFlag = '"STAGING_WRITE_ENABLED": "false"';
-          const shadowActiveFlag = '"SUPABASE_SHADOW_ENABLED": "true"';
-          const shadowSafeFlag = '"SUPABASE_SHADOW_ENABLED": "false"';
-
-          if ((source.match(new RegExp(activeFlag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length !== 1) {
-            throw new Error('ACTIVE_WRITE_FLAG_INVALID');
-          }
-          if (!source.includes('"STAGING_LOW_LEVEL_LEDGER_ENABLED": "false"')) {
-            throw new Error('LOW_LEVEL_LEDGER_MUST_REMAIN_DISABLED');
-          }
-
-          const shadowEnabled = source.includes(shadowActiveFlag);
-          const shadowDisabled = source.includes(shadowSafeFlag);
-          if (shadowEnabled === shadowDisabled) throw new Error('SUPABASE_SHADOW_FLAG_INVALID');
-          if (shadowEnabled) {
-            if (shadowKey.length < 32) throw new Error('SUPABASE_V2_STAGING_SERVICE_ROLE_KEY_MISSING_OR_SHORT');
-            if (!source.includes('"SUPABASE_V2_URL": "https://kueklnkznwpbobqwugns.supabase.co"')) {
-              throw new Error('SUPABASE_V2_STAGING_URL_INVALID');
-            }
-          }
-
-          const secrets = { STAGING_API_TOKEN: token };
-          if (shadowKey) secrets.SUPABASE_V2_SERVICE_ROLE_KEY = shadowKey;
-          fs.writeFileSync(process.env.STAGING_SECRETS_FILE, JSON.stringify(secrets), { mode: 0o600 });
-
-          let rollbackSource = source.replace(activeFlag, safeFlag);
-          if (rollbackSource.includes(shadowActiveFlag)) {
-            rollbackSource = rollbackSource.replace(shadowActiveFlag, shadowSafeFlag);
-          }
-          fs.writeFileSync(rollbackPath, rollbackSource, { mode: 0o600 });
-          NODE
+          node scripts/v2/prepare-site-v2-staging-deploy.mjs
 
       - name: Executar testes isolados
         run: node --test tests/v2/*.test.mjs
