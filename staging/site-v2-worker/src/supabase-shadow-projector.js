@@ -196,7 +196,9 @@ function normalizedBaseUrl(value) {
   if (!text.startsWith('https://')) return '';
   try {
     const url = new URL(text);
-    return url.protocol === 'https:' && url.pathname === '' ? url.origin : '';
+    const rootPath = url.pathname === '' || url.pathname === '/';
+    const cleanAuthority = !url.username && !url.password && !url.search && !url.hash;
+    return url.protocol === 'https:' && rootPath && cleanAuthority ? url.origin : '';
   } catch (_) {
     return '';
   }
