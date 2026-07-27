@@ -7,12 +7,14 @@ const configUrl = new URL('wrangler.site-v2-staging.jsonc', root);
 const workerUrl = new URL('staging/site-v2-worker/src/index.js', root);
 const ledgerUrl = new URL('staging/site-v2-worker/src/order-ledger-do.js', root);
 const fixtureUrl = new URL('staging/site-v2-worker/src/staging-catalog-fixture.js', root);
+const atomicCommandUrl = new URL('src/v2/orders/atomic-command.mjs', root);
 
 const configText = await readFile(configUrl, 'utf8');
 const config = JSON.parse(configText);
 const workerSource = await readFile(workerUrl, 'utf8');
 const ledgerSource = await readFile(ledgerUrl, 'utf8');
 const fixtureSource = await readFile(fixtureUrl, 'utf8');
+const atomicCommandSource = await readFile(atomicCommandUrl, 'utf8');
 
 test('configuração é exclusivamente de staging e não declara rota de produção', () => {
   assert.equal(config.name, 'new-hub-artres-v2-staging');
@@ -21,6 +23,7 @@ test('configuração é exclusivamente de staging e não declara rota de produç
   assert.ok(config.compatibility_flags.includes('nodejs_compat'));
   assert.equal(config.vars.ENVIRONMENT, 'staging');
   assert.equal(config.vars.STAGING_WRITE_ENABLED, 'false');
+  assert.equal(config.vars.STAGING_LOW_LEVEL_LEDGER_ENABLED, 'false');
   assert.equal(config.routes, undefined);
   assert.equal(config.env, undefined);
   assert.equal(config.workers_dev, true);
@@ -65,6 +68,7 @@ test('Worker expõe somente saúde e rotas internas de staging', () => {
   assert.ok(workerSource.includes("url.pathname === '/internal/v2/ledger/submit'"));
   assert.equal(workerSource.includes("'/api/orders/v2'"), false);
   assert.ok(workerSource.includes("env.STAGING_WRITE_ENABLED !== 'true'"));
+  assert.ok(workerSource.includes("env.STAGING_LOW_LEVEL_LEDGER_ENABLED !== 'true'"));
   assert.ok(workerSource.includes("request.headers.get('x-staging-token')"));
   assert.ok(workerSource.includes('constantTimeEqualSecrets'));
 });
@@ -78,6 +82,25 @@ test('rota comercial usa comando atômico e catálogo sintético', () => {
   assert.ok(fixtureSource.includes('example.invalid'));
   assert.equal(fixtureSource.includes('new-hub-artres.pages.dev'), false);
   assert.equal(fixtureSource.includes('drive.google.com'), false);
+});
+
+test('chave bruta não segue para o ledger', () => {
+  assert.ok(atomicCommandSource.includes('idempotencyStorageKey(input.idempotencyKey)'));
+  assert.equal(atomicCommandSource.includes('normalizeIdempotencyKey(input.idempotencyKey)'), false);
+});
+
+test('corpo é limitado durante o streaming e erros inesperados são genéricos', () => {
+  assert.ok(workerSource.includes('readLimitedTextBody(request, MAX_JSON_BYTES)'));
+  assert.ok(workerSource.includes("reader.cancel('REQUEST_BODY_TOO_LARGE')"));
+  assert.equal(workerSource.includes('await request.text()'), false);
+  assert.ok(workerSource.includes("'STAGING_INTERNAL_ERROR'"));
+  assert.equal(workerSource.includes('error?.message'), false);
+});
+
+test('consultas HTTP internas removem dados pessoais', () => {
+  assert.ok(workerSource.includes('customer: { redacted: true }'));
+  assert.ok(workerSource.includes('orderInspectionView(order)'));
+  assert.ok(workerSource.includes('events.map(outboxInspectionView)'));
 });
 
 test('Worker não importa Functions legadas nem arquivos ativos da produção', () => {
