@@ -1,10 +1,10 @@
-name: Publicar Site V2 Staging
+name: Publicar Site V2 Staging Sintético
 
 on:
   workflow_dispatch:
     inputs:
       confirmacao:
-        description: 'Digite PUBLICAR STAGING para confirmar'
+        description: 'Digite PUBLICAR STAGING SINTETICO para confirmar'
         required: true
         type: string
 
@@ -24,13 +24,13 @@ jobs:
         env:
           CONFIRMACAO: ${{ inputs.confirmacao }}
         run: |
-          if [ "$CONFIRMACAO" != "PUBLICAR STAGING" ]; then
+          if [ "$CONFIRMACAO" != "PUBLICAR STAGING SINTETICO" ]; then
             echo "Confirmação inválida. Nenhuma publicação foi realizada."
             exit 1
           fi
 
   deploy-staging:
-    name: Publicar Worker isolado
+    name: Publicar e validar escrita sintética
     needs: validate-confirmation
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -40,7 +40,9 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       SITE_V2_STAGING_API_TOKEN: ${{ secrets.SITE_V2_STAGING_API_TOKEN }}
+      STAGING_URL: https://new-hub-artres-v2-staging.jvgacontato.workers.dev
       STAGING_SECRETS_FILE: /tmp/site-v2-staging-secrets.json
+      ROLLBACK_CONFIG_FILE: wrangler.site-v2-staging.rollback.runtime.jsonc
 
     steps:
       - name: Baixar repositório
@@ -66,46 +68,221 @@ jobs:
             exit 1
           fi
 
-      - name: Preparar secret temporário do Worker
+      - name: Preparar secret e configuração de rollback
         run: |
           umask 077
-          node -e '
-            const fs = require("fs");
-            const target = process.env.STAGING_SECRETS_FILE;
-            const token = process.env.SITE_V2_STAGING_API_TOKEN;
-            if (!token || token.length < 32) throw new Error("SITE_V2_STAGING_API_TOKEN_TOO_SHORT");
-            fs.writeFileSync(target, JSON.stringify({ STAGING_API_TOKEN: token }));
-          '
+          node - <<'NODE'
+          const fs = require('fs');
+          const token = String(process.env.SITE_V2_STAGING_API_TOKEN || '');
+          const sourcePath = 'wrangler.site-v2-staging.jsonc';
+          const rollbackPath = process.env.ROLLBACK_CONFIG_FILE;
+
+          if (token.length < 32) throw new Error('SITE_V2_STAGING_API_TOKEN_TOO_SHORT');
+          fs.writeFileSync(process.env.STAGING_SECRETS_FILE, JSON.stringify({ STAGING_API_TOKEN: token }), { mode: 0o600 });
+
+          const source = fs.readFileSync(sourcePath, 'utf8');
+          const activeFlag = '"STAGING_WRITE_ENABLED": "true"';
+          const safeFlag = '"STAGING_WRITE_ENABLED": "false"';
+          if ((source.match(new RegExp(activeFlag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length !== 1) {
+            throw new Error('ACTIVE_WRITE_FLAG_INVALID');
+          }
+          if (!source.includes('"STAGING_LOW_LEVEL_LEDGER_ENABLED": "false"')) {
+            throw new Error('LOW_LEVEL_LEDGER_MUST_REMAIN_DISABLED');
+          }
+          fs.writeFileSync(rollbackPath, source.replace(activeFlag, safeFlag), { mode: 0o600 });
+          NODE
 
       - name: Executar testes isolados
         run: node --test tests/v2/*.test.mjs
 
-      - name: Validar bundle sem publicar
+      - name: Validar bundle ativo sem publicar
         run: >-
           npx --yes wrangler@4.114.0 deploy
           --dry-run
           --strict
           --config wrangler.site-v2-staging.jsonc
           --secrets-file "$STAGING_SECRETS_FILE"
-          --outdir /tmp/site-v2-staging-dry-run
+          --outdir /tmp/site-v2-staging-active-dry-run
 
-      - name: Publicar Worker, migration e secret com escrita desabilitada
+      - name: Validar bundle de rollback sem publicar
+        run: >-
+          npx --yes wrangler@4.114.0 deploy
+          --dry-run
+          --strict
+          --config "$ROLLBACK_CONFIG_FILE"
+          --secrets-file "$STAGING_SECRETS_FILE"
+          --outdir /tmp/site-v2-staging-rollback-dry-run
+
+      - name: Publicar Worker com escrita exclusivamente sintética
+        id: deploy
         run: >-
           npx --yes wrangler@4.114.0 deploy
           --strict
           --config wrangler.site-v2-staging.jsonc
           --secrets-file "$STAGING_SECRETS_FILE"
-          --message "Staging V2 inicial com escrita desabilitada"
-          --tag "staging-writes-disabled"
+          --message "Staging V2 com escrita exclusivamente sintética"
+          --tag "staging-synthetic-writes-enabled"
 
-      - name: Remover arquivo temporário de secret
+      - name: Criar pedido sintético, repetir e inspecionar
+        id: remote-smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const base = String(process.env.STAGING_URL || '').replace(/\/$/, '');
+          const token = String(process.env.SITE_V2_STAGING_API_TOKEN || '');
+          const runId = String(process.env.GITHUB_RUN_ID || Date.now());
+          const attempt = String(process.env.GITHUB_RUN_ATTEMPT || '1');
+          const idempotencyKey = `synthetic-deploy-${runId}-${attempt}`;
+          const submissionCreatedAt = new Date().toISOString();
+
+          if (!base.startsWith('https://')) throw new Error('STAGING_URL_INVALID');
+          if (token.length < 32) throw new Error('SITE_V2_STAGING_API_TOKEN_MISSING_OR_SHORT');
+
+          async function json(response) {
+            const text = await response.text();
+            try {
+              return text ? JSON.parse(text) : null;
+            } catch {
+              throw new Error(`INVALID_JSON_RESPONSE:${response.status}`);
+            }
+          }
+
+          function assert(condition, code) {
+            if (!condition) throw new Error(code);
+          }
+
+          let health;
+          for (let attemptIndex = 1; attemptIndex <= 30; attemptIndex += 1) {
+            const response = await fetch(`${base}/health`, { headers: { Accept: 'application/json' } });
+            const payload = await json(response);
+            if (
+              response.status === 200 &&
+              payload?.ok === true &&
+              payload?.writesEnabled === true &&
+              payload?.lowLevelLedgerEnabled === false
+            ) {
+              health = payload;
+              break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+
+          assert(health?.catalog === 'synthetic-staging-only', 'SYNTHETIC_HEALTH_NOT_READY');
+          assert(health?.catalogVersion === 9001, 'SYNTHETIC_CATALOG_VERSION_INVALID');
+
+          const body = {
+            submissionCreatedAt,
+            seller: { id: 'ci-staging', label: 'CI Staging' },
+            customer: { name: 'Cliente Sintético do Deploy', whatsapp: '5581999999999' },
+            items: [{
+              driveFileId: 'staging-artwork-2657',
+              productKey: '50x50',
+              variantKey: 'default',
+              sizeKey: '50x50',
+              quantity: 6,
+              unitPrice: 0.01,
+              lineSubtotal: 0.06
+            }],
+            totals: { subtotal: 0.06, total: 0.06 }
+          };
+
+          const headers = {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            'X-Staging-Token': token,
+            'Idempotency-Key': idempotencyKey
+          };
+
+          const firstResponse = await fetch(`${base}/internal/v2/orders/submit`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(body)
+          });
+          const first = await json(firstResponse);
+          assert(firstResponse.status === 201, `FIRST_SUBMISSION_STATUS_${firstResponse.status}`);
+          assert(first?.ok === true && first?.action === 'CREATED' && first?.replayed === false, 'FIRST_SUBMISSION_INVALID');
+          assert(/^PED\d{7}[A-Z]$/.test(String(first?.orderNumber || '')), 'ORDER_NUMBER_INVALID');
+          assert(first?.pricing?.total === 58.5, 'SERVER_TOTAL_INVALID');
+          assert(first?.itemCount === 1, 'ITEM_COUNT_INVALID');
+          assert(first?.warnings?.includes('CLIENT_ITEM_PRICE_IGNORED:staging-artwork-2657'), 'CLIENT_PRICE_WARNING_MISSING');
+          assert(first?.warnings?.includes('CLIENT_ORDER_TOTALS_IGNORED'), 'CLIENT_TOTAL_WARNING_MISSING');
+
+          const replayResponse = await fetch(`${base}/internal/v2/orders/submit`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(body)
+          });
+          const replay = await json(replayResponse);
+          assert(replayResponse.status === 200, `REPLAY_STATUS_${replayResponse.status}`);
+          assert(replay?.ok === true && replay?.action === 'REPLAY' && replay?.replayed === true, 'REPLAY_INVALID');
+          assert(replay?.orderNumber === first.orderNumber, 'REPLAY_ORDER_NUMBER_CHANGED');
+
+          const orderResponse = await fetch(
+            `${base}/internal/v2/ledger/order?number=${encodeURIComponent(first.orderNumber)}&createdAt=${encodeURIComponent(submissionCreatedAt)}`,
+            { headers: { Accept: 'application/json', 'X-Staging-Token': token } }
+          );
+          const orderResult = await json(orderResponse);
+          assert(orderResponse.status === 200, `ORDER_INSPECTION_STATUS_${orderResponse.status}`);
+          assert(orderResult?.order?.customer?.redacted === true, 'CUSTOMER_MUST_BE_REDACTED');
+          assert(orderResult?.order?.pricing?.total === 58.5, 'ORDER_TOTAL_INVALID');
+          assert(orderResult?.order?.items?.[0]?.driveFileId === 'staging-artwork-2657', 'SYNTHETIC_ARTWORK_INVALID');
+
+          const outboxResponse = await fetch(
+            `${base}/internal/v2/ledger/outbox?createdAt=${encodeURIComponent(submissionCreatedAt)}`,
+            { headers: { Accept: 'application/json', 'X-Staging-Token': token } }
+          );
+          const outboxResult = await json(outboxResponse);
+          assert(outboxResponse.status === 200, `OUTBOX_STATUS_${outboxResponse.status}`);
+          const event = outboxResult?.events?.find(entry => entry.aggregateId === first.orderNumber);
+          assert(event?.eventType === 'order.created.v2', 'OUTBOX_EVENT_NOT_FOUND');
+          assert(event?.payload?.order?.customer?.redacted === true, 'OUTBOX_CUSTOMER_MUST_BE_REDACTED');
+
+          const lowLevelResponse = await fetch(`${base}/internal/v2/ledger/submit`, {
+            method: 'POST',
+            headers: {
+              Accept: 'application/json',
+              'Content-Type': 'application/json',
+              'X-Staging-Token': token
+            },
+            body: '{}'
+          });
+          const lowLevel = await json(lowLevelResponse);
+          assert(lowLevelResponse.status === 503, `LOW_LEVEL_STATUS_${lowLevelResponse.status}`);
+          assert(lowLevel?.error === 'LOW_LEVEL_LEDGER_DISABLED', 'LOW_LEVEL_LEDGER_NOT_BLOCKED');
+
+          console.log(JSON.stringify({
+            ok: true,
+            orderNumber: first.orderNumber,
+            action: first.action,
+            replayAction: replay.action,
+            total: first.pricing.total,
+            customerRedacted: orderResult.order.customer.redacted,
+            outboxEventType: event.eventType,
+            lowLevelLedgerError: lowLevel.error
+          }, null, 2));
+          NODE
+
+      - name: Reverter automaticamente para escrita desativada em caso de falha
+        if: failure() && steps.deploy.outcome == 'success'
+        run: >-
+          npx --yes wrangler@4.114.0 deploy
+          --strict
+          --config "$ROLLBACK_CONFIG_FILE"
+          --secrets-file "$STAGING_SECRETS_FILE"
+          --message "Rollback automático: escrita do staging desativada"
+          --tag "staging-writes-disabled-automatic-rollback"
+
+      - name: Remover arquivos temporários
         if: always()
-        run: rm -f "$STAGING_SECRETS_FILE"
+        run: rm -f "$STAGING_SECRETS_FILE" "$ROLLBACK_CONFIG_FILE"
 
       - name: Registrar garantia de isolamento
+        if: success()
         run: |
           echo "Worker: new-hub-artres-v2-staging"
-          echo "Rotas de domínio: nenhuma"
-          echo "Escrita: desabilitada"
-          echo "Catálogo: sintético"
+          echo "Rotas de domínio de produção: nenhuma"
+          echo "Escrita comercial: habilitada somente para catálogo sintético"
+          echo "Rota técnica do ledger: desabilitada"
+          echo "Catálogo: synthetic-staging-only, versão 9001"
           echo "Produção pública: não alterada"
