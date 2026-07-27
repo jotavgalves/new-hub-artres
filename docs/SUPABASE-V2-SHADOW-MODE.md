@@ -35,13 +35,27 @@ staging/site-v2-worker/src/index-shadow.js
 
 Esse arquivo envolve o Worker consolidado em `index.js`, mas não substitui suas rotas ou sua implementação do Durable Object.
 
-A comunicação HTTP com o Supabase fica isolada em:
+A montagem do contrato específico do staging fica isolada em:
 
 ```text
 staging/site-v2-worker/src/supabase-shadow-projector.js
 ```
 
-RPC utilizada:
+O transporte HTTP, a validação HTTPS, os headers privilegiados, o limite de resposta e a sanitização de erros são compartilhados com o adaptador Supabase já existente por meio de:
+
+```text
+src/v2/persistence/supabase-rpc-client.mjs
+```
+
+O adaptador genérico de pedidos continua em:
+
+```text
+src/v2/persistence/supabase-order-projection.mjs
+```
+
+Assim, o staging não mantém uma segunda implementação de transporte Supabase.
+
+RPC utilizada pelo modo sombra:
 
 ```text
 public.armazem_v2_project_order_v1(jsonb)
@@ -146,7 +160,7 @@ Antes do deploy, o workflow exige:
 O rollback troca automaticamente:
 
 ```text
-STAGING_WRITE_ENABLED=true  -> false
+STAGING_WRITE_ENABLED=true   -> false
 SUPABASE_SHADOW_ENABLED=true -> false
 ```
 
