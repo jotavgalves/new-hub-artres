@@ -8,7 +8,7 @@ import { assertOrderProjectionPort } from '../../src/v2/persistence/order-projec
 
 function command(overrides = {}) {
   return {
-    idempotencyKey: 'idem_0123456789abcdef',
+    idempotencyKey: `idempotency:v2:${'1'.repeat(64)}`,
     fingerprint: 'a'.repeat(64),
     submissionCreatedAt: '2026-07-26T20:00:00.000Z',
     requestId: 'req-1',
@@ -116,7 +116,7 @@ test('dispatcher pode continuar após uma falha e entregar os demais eventos', a
   const ledger = new MemoryOrderLedger({ yearCode: '26' });
   await ledger.submit(command());
   await ledger.submit(command({
-    idempotencyKey: 'idem_fedcba9876543210',
+    idempotencyKey: `idempotency:v2:${'2'.repeat(64)}`,
     fingerprint: 'b'.repeat(64),
     requestId: 'req-2',
     preparedOrder: {
