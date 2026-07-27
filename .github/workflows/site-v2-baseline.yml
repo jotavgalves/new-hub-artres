@@ -37,11 +37,21 @@ jobs:
           node-version: '22'
 
       - name: Executar testes isolados da V2
-        run: node --test tests/v2/*.test.mjs
+        run: |
+          set -euo pipefail
+          TEST_LOG=/tmp/site-v2-node-tests.log
+          if ! node --test tests/v2/*.test.mjs > "$TEST_LOG" 2>&1; then
+            echo "Falha nos testes V2. Últimas 220 linhas:"
+            tail -n 220 "$TEST_LOG"
+            exit 1
+          fi
+          tail -n 30 "$TEST_LOG"
 
       - name: Verificar sintaxe do Worker de staging
         run: |
           node --check staging/site-v2-worker/src/index.js
+          node --check staging/site-v2-worker/src/index-shadow.js
+          node --check staging/site-v2-worker/src/supabase-shadow-projector.js
           node --check staging/site-v2-worker/src/order-ledger-do.js
           node --check staging/site-v2-worker/src/admin-readonly-page.js
 
