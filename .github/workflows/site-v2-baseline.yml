@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'src/v2/**'
+      - 'scripts/v2/**'
       - 'staging/site-v2-worker/**'
       - 'supabase/**'
       - 'tests/v2/**'
@@ -57,10 +58,11 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-      - name: Verificar sintaxe do Worker e persistência V2
+      - name: Verificar sintaxe do Worker, persistência e deploy V2
         run: |
           node --check src/v2/persistence/supabase-rpc-client.mjs
           node --check src/v2/persistence/supabase-order-projection.mjs
+          node --check scripts/v2/prepare-site-v2-staging-deploy.mjs
           node --check staging/site-v2-worker/src/index.js
           node --check staging/site-v2-worker/src/index-shadow.js
           node --check staging/site-v2-worker/src/supabase-shadow-projector.js
