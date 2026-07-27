@@ -19,8 +19,10 @@ O identificador concreto do projeto não é registrado no repositório.
 
 ```text
 supabase/migrations/20260727193000_armazem_v2_projection_foundation.sql
+supabase/migrations/20260727193100_armazem_v2_rpc_role_guard.sql
 supabase/contracts/order-projection-v1.schema.json
 tests/v2/supabase-v2-schema.test.mjs
+tests/v2/supabase-v2-rpc-role-guard.test.mjs
 ```
 
 ## Modelo de segurança
@@ -48,6 +50,12 @@ Todas as tabelas possuem:
 - privilégios revogados de `public`, `anon` e `authenticated`.
 
 O frontend não recebe chave de serviço e não consulta o Supabase diretamente.
+
+### Contexto das RPCs
+
+As três RPCs são executáveis somente por `service_role`. A migration complementar fixa o contexto interno usado pelo guard das funções, sem conceder acesso a tabelas ou a outros papéis.
+
+Esse ajuste evita dependência do formato histórico de propagação individual das claims pelo PostgREST.
 
 ### Dados pessoais
 
@@ -130,12 +138,12 @@ O JSON Schema `order-projection-v1.schema.json` acompanha o pedido canônico já
 
 ## Aplicação futura
 
-A migration só deverá ser aplicada depois de:
+As migrations só deverão ser aplicadas depois de:
 
 1. PR aprovado e mesclado;
 2. revisão do SQL final;
 3. confirmação explícita para modificar o projeto `Armazem V2 Staging`;
-4. execução controlada da migration;
+4. execução controlada das migrations em ordem;
 5. advisors de segurança e performance;
 6. testes de acesso anônimo, autenticado e service role;
 7. inserção exclusivamente sintética;
