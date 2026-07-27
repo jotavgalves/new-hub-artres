@@ -1,0 +1,97 @@
+{
+  "capturedAt": "2026-07-26T17:48:00.000Z",
+  "source": "kv",
+  "storageReady": true,
+  "version": 3,
+  "sellers": [
+    {
+      "id": "ana",
+      "label": "Ana",
+      "active": true,
+      "phoneConfigured": true
+    },
+    {
+      "id": "dayane",
+      "label": "Dayane",
+      "active": true,
+      "phoneConfigured": true
+    }
+  ],
+  "products": {
+    "bolinhas": {
+      "label": "Bolinhas",
+      "productKey": "50x50",
+      "unitPrice": 9.75,
+      "minQty": 6,
+      "step": 2,
+      "disableCustomization": true,
+      "skipProductsStep": true
+    }
+  },
+  "productCatalog": [
+    {
+      "id": "bolinhas",
+      "label": "Bolinhas",
+      "productKey": "50x50",
+      "active": true,
+      "editable": true
+    }
+  ],
+  "drives": [
+    {
+      "id": "bolinhas",
+      "name": "Drive Bolinhas",
+      "active": true,
+      "type": "bolinhas",
+      "productKey": "50x50",
+      "structure": "theme-or-subtheme-images",
+      "filenamePattern": "ID_TEMA_PRODUTO_DIMENSAO",
+      "folderIdConfigured": true,
+      "folderIdLength": 33
+    }
+  ],
+  "ui": {
+    "discountPercent": 0,
+    "confirmModal": true,
+    "cacheVersion": 49
+  },
+  "campaign": {
+    "active": false,
+    "name": "10% OFF por aqui",
+    "discountPercent": 10,
+    "applyTo": "all"
+  },
+  "maintenance": {
+    "active": false
+  },
+  "orderSettings": {
+    "saveOrders": true,
+    "defaultStatus": "Novo",
+    "statuses": [
+      "Novo",
+      "Em atendimento",
+      "Fechado",
+      "Cancelado"
+    ],
+    "keepLast": 300
+  },
+  "productionApi": {
+    "enabled": true,
+    "allowStatusUpdate": true,
+    "statusOnComplete": "Separado",
+    "actorName": "Armazem",
+    "exposeCustomer": true,
+    "exposeTotals": false
+  },
+  "catalogMeta": {
+    "catalogVersion": 49,
+    "discountPercent": 0,
+    "confirmModal": true,
+    "maintenanceActive": false
+  },
+  "catalogRules": {
+    "catalogVersion": 49,
+    "themeBlockCount": 0,
+    "artBlockCount": 3
+  }
+}

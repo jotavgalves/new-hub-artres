@@ -1,0 +1,18 @@
+# Dependências e ferramentas
+node_modules/
+.wrangler/
+
+# Segredos e variáveis locais
+.dev.vars
+.dev.vars.*
+.env
+.env.*
+
+# Relatórios e resultados locais
+playwright-report/
+test-results/
+coverage/
+
+# Sistema operacional
+.DS_Store
+Thumbs.db

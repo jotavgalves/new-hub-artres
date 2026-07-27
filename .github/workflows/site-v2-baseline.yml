@@ -1,0 +1,65 @@
+name: Site V2 Baseline
+
+on:
+  pull_request:
+    paths:
+      - 'src/v2/**'
+      - 'staging/site-v2-worker/**'
+      - 'tests/v2/**'
+      - 'docs/**'
+      - 'wrangler.site-v2-staging.jsonc'
+      - '.github/workflows/site-v2-baseline.yml'
+      - '.github/workflows/deploy-site-v2-staging.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  defensive-foundation:
+    name: Contratos, isolamento e staging dry-run
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      DRY_RUN_SECRETS_FILE: /tmp/site-v2-staging-dry-run-secrets.json
+
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+
+      - name: Executar testes isolados da V2
+        run: node --test tests/v2/*.test.mjs
+
+      - name: Verificar sintaxe do Worker de staging
+        run: |
+          node --check staging/site-v2-worker/src/index.js
+          node --check staging/site-v2-worker/src/order-ledger-do.js
+
+      - name: Preparar secret sintético do dry-run
+        run: |
+          umask 077
+          printf '%s' '{"STAGING_API_TOKEN":"ci-dry-run-token-0123456789abcdef"}' > "$DRY_RUN_SECRETS_FILE"
+
+      - name: Validar bundle Cloudflare sem publicar
+        run: >-
+          npx --yes wrangler@4.114.0 deploy
+          --dry-run
+          --strict
+          --config wrangler.site-v2-staging.jsonc
+          --secrets-file "$DRY_RUN_SECRETS_FILE"
+          --outdir /tmp/site-v2-staging-dry-run
+
+      - name: Remover secret sintético do dry-run
+        if: always()
+        run: rm -f "$DRY_RUN_SECRETS_FILE"
+
+      - name: Executar Worker e Durable Object localmente
+        run: bash tests/v2/run-staging-worker-smoke.sh

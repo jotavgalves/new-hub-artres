@@ -1,0 +1,50 @@
+name: Atual Versão de Segurança Baseline
+
+on:
+  push:
+    branches:
+      - 'agent/site-v2-*'
+    paths:
+      - 'tests/e2e/**'
+      - '.github/workflows/current-safety-baseline.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  safety-baseline:
+    name: Navegação e screenshots
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      BASELINE_URL: https://new-hub-artres.pages.dev
+
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Instalar Playwright
+        run: |
+          npm install --no-save @playwright/test@1.61.1
+          npx playwright install --with-deps chromium
+
+      - name: Executar baseline da Atual Versão de Segurança
+        run: npx playwright test --config tests/e2e/playwright.config.mjs
+
+      - name: Salvar screenshots, traces e relatório
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: atual-versao-de-seguranca-baseline
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            test-results/current-safety-version
+            playwright-report/current-safety-version

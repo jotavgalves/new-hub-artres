@@ -1,0 +1,111 @@
+name: Publicar Site V2 Staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmacao:
+        description: 'Digite PUBLICAR STAGING para confirmar'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-v2-staging-deploy
+  cancel-in-progress: false
+
+jobs:
+  validate-confirmation:
+    name: Validar confirmação manual
+    runs-on: ubuntu-latest
+    steps:
+      - name: Exigir frase exata
+        env:
+          CONFIRMACAO: ${{ inputs.confirmacao }}
+        run: |
+          if [ "$CONFIRMACAO" != "PUBLICAR STAGING" ]; then
+            echo "Confirmação inválida. Nenhuma publicação foi realizada."
+            exit 1
+          fi
+
+  deploy-staging:
+    name: Publicar Worker isolado
+    needs: validate-confirmation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: site-v2-staging
+
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      SITE_V2_STAGING_API_TOKEN: ${{ secrets.SITE_V2_STAGING_API_TOKEN }}
+      STAGING_SECRETS_FILE: /tmp/site-v2-staging-secrets.json
+
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+
+      - name: Validar segredos obrigatórios
+        run: |
+          missing=0
+          for variable in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID SITE_V2_STAGING_API_TOKEN; do
+            if [ -z "${!variable}" ]; then
+              echo "Segredo obrigatório ausente: $variable"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Preparar secret temporário do Worker
+        run: |
+          umask 077
+          node -e '
+            const fs = require("fs");
+            const target = process.env.STAGING_SECRETS_FILE;
+            const token = process.env.SITE_V2_STAGING_API_TOKEN;
+            if (!token || token.length < 32) throw new Error("SITE_V2_STAGING_API_TOKEN_TOO_SHORT");
+            fs.writeFileSync(target, JSON.stringify({ STAGING_API_TOKEN: token }));
+          '
+
+      - name: Executar testes isolados
+        run: node --test tests/v2/*.test.mjs
+
+      - name: Validar bundle sem publicar
+        run: >-
+          npx --yes wrangler@4.114.0 deploy
+          --dry-run
+          --strict
+          --config wrangler.site-v2-staging.jsonc
+          --secrets-file "$STAGING_SECRETS_FILE"
+          --outdir /tmp/site-v2-staging-dry-run
+
+      - name: Publicar Worker, migration e secret com escrita desabilitada
+        run: >-
+          npx --yes wrangler@4.114.0 deploy
+          --strict
+          --config wrangler.site-v2-staging.jsonc
+          --secrets-file "$STAGING_SECRETS_FILE"
+          --message "Staging V2 inicial com escrita desabilitada"
+          --tag "staging-writes-disabled"
+
+      - name: Remover arquivo temporário de secret
+        if: always()
+        run: rm -f "$STAGING_SECRETS_FILE"
+
+      - name: Registrar garantia de isolamento
+        run: |
+          echo "Worker: new-hub-artres-v2-staging"
+          echo "Rotas de domínio: nenhuma"
+          echo "Escrita: desabilitada"
+          echo "Catálogo: sintético"
+          echo "Produção pública: não alterada"
