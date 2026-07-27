@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const root = new URL('../../', import.meta.url);
 const configUrl = new URL('wrangler.site-v2-staging.jsonc', root);
+const wrapperUrl = new URL('staging/site-v2-worker/src/index-shadow.js', root);
 const workerUrl = new URL('staging/site-v2-worker/src/index.js', root);
 const ledgerUrl = new URL('staging/site-v2-worker/src/order-ledger-do.js', root);
 const fixtureUrl = new URL('staging/site-v2-worker/src/staging-catalog-fixture.js', root);
@@ -11,6 +12,7 @@ const atomicCommandUrl = new URL('src/v2/orders/atomic-command.mjs', root);
 
 const configText = await readFile(configUrl, 'utf8');
 const config = JSON.parse(configText);
+const wrapperSource = await readFile(wrapperUrl, 'utf8');
 const workerSource = await readFile(workerUrl, 'utf8');
 const ledgerSource = await readFile(ledgerUrl, 'utf8');
 const fixtureSource = await readFile(fixtureUrl, 'utf8');
@@ -18,20 +20,32 @@ const atomicCommandSource = await readFile(atomicCommandUrl, 'utf8');
 
 test('configuração é exclusivamente de staging, habilita só escrita sintética e não declara rota de produção', () => {
   assert.equal(config.name, 'new-hub-artres-v2-staging');
-  assert.equal(config.main, 'staging/site-v2-worker/src/index.js');
+  assert.equal(config.main, 'staging/site-v2-worker/src/index-shadow.js');
   assert.equal(config.compatibility_date, '2026-07-26');
   assert.ok(config.compatibility_flags.includes('nodejs_compat'));
   assert.equal(config.vars.ENVIRONMENT, 'staging');
   assert.equal(config.vars.STAGING_WRITE_ENABLED, 'true');
   assert.equal(config.vars.STAGING_LOW_LEVEL_LEDGER_ENABLED, 'false');
+  assert.equal(config.vars.SUPABASE_SHADOW_ENABLED, 'false');
+  assert.equal(config.vars.SUPABASE_V2_URL, 'https://kueklnkznwpbobqwugns.supabase.co');
+  assert.equal(config.vars.SUPABASE_SHADOW_TIMEOUT_MS, '3500');
   assert.equal(config.routes, undefined);
   assert.equal(config.env, undefined);
   assert.equal(config.workers_dev, true);
 });
 
+test('entrypoint sombra delega ao Worker consolidado e preserva o Durable Object', () => {
+  assert.ok(wrapperSource.includes("import baseWorker, { OrderLedger } from './index.js';"));
+  assert.ok(wrapperSource.includes('export { OrderLedger };'));
+  assert.ok(wrapperSource.includes('await baseWorker.fetch(request, env, ctx)'));
+  assert.ok(wrapperSource.includes('ctx.waitUntil(task)'));
+  assert.equal(wrapperSource.includes('markOutboxDelivered'), false);
+});
+
 test('secret interno é obrigatório, mas não possui valor no arquivo', () => {
   assert.deepEqual(config.secrets, { required: ['STAGING_API_TOKEN'] });
   assert.equal(Object.hasOwn(config.vars, 'STAGING_API_TOKEN'), false);
+  assert.equal(Object.hasOwn(config.vars, 'SUPABASE_V2_SERVICE_ROLE_KEY'), false);
   assert.equal(configText.includes('local-staging-token-0123456789abcdef'), false);
 });
 
@@ -105,10 +119,13 @@ test('consultas HTTP internas removem dados pessoais', () => {
 
 test('Worker não importa Functions legadas nem arquivos ativos da produção', () => {
   assert.equal(workerSource.includes('/functions/'), false);
+  assert.equal(wrapperSource.includes('/functions/'), false);
   assert.equal(ledgerSource.includes('/functions/'), false);
   assert.equal(workerSource.includes('CONFIG_KV'), false);
+  assert.equal(wrapperSource.includes('CONFIG_KV'), false);
   assert.equal(ledgerSource.includes('CONFIG_KV'), false);
   assert.equal(workerSource.includes('SUPABASE_SERVICE_ROLE_KEY'), false);
+  assert.equal(wrapperSource.includes('SUPABASE_SERVICE_ROLE_KEY'), false);
   assert.equal(ledgerSource.includes('SUPABASE_SERVICE_ROLE_KEY'), false);
 });
 
