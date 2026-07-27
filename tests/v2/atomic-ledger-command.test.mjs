@@ -59,6 +59,8 @@ test('comando atômico ignora preço e total enviados pelo navegador', async () 
   assert.ok(value.quoteWarnings.includes('CLIENT_ITEM_PRICE_IGNORED:staging-artwork-2657'));
   assert.ok(value.quoteWarnings.includes('CLIENT_ORDER_TOTALS_IGNORED'));
   assert.match(value.fingerprint, /^[a-f0-9]{64}$/);
+  assert.match(value.idempotencyKey, /^idempotency:v2:[a-f0-9]{64}$/);
+  assert.equal(value.idempotencyKey.includes('idem_atomic_0123456789'), false);
 });
 
 test('comando mais ledger criam pedido, idempotência e outbox', async () => {
