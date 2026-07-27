@@ -1,23 +1,13 @@
 import { validateProjectionEvent } from './order-projection-port.mjs';
-
-const MAX_REMOTE_RESPONSE_BYTES = 64 * 1024;
+import { SupabaseRpcClient } from './supabase-rpc-client.mjs';
 
 export class SupabaseOrderProjection {
-  #url;
-  #key;
-  #fetch;
+  #client;
   #schema;
 
   constructor(options = {}) {
-    this.#url = normalizeSupabaseUrl(options.url);
-    this.#key = clean(options.serviceKey || options.secretKey);
-    this.#fetch = options.fetch || globalThis.fetch;
-    this.#schema = identifier(options.schema || 'public');
-
-    if (!this.#url) throw projectionError('SUPABASE_URL_INVALID');
-    if (this.#key.length < 20) throw projectionError('SUPABASE_SECRET_KEY_INVALID');
-    if (typeof this.#fetch !== 'function') throw projectionError('SUPABASE_FETCH_REQUIRED');
-    if (!this.#schema) throw projectionError('SUPABASE_SCHEMA_INVALID');
+    this.#client = new SupabaseRpcClient(options);
+    this.#schema = this.#client.schema;
   }
 
   async projectOrderCreated(input) {
@@ -65,7 +55,7 @@ export class SupabaseOrderProjection {
       };
     }
 
-    const result = await this.#rpc('order_projection_health_v2', {});
+    const result = await this.#rpc('order_projection_health_v2', {}, false);
     return {
       ok: result?.ok !== false,
       adapter: 'supabase-order-projection',
@@ -76,40 +66,28 @@ export class SupabaseOrderProjection {
     };
   }
 
-  async #rpc(functionName, body) {
-    const response = await this.#fetch(
-      `${this.#url}/rest/v1/rpc/${encodeURIComponent(functionName)}`,
-      {
-        method: 'POST',
-        headers: {
-          apikey: this.#key,
-          Authorization: `Bearer ${this.#key}`,
-          'Content-Type': 'application/json',
-          'Content-Profile': this.#schema,
-          Accept: 'application/json',
-          Prefer: 'return=representation'
-        },
-        body: JSON.stringify(body)
+  async #rpc(functionName, body, normalize = true) {
+    let payload;
+    try {
+      payload = await this.#client.call(functionName, body);
+    } catch (error) {
+      if (error?.code === 'SUPABASE_RPC_RESPONSE_TOO_LARGE') {
+        throw projectionError('SUPABASE_PROJECTION_RESPONSE_TOO_LARGE');
       }
-    );
 
-    const text = await readLimitedResponseText(response, MAX_REMOTE_RESPONSE_BYTES);
-    const payload = parsePayload(text);
+      if (error?.code === 'SUPABASE_RPC_REQUEST_FAILED' || error?.code === 'SUPABASE_RPC_TIMEOUT') {
+        const mapped = projectionError('SUPABASE_PROJECTION_REQUEST_FAILED');
+        mapped.status = Number(error.status || 0);
+        mapped.remoteCode = clean(error.remoteCode).slice(0, 80);
+        mapped.remoteMessage = clean(error.remoteMessage).slice(0, 240);
+        throw mapped;
+      }
 
-    if (!response.ok) {
-      const error = projectionError('SUPABASE_PROJECTION_REQUEST_FAILED');
-      error.status = response.status;
-      error.remoteCode = safeRemoteText(payload?.code, this.#key, 80);
-      error.remoteMessage = safeRemoteText(
-        payload?.message || payload?.details || payload?.hint,
-        this.#key,
-        240
-      );
       throw error;
     }
 
     const result = Array.isArray(payload) && payload.length === 1 ? payload[0] : payload;
-    return normalizeProjectionResult(result);
+    return normalize ? normalizeProjectionResult(result) : result;
   }
 }
 
@@ -140,43 +118,6 @@ function requireEvent(input, expectedType) {
   return validation.event;
 }
 
-async function readLimitedResponseText(response, maxBytes) {
-  const declaredLength = Number.parseInt(response?.headers?.get?.('content-length') || '', 10);
-  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
-    throw projectionError('SUPABASE_PROJECTION_RESPONSE_TOO_LARGE');
-  }
-
-  if (!response?.body?.getReader) {
-    const text = await response.text().catch(() => '');
-    if (new TextEncoder().encode(text).byteLength > maxBytes) {
-      throw projectionError('SUPABASE_PROJECTION_RESPONSE_TOO_LARGE');
-    }
-    return text;
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  const chunks = [];
-  let totalBytes = 0;
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      totalBytes += value.byteLength;
-      if (totalBytes > maxBytes) {
-        await reader.cancel('SUPABASE_PROJECTION_RESPONSE_TOO_LARGE').catch(() => {});
-        throw projectionError('SUPABASE_PROJECTION_RESPONSE_TOO_LARGE');
-      }
-      chunks.push(decoder.decode(value, { stream: true }));
-    }
-    chunks.push(decoder.decode());
-    return chunks.join('');
-  } finally {
-    reader.releaseLock();
-  }
-}
-
 function normalizeProjectionResult(value) {
   if (value === null || value === undefined || value === '') {
     return { action: 'PROJECTED', projected: true };
@@ -204,44 +145,11 @@ function normalizeProjectionResult(value) {
   };
 }
 
-function normalizeSupabaseUrl(value) {
-  const text = clean(value).replace(/\/$/, '').replace(/\/rest\/v1$/, '');
-  if (!text) return '';
-  try {
-    const url = new URL(text);
-    if (url.protocol !== 'https:') return '';
-    return url.origin;
-  } catch (_) {
-    return '';
-  }
-}
-
-function parsePayload(text) {
-  if (!text) return null;
-  try {
-    return JSON.parse(text);
-  } catch (_) {
-    return text;
-  }
-}
-
-function safeRemoteText(value, secret, maxLength) {
-  const text = clean(value);
-  if (!text) return '';
-  const redacted = secret ? text.split(secret).join('[REDACTED]') : text;
-  return redacted.slice(0, maxLength);
-}
-
 function validIsoDate(value) {
   const text = clean(value);
   if (!text) return '';
   const date = new Date(text);
   return Number.isFinite(date.getTime()) ? date.toISOString() : '';
-}
-
-function identifier(value) {
-  const text = clean(value);
-  return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(text) ? text : '';
 }
 
 function clean(value) {

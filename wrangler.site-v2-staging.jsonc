@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "new-hub-artres-v2-staging",
-  "main": "staging/site-v2-worker/src/index.js",
+  "main": "staging/site-v2-worker/src/index-shadow.js",
   "compatibility_date": "2026-07-26",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
@@ -13,7 +13,10 @@
   "vars": {
     "ENVIRONMENT": "staging",
     "STAGING_WRITE_ENABLED": "true",
-    "STAGING_LOW_LEVEL_LEDGER_ENABLED": "false"
+    "STAGING_LOW_LEVEL_LEDGER_ENABLED": "false",
+    "SUPABASE_SHADOW_ENABLED": "false",
+    "SUPABASE_V2_URL": "https://kueklnkznwpbobqwugns.supabase.co",
+    "SUPABASE_SHADOW_TIMEOUT_MS": "3500"
   },
   "secrets": {
     "required": ["STAGING_API_TOKEN"]
