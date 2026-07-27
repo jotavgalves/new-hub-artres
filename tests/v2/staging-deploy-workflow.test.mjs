@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const workflowUrl = new URL('../../.github/workflows/deploy-site-v2-staging.yml', import.meta.url);
+const smokeUrl = new URL('./run-staging-synthetic-remote-smoke.mjs', import.meta.url);
 const workflow = await readFile(workflowUrl, 'utf8');
+const smoke = await readFile(smokeUrl, 'utf8');
 
 test('deploy só pode ser iniciado manualmente', () => {
   assert.ok(workflow.includes('workflow_dispatch:'));
@@ -74,24 +76,35 @@ test('deploy ativo declara escrita sintética e mantém rota técnica desligada'
   assert.ok(workflow.includes('staging-synthetic-writes-enabled'));
   assert.ok(workflow.includes('Escrita comercial: habilitada somente para catálogo sintético'));
   assert.ok(workflow.includes('Rota técnica do ledger: desabilitada'));
-  assert.ok(workflow.includes('synthetic-staging-only'));
-  assert.ok(workflow.includes('catalogVersion === 9001'));
-  assert.ok(workflow.includes("lowLevel?.error === 'LOW_LEVEL_LEDGER_DISABLED'"));
+  assert.ok(smoke.includes("health?.catalog === 'synthetic-staging-only'") || smoke.includes("result.payload?.catalog === 'synthetic-staging-only'"));
+  assert.ok(smoke.includes('catalogVersion === 9001'));
+  assert.ok(smoke.includes("lowLevelResult.payload?.error === 'LOW_LEVEL_LEDGER_DISABLED'"));
 });
 
 test('smoke remoto cria, repete e inspeciona somente pedido sintético', () => {
-  assert.ok(workflow.includes('staging-artwork-2657'));
-  assert.ok(workflow.includes("first?.action === 'CREATED'"));
-  assert.ok(workflow.includes("replay?.action === 'REPLAY'"));
-  assert.ok(workflow.includes('first?.pricing?.total === 58.5'));
-  assert.ok(workflow.includes('customer?.redacted === true'));
-  assert.ok(workflow.includes("event?.eventType === 'order.created.v2'"));
-  assert.ok(workflow.includes('CLIENT_ITEM_PRICE_IGNORED:staging-artwork-2657'));
-  assert.ok(workflow.includes('CLIENT_ORDER_TOTALS_IGNORED'));
+  assert.ok(workflow.includes('node tests/v2/run-staging-synthetic-remote-smoke.mjs'));
+  assert.ok(smoke.includes('staging-artwork-2657'));
+  assert.ok(smoke.includes("first?.action === 'CREATED'"));
+  assert.ok(smoke.includes("replay?.action === 'REPLAY'"));
+  assert.ok(smoke.includes('first?.pricing?.total === 58.5'));
+  assert.ok(smoke.includes('customer?.redacted === true'));
+  assert.ok(smoke.includes("event?.eventType === 'order.created.v2'"));
+  assert.ok(smoke.includes('CLIENT_ITEM_PRICE_IGNORED:staging-artwork-2657'));
+  assert.ok(smoke.includes('CLIENT_ORDER_TOTALS_IGNORED'));
+});
+
+test('smoke aguarda propagação estável e repete somente erro transitório de escrita desativada', () => {
+  assert.ok(smoke.includes('waitForStableActiveDeployment'));
+  assert.ok(smoke.includes('consecutive >= 3'));
+  assert.ok(smoke.includes("transientErrors: ['STAGING_WRITES_DISABLED']"));
+  assert.ok(smoke.includes("response.status === 503 && transientErrors.has(payload?.error)"));
+  assert.ok(smoke.includes("event: 'staging-rollout-transient-retry'"));
+  assert.ok(smoke.includes('REPLAY_STATUS_'));
+  assert.ok(smoke.includes('_ERROR_'));
 });
 
 test('falha posterior ao deploy aciona rollback automático para escrita desativada', () => {
-  assert.ok(workflow.includes("id: deploy"));
+  assert.ok(workflow.includes('id: deploy'));
   assert.ok(workflow.includes("if: failure() && steps.deploy.outcome == 'success'"));
   assert.ok(workflow.includes('Rollback automático: escrita do staging desativada'));
   assert.ok(workflow.includes('staging-writes-disabled-automatic-rollback'));
