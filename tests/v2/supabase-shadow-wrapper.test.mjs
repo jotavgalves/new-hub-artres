@@ -47,7 +47,8 @@ test('projeção recebe diretamente comando e resultado canônicos, sem reconstr
   assert.ok(wrapper.includes('command,'));
   assert.ok(wrapper.includes('result,'));
   assert.equal(wrapper.includes('request.clone()'), false);
-  assert.equal(wrapper.includes('response.clone().json()'), false);
+  assert.equal(wrapper.includes('submissionRequest'), false);
+  assert.equal(wrapper.includes('submissionBodyTask'), false);
   assert.equal(wrapper.includes('createAtomicLedgerCommandV2'), false);
   assert.equal(wrapper.includes('.getOrder('), false);
   assert.equal(wrapper.includes('STAGING_CATALOG_ITEMS'), false);
@@ -62,6 +63,7 @@ test('hook genérico não pode transformar falha sombra em falha do pedido', () 
 
 test('health informa modo sombra ativo sem revelar URL ou credencial', () => {
   assert.ok(wrapper.includes('supabaseShadow: shadowStatus'));
+  assert.ok(wrapper.includes('response.clone().json()'));
   assert.ok(wrangler.includes('"SUPABASE_SHADOW_ENABLED": "true"'));
   assert.ok(wrangler.includes('"SUPABASE_V2_URL": "https://kueklnkznwpbobqwugns.supabase.co"'));
   assert.equal(wrangler.includes('SUPABASE_V2_SERVICE_ROLE_KEY'), false);
