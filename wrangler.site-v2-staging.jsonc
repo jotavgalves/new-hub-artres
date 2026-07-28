@@ -18,11 +18,6 @@
     "SUPABASE_V2_URL": "https://kueklnkznwpbobqwugns.supabase.co",
     "SUPABASE_SHADOW_TIMEOUT_MS": "3500",
     "CATALOG_READONLY_BRIDGE_ENABLED": "false",
-    "CATALOG_LEGACY_BASE_URL": "https://new-hub-artres.pages.dev",
-    "CATALOG_V2_ROOT_DRIVE_ID": "193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae",
-    "CATALOG_V2_PRODUCT_KEY": "50x50",
-    "CATALOG_V2_PRODUCT_NAME": "Bolinhas 50x50",
-    "CATALOG_V2_STRUCTURE": "theme-or-subtheme-images",
     "CATALOG_READONLY_TIMEOUT_MS": "5000",
     "CATALOG_READONLY_MAX_RESPONSE_BYTES": "2097152"
   },
