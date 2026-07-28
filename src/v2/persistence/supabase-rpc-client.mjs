@@ -39,7 +39,7 @@ export class SupabaseRpcClient {
       : null;
 
     try {
-      const response = await this.#fetch(
+      const response = await Reflect.apply(this.#fetch, globalThis, [
         `${this.#url}/rest/v1/rpc/${encodeURIComponent(rpcName)}`,
         {
           method: 'POST',
@@ -54,7 +54,7 @@ export class SupabaseRpcClient {
           body: JSON.stringify(body),
           ...(controller ? { signal: controller.signal } : {})
         }
-      );
+      ]);
 
       const text = await readLimitedResponseText(response, this.#maxResponseBytes);
       const payload = parsePayload(text);
