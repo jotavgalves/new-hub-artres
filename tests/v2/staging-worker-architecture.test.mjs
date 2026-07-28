@@ -34,11 +34,12 @@ test('configuração é exclusivamente de staging, habilita escrita sintética e
   assert.equal(config.workers_dev, true);
 });
 
-test('entrypoint sombra delega ao Worker consolidado e preserva o Durable Object', () => {
-  assert.ok(wrapperSource.includes("import baseWorker, { OrderLedger } from './index.js';"));
+test('entrypoint sombra usa o Worker consolidado e preserva o Durable Object', () => {
+  assert.ok(wrapperSource.includes("import { fetchStagingWorker, OrderLedger } from './index.js';"));
   assert.ok(wrapperSource.includes('export { OrderLedger };'));
-  assert.ok(wrapperSource.includes('await baseWorker.fetch(request, env, ctx)'));
-  assert.ok(wrapperSource.includes('ctx.waitUntil(task)'));
+  assert.ok(wrapperSource.includes('await fetchStagingWorker(request, env, ctx, hooks)'));
+  assert.ok(wrapperSource.includes('scheduleSupabaseShadowProjection'));
+  assert.ok(workerSource.includes('export async function fetchStagingWorker'));
   assert.equal(wrapperSource.includes('markOutboxDelivered'), false);
 });
 
@@ -87,11 +88,15 @@ test('Worker expõe somente saúde e rotas internas de staging', () => {
   assert.ok(workerSource.includes('constantTimeEqualSecrets'));
 });
 
-test('rota comercial usa comando atômico e catálogo sintético', () => {
+test('rota comercial usa comando atômico, catálogo sintético e hook somente após commit', () => {
   assert.ok(workerSource.includes('createAtomicLedgerCommandV2'));
   assert.ok(workerSource.includes('STAGING_CATALOG_ITEMS'));
   assert.ok(workerSource.includes('STAGING_PRODUCT_SNAPSHOT'));
   assert.ok(workerSource.includes("source: 'catalog-v2-staging-synthetic'"));
+  const submitIndex = workerSource.indexOf('const result = await ledgerStub(env, command.submissionCreatedAt).submit(command);');
+  const hookIndex = workerSource.indexOf('notifyOrderCommitted(hooks, { command, result, requestId }, ctx);');
+  assert.ok(submitIndex >= 0);
+  assert.ok(hookIndex > submitIndex);
   assert.ok(fixtureSource.includes('staging-artwork-2657'));
   assert.ok(fixtureSource.includes('example.invalid'));
   assert.equal(fixtureSource.includes('new-hub-artres.pages.dev'), false);
