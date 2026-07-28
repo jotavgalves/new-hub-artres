@@ -63,21 +63,46 @@ v2: contrato normalizado
 comparison: comparação sombra
 ```
 
+## Rota de staging
+
+A rota interna preparada é:
+
+```text
+GET /internal/v2/catalog/preview
+```
+
+Requisitos:
+
+```text
+X-Staging-Token válido
+CATALOG_READONLY_BRIDGE_ENABLED=true
+origem e root configurados
+```
+
+A rota não aceita métodos de escrita e permanece bloqueada por padrão:
+
+```text
+CATALOG_READONLY_BRIDGE_ENABLED=false
+```
+
+O endpoint `/health` informa apenas se a ponte está habilitada e configurada. Ele não consulta o catálogo.
+
 ## Limitações desta etapa
 
 - o Supabase real do catálogo ainda não está acessível na conta conectada;
 - a ponte depende temporariamente da API pública atual;
-- o módulo ainda não está ligado a uma rota do Worker de staging;
-- nenhuma flag foi ativada;
-- nenhuma publicação foi realizada;
+- a rota existe no código, mas permanece desativada por flag;
+- nenhuma consulta real será executada enquanto a flag estiver desativada;
+- nenhuma publicação foi realizada neste PR antes da autorização de merge;
 - o frontend continua usando exclusivamente a Atual Versão de Segurança.
 
 ## Próximo bloco controlado
 
-Depois da aprovação deste módulo:
+Depois da aprovação deste PR:
 
-1. adicionar uma rota interna protegida no staging;
-2. manter a rota desativada por flag;
-3. publicar o staging somente após autorização explícita;
-4. executar comparação real de temas, pastas e artes;
-5. registrar divergências sem alterar o design público.
+1. incorporar a ponte ao staging mantendo a flag desativada;
+2. confirmar que o deploy não consultou o catálogo;
+3. preparar um PR separado para ativação somente leitura;
+4. publicar a ativação apenas após autorização explícita;
+5. executar comparação real de temas, pastas e artes;
+6. registrar divergências sem alterar o design público.
