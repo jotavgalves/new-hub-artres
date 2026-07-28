@@ -18,7 +18,7 @@ const ledgerSource = await readFile(ledgerUrl, 'utf8');
 const fixtureSource = await readFile(fixtureUrl, 'utf8');
 const atomicCommandSource = await readFile(atomicCommandUrl, 'utf8');
 
-test('configuração é exclusivamente de staging, habilita só escrita sintética e não declara rota de produção', () => {
+test('configuração é exclusivamente de staging, habilita escrita sintética e sombra sem rota de produção', () => {
   assert.equal(config.name, 'new-hub-artres-v2-staging');
   assert.equal(config.main, 'staging/site-v2-worker/src/index-shadow.js');
   assert.equal(config.compatibility_date, '2026-07-26');
@@ -26,7 +26,7 @@ test('configuração é exclusivamente de staging, habilita só escrita sintéti
   assert.equal(config.vars.ENVIRONMENT, 'staging');
   assert.equal(config.vars.STAGING_WRITE_ENABLED, 'true');
   assert.equal(config.vars.STAGING_LOW_LEVEL_LEDGER_ENABLED, 'false');
-  assert.equal(config.vars.SUPABASE_SHADOW_ENABLED, 'false');
+  assert.equal(config.vars.SUPABASE_SHADOW_ENABLED, 'true');
   assert.equal(config.vars.SUPABASE_V2_URL, 'https://kueklnkznwpbobqwugns.supabase.co');
   assert.equal(config.vars.SUPABASE_SHADOW_TIMEOUT_MS, '3500');
   assert.equal(config.routes, undefined);

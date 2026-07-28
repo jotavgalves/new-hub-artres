@@ -46,9 +46,9 @@ test('projeção roda somente após resposta CREATED ou REPLAY bem-sucedida', ()
   assert.ok(wrapper.includes('ledgerStub(env, command.submissionCreatedAt).getOrder(orderNumber)'));
 });
 
-test('health informa modo sombra sem revelar URL ou credencial', () => {
+test('health informa modo sombra ativo sem revelar URL ou credencial', () => {
   assert.ok(wrapper.includes('supabaseShadow: shadowStatus'));
-  assert.ok(wrangler.includes('"SUPABASE_SHADOW_ENABLED": "false"'));
+  assert.ok(wrangler.includes('"SUPABASE_SHADOW_ENABLED": "true"'));
   assert.ok(wrangler.includes('"SUPABASE_V2_URL": "https://kueklnkznwpbobqwugns.supabase.co"'));
   assert.equal(wrangler.includes('SUPABASE_V2_SERVICE_ROLE_KEY'), false);
   assert.equal(wrapper.includes('sb_secret_'), false);

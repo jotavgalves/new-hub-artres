@@ -10,6 +10,7 @@ on:
       - 'staging/site-v2-worker/**'
       - 'wrangler.site-v2-staging.jsonc'
       - 'tests/v2/run-staging-synthetic-remote-smoke.mjs'
+      - 'tests/v2/run-staging-supabase-shadow-remote-smoke.mjs'
       - '.github/workflows/deploy-site-v2-staging.yml'
   workflow_dispatch:
     inputs:
@@ -55,7 +56,7 @@ jobs:
     name: Publicar e validar staging sintético
     needs: authorize-deploy
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     environment: site-v2-staging
 
     env:
@@ -64,6 +65,7 @@ jobs:
       SITE_V2_STAGING_API_TOKEN: ${{ secrets.SITE_V2_STAGING_API_TOKEN }}
       SUPABASE_V2_STAGING_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_V2_STAGING_SERVICE_ROLE_KEY }}
       STAGING_URL: https://new-hub-artres-v2-staging.jvgacontato.workers.dev
+      SUPABASE_V2_URL: https://kueklnkznwpbobqwugns.supabase.co
       STAGING_SECRETS_FILE: /tmp/site-v2-staging-secrets.json
       ROLLBACK_CONFIG_FILE: wrangler.site-v2-staging.rollback.runtime.jsonc
 
@@ -88,7 +90,7 @@ jobs:
       - name: Validar segredos obrigatórios
         run: |
           missing=0
-          for variable in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID SITE_V2_STAGING_API_TOKEN; do
+          for variable in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID SITE_V2_STAGING_API_TOKEN SUPABASE_V2_STAGING_SERVICE_ROLE_KEY; do
             if [ -z "${!variable}" ]; then
               echo "Segredo obrigatório ausente: $variable"
               missing=1
@@ -131,12 +133,16 @@ jobs:
           --strict
           --config wrangler.site-v2-staging.jsonc
           --secrets-file "$STAGING_SECRETS_FILE"
-          --message "Staging V2 automático com escrita exclusivamente sintética"
-          --tag "staging-synthetic-writes-enabled"
+          --message "Staging V2 sintético com projeção sombra Supabase"
+          --tag "staging-synthetic-supabase-shadow-enabled"
 
       - name: Validar pedido, replay, painel e bloqueios
         id: remote-smoke
         run: node tests/v2/run-staging-synthetic-remote-smoke.mjs
+
+      - name: Validar projeção sombra no Supabase
+        id: shadow-smoke
+        run: node tests/v2/run-staging-supabase-shadow-remote-smoke.mjs
 
       - name: Reverter automaticamente para escrita e sombra desativadas em caso de falha
         if: failure() && steps.deploy.outcome == 'success'
@@ -160,6 +166,6 @@ jobs:
           echo "Rotas de domínio de produção: nenhuma"
           echo "Escrita comercial: habilitada somente para catálogo sintético"
           echo "Rota técnica do ledger: desabilitada"
-          echo "Projeção Supabase sombra: controlada por flag e desativada por padrão"
+          echo "Projeção Supabase sombra: habilitada e validada por pedido sintético"
           echo "Catálogo: synthetic-staging-only, versão 9001"
           echo "Produção pública: não alterada"
