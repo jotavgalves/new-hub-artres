@@ -1,4 +1,9 @@
+import { constantTimeEqualSecrets } from '../../../src/v2/http/request-guard.mjs';
 import { fetchStagingWorker, OrderLedger } from './index.js';
+import {
+  catalogReadonlyBridgeStatus,
+  handleCatalogReadonlyRoute
+} from './catalog-readonly-route.js';
 import {
   scheduleSupabaseShadowProjection,
   supabaseShadowStatus
@@ -6,10 +11,25 @@ import {
 
 export { OrderLedger };
 
+const CATALOG_READONLY_ROUTE = '/internal/v2/catalog/preview';
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const shadowStatus = supabaseShadowStatus(env);
+    const catalogStatus = catalogReadonlyBridgeStatus(env);
+
+    if (url.pathname === CATALOG_READONLY_ROUTE) {
+      const requestId = safeRequestId(request.headers) || crypto.randomUUID();
+      const authorized = await constantTimeEqualSecrets(
+        request.headers.get('x-staging-token'),
+        env.STAGING_API_TOKEN
+      );
+      if (!authorized) return json({ ok: false, error: 'STAGING_TOKEN_INVALID', requestId }, 401);
+      if (request.method !== 'GET') return methodNotAllowed(['GET'], requestId);
+      return handleCatalogReadonlyRoute(request, env, requestId);
+    }
+
     const hooks = shadowStatus.enabled && shadowStatus.configured
       ? {
           onOrderCommitted({ command, result }) {
@@ -27,14 +47,17 @@ export default {
     const response = await fetchStagingWorker(request, env, ctx, hooks);
 
     if (url.pathname === '/health' && request.method === 'GET') {
-      return augmentHealthResponse(response, shadowStatus);
+      return augmentHealthResponse(response, {
+        supabaseShadow: shadowStatus,
+        catalogReadonlyBridge: catalogStatus
+      });
     }
 
     return response;
   }
 };
 
-async function augmentHealthResponse(response, shadowStatus) {
+async function augmentHealthResponse(response, statusFields) {
   if (response.status !== 200) return response;
 
   try {
@@ -43,7 +66,7 @@ async function augmentHealthResponse(response, shadowStatus) {
     headers.delete('content-length');
     return new Response(JSON.stringify({
       ...payload,
-      supabaseShadow: shadowStatus
+      ...statusFields
     }), {
       status: response.status,
       headers
@@ -51,4 +74,27 @@ async function augmentHealthResponse(response, shadowStatus) {
   } catch (_) {
     return response;
   }
+}
+
+function methodNotAllowed(methods, requestId) {
+  return json({ ok: false, error: 'METHOD_NOT_ALLOWED', requestId }, 405, {
+    Allow: methods.join(', ')
+  });
+}
+
+function safeRequestId(headers) {
+  const value = String(headers?.get?.('x-request-id') || '').trim();
+  return /^[A-Za-z0-9._:-]{1,100}$/.test(value) ? value : '';
+}
+
+function json(payload, status = 200, extraHeaders = {}) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store, max-age=0',
+      'X-Content-Type-Options': 'nosniff',
+      ...extraHeaders
+    }
+  });
 }

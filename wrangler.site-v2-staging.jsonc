@@ -16,7 +16,10 @@
     "STAGING_LOW_LEVEL_LEDGER_ENABLED": "false",
     "SUPABASE_SHADOW_ENABLED": "true",
     "SUPABASE_V2_URL": "https://kueklnkznwpbobqwugns.supabase.co",
-    "SUPABASE_SHADOW_TIMEOUT_MS": "3500"
+    "SUPABASE_SHADOW_TIMEOUT_MS": "3500",
+    "CATALOG_READONLY_BRIDGE_ENABLED": "false",
+    "CATALOG_READONLY_TIMEOUT_MS": "5000",
+    "CATALOG_READONLY_MAX_RESPONSE_BYTES": "2097152"
   },
   "secrets": {
     "required": ["STAGING_API_TOKEN"]
