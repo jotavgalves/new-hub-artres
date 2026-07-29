@@ -91,6 +91,7 @@ jobs:
           node --check staging/site-v2-worker/src/order-ledger-do.js
           node --check staging/site-v2-worker/src/admin-readonly-page.js
           node --check tests/v2/run-staging-accepted-catalog-remote-smoke.mjs
+          node --check tests/v2/wait-for-staging-checkout-pricing.mjs
           node --check tests/v2/run-staging-checkout-validation-remote-smoke.mjs
           node --check tests/v2/run-staging-supabase-shadow-remote-smoke.mjs
 
