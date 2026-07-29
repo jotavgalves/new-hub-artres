@@ -8,7 +8,7 @@ const MAX_CART_LINES = 500;
 const MAX_LINE_QUANTITY = 100000;
 
 export function addCartLine(lines = [], candidate = {}, options = {}) {
-  const source = validateLines(lines);
+  const source = validatedLines(lines);
   const incoming = canonicalCartLine(candidate, options.quantity);
   const existing = findCartLine(source, incoming);
 
@@ -30,7 +30,7 @@ export function addCartLine(lines = [], candidate = {}, options = {}) {
 }
 
 export function setCartLineQuantity(lines = [], identityCandidate = {}, quantity) {
-  const source = validateLines(lines);
+  const source = validatedLines(lines);
   const targetLineId = cartLineId(identityCandidate);
   const nextQuantity = checkedQuantity(quantity);
   let updated = false;
@@ -46,7 +46,7 @@ export function setCartLineQuantity(lines = [], identityCandidate = {}, quantity
 }
 
 export function incrementCartLine(lines = [], identityCandidate = {}, delta = 1) {
-  const source = validateLines(lines);
+  const source = validatedLines(lines);
   const targetLineId = cartLineId(identityCandidate);
   const parsedDelta = integer(delta);
   if (!parsedDelta) throw collectionError('CART_LINE_DELTA_INVALID');
@@ -69,7 +69,7 @@ export function incrementCartLine(lines = [], identityCandidate = {}, delta = 1)
 }
 
 export function removeCartLine(lines = [], identityCandidate = {}) {
-  const source = validateLines(lines);
+  const source = validatedLines(lines);
   const targetLineId = cartLineId(identityCandidate);
   const next = source.filter(line => cartLineId(line) !== targetLineId);
   if (next.length === source.length) throw collectionError('CART_LINE_NOT_FOUND');
@@ -77,7 +77,7 @@ export function removeCartLine(lines = [], identityCandidate = {}) {
 }
 
 export function cartCollectionSummary(lines = []) {
-  const source = validateLines(lines);
+  const source = validatedLines(lines);
   const codeCounts = new Map();
   let quantity = 0;
 
@@ -99,22 +99,7 @@ export function cartCollectionSummary(lines = []) {
 }
 
 export function assertCartCollectionIntegrity(lines = []) {
-  const source = validateLines(lines);
-  const seen = new Set();
-
-  for (let index = 0; index < source.length; index += 1) {
-    const line = source[index];
-    const lineId = cartLineId(line);
-    if (seen.has(lineId)) {
-      const error = collectionError('CART_LINE_ID_DUPLICATED');
-      error.lineId = lineId;
-      error.duplicateIndex = index;
-      throw error;
-    }
-    seen.add(lineId);
-    checkedQuantity(lineQuantity(line));
-  }
-
+  const source = validatedLines(lines);
   return deepFreeze({
     ok: true,
     lineCount: source.length,
@@ -143,14 +128,31 @@ function withQuantity(line, quantity) {
   });
 }
 
-function validateLines(lines) {
+function validatedLines(lines) {
   if (!Array.isArray(lines)) throw collectionError('CART_LINES_ARRAY_REQUIRED');
   if (lines.length > MAX_CART_LINES) throw collectionError('CART_LINE_LIMIT_EXCEEDED');
+
+  const seen = new Set();
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const lineId = cartLineId(line);
+    checkedQuantity(lineQuantity(line));
+    if (seen.has(lineId)) {
+      const error = collectionError('CART_LINE_ID_DUPLICATED');
+      error.lineId = lineId;
+      error.duplicateIndex = index;
+      throw error;
+    }
+    seen.add(lineId);
+  }
+
   return lines;
 }
 
 function lineQuantity(line) {
-  return integer(line?.quantity ?? line?.qty) || 1;
+  const value = line?.quantity ?? line?.qty;
+  if (value === undefined || value === null || value === '') return 1;
+  return integer(value);
 }
 
 function checkedQuantity(value, overflowCode = 'CART_LINE_QUANTITY_INVALID') {
