@@ -94,19 +94,19 @@ async function main() {
     'PUBLIC_CHECKOUT_PROTECTION_IDEMPOTENCY_NOT_REJECTED'
   );
 
-  const publicDisabled = await requestJson('/api/orders/v2', {
+  const publicMissingOrigin = await requestJson('/api/orders/v2', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
-      'idempotency-key': `public-disabled-${crypto.randomUUID()}`
+      'idempotency-key': `public-missing-origin-${crypto.randomUUID()}`
     },
     body: JSON.stringify({ private: privateBody })
   });
   assertError(
-    publicDisabled,
-    503,
-    'PUBLIC_CHECKOUT_DISABLED',
-    'PUBLIC_CHECKOUT_DISABLED_BARRIER_FAILED'
+    publicMissingOrigin,
+    403,
+    'PUBLIC_CHECKOUT_ORIGIN_NOT_ALLOWED',
+    'PUBLIC_CHECKOUT_PROTECTION_PUBLIC_ORIGIN_NOT_REJECTED'
   );
 
   for (const response of [
@@ -116,7 +116,7 @@ async function main() {
     crossOrigin,
     invalidContent,
     invalidKey,
-    publicDisabled
+    publicMissingOrigin
   ]) {
     const serialized = JSON.stringify(response.payload);
     for (const privateValue of [privateKey, privateBody, crossOriginValue, STAGING_API_TOKEN]) {
@@ -137,7 +137,8 @@ async function main() {
     contentTypeRejected: true,
     invalidIdempotencyRejected: true,
     rateLimitBindingApplied: true,
-    publicCheckoutDisabled: true,
+    publicCheckoutEnabled: true,
+    publicRouteMissingOriginRejected: true,
     writesPerformed: false,
     privateDataExposed: false,
     productionChanged: false
