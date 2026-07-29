@@ -12,11 +12,16 @@ import {
   scheduleSupabaseShadowProjection,
   supabaseShadowStatus
 } from './supabase-shadow-projector.js';
-import { isStaticAssetRoute, serveStaticAsset } from './static-assets-router.js';
+import {
+  isStaticAssetRoute,
+  probeStaticAssets,
+  serveStaticAsset
+} from './static-assets-router.js';
 
 export { OrderLedger };
 
 const CATALOG_READONLY_ROUTE = '/internal/v2/catalog/preview';
+const STATIC_ASSETS_PROBE_ROUTE = '/internal/v2/assets/probe';
 const PUBLIC_CATALOG_ROUTES = new Set(['/api/drive', '/api/catalog-meta']);
 
 export default {
@@ -43,6 +48,16 @@ export async function fetchStagingShadowWorker(request, env, ctx) {
   if (PUBLIC_CATALOG_ROUTES.has(url.pathname)) {
     const requestId = safeRequestId(request.headers) || crypto.randomUUID();
     return handleCatalogAcceptedPublicRoute(request, env, requestId);
+  }
+
+  if (url.pathname === STATIC_ASSETS_PROBE_ROUTE) {
+    const requestId = safeRequestId(request.headers) || crypto.randomUUID();
+    const authorized = await constantTimeEqualSecrets(
+      request.headers.get('x-staging-token'),
+      env.STAGING_API_TOKEN
+    );
+    if (!authorized) return json({ ok: false, error: 'STAGING_TOKEN_INVALID', requestId }, 401);
+    return probeStaticAssets(request, env, requestId);
   }
 
   if (url.pathname === CATALOG_READONLY_ROUTE) {
