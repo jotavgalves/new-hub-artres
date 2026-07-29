@@ -48,14 +48,17 @@ test('falha inclui somente códigos públicos e sanitizados dos smokes', () => {
     workflowStatus: 'failure',
     catalogSmoke: 'success',
     checkoutSmoke: 'failure',
+    remoteSmoke: 'failure',
     catalogSmokeError: 'STAGING_ASSET_PROBE_INDEX_FETCH_FAILED',
     checkoutSmokeError: 'CHECKOUT_VALIDATION_VALID_ITEM_FAILED',
+    remoteSmokeError: 'FIRST_SUBMISSION_STATUS_503_ERROR_STAGING_WRITES_DISABLED',
     token: 'nao-pode-vazar',
     artworkId: 'drive-id-nao-pode-vazar'
   });
 
   assert.match(body, /Código do smoke do catálogo: `STAGING_ASSET_PROBE_INDEX_FETCH_FAILED`/);
   assert.match(body, /Código do smoke do checkout: `CHECKOUT_VALIDATION_VALID_ITEM_FAILED`/);
+  assert.match(body, /Código do smoke sintético: `FIRST_SUBMISSION_STATUS_503_ERROR_STAGING_WRITES_DISABLED`/);
   assert.doesNotMatch(body, /nao-pode-vazar/);
   assert.doesNotMatch(body, /drive-id-nao-pode-vazar/);
 });
@@ -67,6 +70,7 @@ test('resultado desconhecido é sanitizado e não inventa sucesso', () => {
     checkoutSmoke: '<script>checkout</script>',
     checkoutSmokeError: '<script>codigo</script>',
     catalogSmokeError: '<script>erro</script>',
+    remoteSmokeError: '<script>remote</script>',
     commit: 'nao-e-sha'
   });
 
@@ -76,5 +80,6 @@ test('resultado desconhecido é sanitizado e não inventa sucesso', () => {
   assert.match(body, /Commit: `desconhecido`/);
   assert.doesNotMatch(body, /Código do smoke do catálogo/);
   assert.doesNotMatch(body, /Código do smoke do checkout/);
+  assert.doesNotMatch(body, /Código do smoke sintético/);
   assert.doesNotMatch(body, /<script>/);
 });
