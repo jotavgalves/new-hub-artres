@@ -24,7 +24,7 @@ export function createCartLineIdentity(input = {}) {
   if (!productKey) throw identityError('CART_LINE_PRODUCT_KEY_INVALID');
 
   const variantKey = resolveVariantKey(input, productKey);
-  const sizeKey = resolveSizeKey(input);
+  const sizeKey = resolveSizeKey(input, productKey);
   const lineId = buildItemId({
     driveFileId,
     productKey,
@@ -122,18 +122,19 @@ function resolveVariantKey(input, productKey) {
     input.variant,
     details.variantKey,
     details.variant,
+    productKey === 'sacolinha' ? input.size : '',
     productKey === 'sacolinha' ? details.size : ''
   );
   return candidate || 'default';
 }
 
-function resolveSizeKey(input) {
+function resolveSizeKey(input, productKey) {
   const details = record(input.details);
   return firstText(
     input.sizeKey,
-    input.size,
     details.sizeKey,
-    details.size
+    productKey === 'sacolinha' ? '' : input.size,
+    productKey === 'sacolinha' ? '' : details.size
   ) || 'default';
 }
 
