@@ -9,12 +9,15 @@ on:
       - 'assets/**'
       - 'src/v2/**'
       - 'scripts/v2/**'
+      - 'scripts/catalog-v2/**'
       - 'staging/site-v2-worker/**'
+      - 'supabase/migrations/**'
       - 'wrangler.site-v2-staging.jsonc'
       - 'tests/v2/run-staging-synthetic-remote-smoke.mjs'
       - 'tests/v2/run-staging-supabase-shadow-remote-smoke.mjs'
       - 'tests/v2/run-staging-accepted-catalog-remote-smoke.mjs'
       - '.github/workflows/deploy-site-v2-staging.yml'
+      - '.github/workflows/catalog-v2-auto-accept.yml'
   workflow_dispatch:
     inputs:
       confirmacao:
@@ -59,7 +62,7 @@ jobs:
     name: Publicar e validar staging V2
     needs: authorize-deploy
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     environment: site-v2-staging
 
     env:
@@ -68,6 +71,12 @@ jobs:
       SITE_V2_STAGING_API_TOKEN: ${{ secrets.SITE_V2_STAGING_API_TOKEN }}
       SUPABASE_V2_STAGING_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_V2_STAGING_SERVICE_ROLE_KEY }}
       STAGING_URL: https://new-hub-artres-v2-staging.jvgacontato.workers.dev
+      CATALOG_LEGACY_BASE_URL: https://new-hub-artres.pages.dev
+      CATALOG_V2_ROOT_DRIVE_ID: 193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae
+      CATALOG_REPORT_FILE: /tmp/catalog-v2-deploy-accept-report.json
+      CATALOG_INSPECTION_MAX_REQUESTS: '2000'
+      CATALOG_INSPECTION_MAX_FOLDERS: '2000'
+      CATALOG_INSPECTION_MAX_ARTWORKS: '100000'
       SUPABASE_V2_URL: https://kueklnkznwpbobqwugns.supabase.co
       STAGING_SECRETS_FILE: /tmp/site-v2-staging-secrets.json
       ROLLBACK_CONFIG_FILE: wrangler.site-v2-staging.rollback.runtime.jsonc
@@ -108,11 +117,15 @@ jobs:
           umask 077
           node scripts/v2/prepare-site-v2-staging-deploy.mjs
 
+      - name: Executar testes isolados
+        run: node --test tests/v2/*.test.mjs tests/catalog-v2/*.test.mjs
+
+      - name: Validar e aceitar catálogo real antes do deploy
+        id: catalog-accept
+        run: node scripts/catalog-v2/publish-accepted-catalog-v2.mjs
+
       - name: Preparar cópia isolada do design público atual
         run: node scripts/v2/prepare-site-v2-static-assets.mjs
-
-      - name: Executar testes isolados
-        run: node --test tests/v2/*.test.mjs
 
       - name: Validar bundle ativo sem publicar
         run: >-
@@ -166,7 +179,7 @@ jobs:
 
       - name: Remover arquivos temporários
         if: always()
-        run: rm -f "$STAGING_SECRETS_FILE" "$ROLLBACK_CONFIG_FILE" && rm -rf staging/site-v2-public
+        run: rm -f "$STAGING_SECRETS_FILE" "$ROLLBACK_CONFIG_FILE" "$CATALOG_REPORT_FILE" && rm -rf staging/site-v2-public
 
       - name: Registrar garantia de isolamento
         if: success()
