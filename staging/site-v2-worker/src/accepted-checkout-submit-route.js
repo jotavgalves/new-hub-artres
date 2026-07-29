@@ -14,6 +14,10 @@ export async function handleAcceptedCheckoutSubmit(request, env, requestId, opti
     return json({ ok: false, error: 'CONTENT_TYPE_NOT_JSON', requestId }, 415);
   }
 
+  if (env.STAGING_WRITE_ENABLED !== 'true') {
+    return json({ ok: false, error: 'STAGING_WRITES_DISABLED', requestId }, 503);
+  }
+
   try {
     const rawIdempotencyKey = String(request.headers.get('idempotency-key') || '').trim();
     if (rawIdempotencyKey.length < 16 || rawIdempotencyKey.length > 128) {
