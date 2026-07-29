@@ -1,8 +1,9 @@
 const STAGING_URL = normalizeOrigin(process.env.STAGING_URL);
 const MAX_FOLDERS = 40;
-const PROPAGATION_MAX_ATTEMPTS = 90;
+const PROPAGATION_MAX_ATTEMPTS = 180;
 const PROPAGATION_INTERVAL_MS = 1000;
 const REQUIRED_STABLE_RESPONSES = 3;
+const HOME_MAX_REDIRECTS = 3;
 const TRANSIENT_STATUSES = new Set([404, 429, 500, 502, 503, 504]);
 
 async function main() {
@@ -48,6 +49,7 @@ async function main() {
     ok: true,
     propagationAttempts: stable.attempts,
     stableResponses: stable.consecutive,
+    homeRedirects: stable.homeRedirects,
     catalogVersion: Number(metadata.catalogVersion),
     themeCount: uniqueFolders(themes).length,
     visitedFolderCount: visited.size,
@@ -61,10 +63,12 @@ async function main() {
 async function waitForAcceptedCatalogDeployment() {
   let consecutive = 0;
   let lastCode = 'STAGING_ACCEPTED_CATALOG_PROPAGATION_PENDING';
+  let homeRedirects = 0;
 
   for (let attempt = 1; attempt <= PROPAGATION_MAX_ATTEMPTS; attempt += 1) {
     try {
-      const home = await fetchText(new URL('/', STAGING_URL), 2 * 1024 * 1024);
+      const home = await fetchHomeText(new URL('/', STAGING_URL), 2 * 1024 * 1024);
+      homeRedirects = home.redirects;
       if (!home.response.ok || !/<title>Escolha suas Artes \| Armazém Festa e Eventos<\/title>/i.test(home.text)) {
         lastCode = home.response.ok
           ? 'STAGING_CURRENT_DESIGN_NOT_SERVED'
@@ -114,6 +118,7 @@ async function waitForAcceptedCatalogDeployment() {
         event: 'staging-accepted-catalog-stable-probe',
         attempt,
         consecutive,
+        homeRedirects,
         catalogVersion: Number(metadata.catalogVersion)
       })}\n`);
 
@@ -121,6 +126,7 @@ async function waitForAcceptedCatalogDeployment() {
         return Object.freeze({
           attempts: attempt,
           consecutive,
+          homeRedirects,
           metadata
         });
       }
@@ -131,7 +137,9 @@ async function waitForAcceptedCatalogDeployment() {
     }
   }
 
-  throw smokeError('STAGING_ACCEPTED_CATALOG_PROPAGATION_TIMEOUT');
+  throw smokeError(lastCode === 'STAGING_ACCEPTED_CATALOG_PROPAGATION_PENDING'
+    ? 'STAGING_ACCEPTED_CATALOG_PROPAGATION_TIMEOUT'
+    : lastCode);
 }
 
 function validAcceptedMetadata(metadata) {
@@ -187,13 +195,39 @@ async function fetchJsonResult(url) {
   }
 }
 
-async function fetchText(url, maxBytes) {
+async function fetchHomeText(url, maxBytes) {
+  let current = new URL(url);
+
+  for (let redirects = 0; redirects <= HOME_MAX_REDIRECTS; redirects += 1) {
+    const result = await fetchText(current, maxBytes, { redirect: 'manual' });
+    const status = result.response.status;
+    if (status < 300 || status >= 400) return { ...result, redirects };
+
+    if (redirects >= HOME_MAX_REDIRECTS) throw smokeError('STAGING_HOME_REDIRECT_LIMIT');
+    const location = String(result.response.headers.get('location') || '').trim();
+    if (!location) throw smokeError('STAGING_HOME_REDIRECT_LOCATION_MISSING');
+
+    const next = new URL(location, current);
+    if (next.origin !== STAGING_URL || next.username || next.password) {
+      throw smokeError('STAGING_HOME_REDIRECT_EXTERNAL');
+    }
+    if (next.pathname.startsWith('/api/') || next.pathname.startsWith('/internal/')) {
+      throw smokeError('STAGING_HOME_REDIRECT_INVALID_PATH');
+    }
+    next.hash = '';
+    current = next;
+  }
+
+  throw smokeError('STAGING_HOME_REDIRECT_LIMIT');
+}
+
+async function fetchText(url, maxBytes, options = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
   try {
     const response = await fetch(url, {
       method: 'GET',
-      redirect: 'error',
+      redirect: options.redirect || 'error',
       signal: controller.signal,
       headers: { Accept: 'application/json,text/html;q=0.9,*/*;q=0.8', 'Cache-Control': 'no-store' }
     });
