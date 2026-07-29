@@ -82,8 +82,8 @@ Evidência: commit `318597cfbda45f94364a75a9bb11cb2567bca2c7`.
 
 - [x] Criar fundação da rota pública de checkout somente no staging.
 - [x] Manter a rota desativada por flag até os testes finais desta etapa.
-- [-] Resolver cada item contra a versão aceita do catálogo.
-- [ ] Validar produto, variante, tamanho e vínculo da arte no servidor.
+- [x] Resolver cada item contra a versão aceita do catálogo.
+- [-] Validar produto, variante, tamanho e vínculo da arte no servidor.
 - [ ] Recalcular quantidade, preço, desconto e total no servidor.
 - [ ] Preservar cliente, vendedora, medidas, observações e personalizações.
 - [ ] Aplicar idempotência contra duplo clique e repetição de requisição.
@@ -91,7 +91,10 @@ Evidência: commit `318597cfbda45f94364a75a9bb11cb2567bca2c7`.
 - [ ] Adicionar proteção de origem, limite de requisições e resposta sanitizada.
 - [ ] Executar smoke remoto sem pedido real.
 
-Evidência parcial: PR #31; `Site V2 Baseline` run `30451888548` aprovado. A rota `/api/orders/v2` está restrita ao staging, desligada por `STAGING_PUBLIC_CHECKOUT_ENABLED=false` e incapaz de gravar pedidos nesta versão.
+Evidência parcial:
+
+- PR #31, `Site V2 Baseline` run `30452012797` e deploy do commit `7ee4c59e4bf76a478d0236e0d75dcc79d1401268`: rota `/api/orders/v2` restrita ao staging, desligada e incapaz de gravar pedidos.
+- PR #32, `Site V2 Baseline` run `30452445872`, migration `catalog_checkout_items_rpc` aplicada ao Supabase de staging e validação remota da versão 49: IDs duplicados são deduplicados, itens existentes são resolvidos e ausentes produzem contagem incompleta para rejeição pelo Worker.
 
 Critério de conclusão: checkout do staging cria e reproduz pedido V2 usando arte e produto reais do catálogo aceito, com valores calculados pelo servidor e sem alterar produção.
 
