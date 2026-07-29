@@ -5,13 +5,16 @@ on:
     paths:
       - 'src/v2/**'
       - 'scripts/v2/**'
+      - 'scripts/catalog-v2/**'
       - 'staging/site-v2-worker/**'
       - 'supabase/**'
       - 'tests/v2/**'
+      - 'tests/catalog-v2/**'
       - 'docs/**'
       - 'wrangler.site-v2-staging.jsonc'
       - '.github/workflows/site-v2-baseline.yml'
       - '.github/workflows/deploy-site-v2-staging.yml'
+      - '.github/workflows/catalog-v2-readonly-inspection.yml'
   workflow_dispatch:
 
 permissions:
@@ -42,7 +45,7 @@ jobs:
         run: |
           set -euo pipefail
           TEST_LOG=/tmp/site-v2-node-tests.log
-          if ! node --test tests/v2/*.test.mjs > "$TEST_LOG" 2>&1; then
+          if ! node --test tests/v2/*.test.mjs tests/catalog-v2/*.test.mjs > "$TEST_LOG" 2>&1; then
             echo "Falha nos testes V2. Últimas 220 linhas:"
             tail -n 220 "$TEST_LOG"
             exit 1
@@ -64,6 +67,10 @@ jobs:
           node --check src/v2/persistence/supabase-rpc-client.mjs
           node --check src/v2/persistence/supabase-order-projection.mjs
           node --check scripts/v2/prepare-site-v2-staging-deploy.mjs
+          node --check scripts/catalog-v2/prepare-catalog-readonly-inspection.mjs
+          node --check scripts/catalog-v2/run-staging-catalog-readonly-inspection.mjs
+          node --check scripts/catalog-v2/verify-staging-catalog-bridge-disabled.mjs
+          node --check scripts/catalog-v2/post-catalog-inspection-status.mjs
           node --check staging/site-v2-worker/src/index.js
           node --check staging/site-v2-worker/src/index-shadow.js
           node --check staging/site-v2-worker/src/catalog-readonly-route.js
