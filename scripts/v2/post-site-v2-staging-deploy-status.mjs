@@ -28,6 +28,9 @@ export function buildSiteV2StagingDeployComment(input = {}) {
   if (status.catalogSmokeError) {
     lines.push(`- Código do smoke do catálogo: \`${status.catalogSmokeError}\``);
   }
+  if (status.checkoutSmokeError) {
+    lines.push(`- Código do smoke do checkout: \`${status.checkoutSmokeError}\``);
+  }
   lines.push('');
 
   if (success) {
@@ -77,6 +80,7 @@ function sanitizeStatus(input) {
     catalogSmoke: outcome(input.catalogSmoke),
     catalogSmokeError: publicCode(input.catalogSmokeError),
     checkoutSmoke: outcome(input.checkoutSmoke),
+    checkoutSmokeError: publicCode(input.checkoutSmokeError),
     remoteSmoke: outcome(input.remoteSmoke),
     shadowSmoke: outcome(input.shadowSmoke),
     rollback: outcome(input.rollback),
@@ -116,6 +120,7 @@ async function main() {
     catalogSmoke: process.env.CATALOG_SMOKE_OUTCOME,
     catalogSmokeError: process.env.CATALOG_SMOKE_ERROR_CODE,
     checkoutSmoke: process.env.CHECKOUT_SMOKE_OUTCOME,
+    checkoutSmokeError: process.env.CHECKOUT_SMOKE_ERROR_CODE,
     remoteSmoke: process.env.REMOTE_SMOKE_OUTCOME,
     shadowSmoke: process.env.SHADOW_SMOKE_OUTCOME,
     rollback: process.env.ROLLBACK_OUTCOME,
