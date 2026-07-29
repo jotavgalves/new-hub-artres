@@ -22,10 +22,12 @@ async function main() {
     throw smokeError('CHECKOUT_REJECTIONS_DEPENDENCIES_NOT_READY');
   }
   if (
-    health?.publicCheckout?.enabled !== false ||
-    health?.publicCheckout?.acceptsRealOrders !== false
+    health?.publicCheckout?.enabled !== true ||
+    health?.publicCheckout?.implemented !== true ||
+    health?.publicCheckout?.acceptsRealOrders !== true ||
+    health?.publicCheckout?.protection?.configured !== true
   ) {
-    throw smokeError('PUBLIC_CHECKOUT_MUST_REMAIN_DISABLED');
+    throw smokeError('PUBLIC_CHECKOUT_MUST_BE_ACTIVE_AND_PROTECTED');
   }
 
   const artwork = await firstReachableArtwork();
@@ -111,22 +113,6 @@ async function main() {
     ]);
   }
 
-  const publicCheckout = await requestJson('/api/orders/v2', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'idempotency-key': `public-disabled-${crypto.randomUUID()}`
-    },
-    body: JSON.stringify(requestBody)
-  });
-  if (
-    publicCheckout.status !== 503 ||
-    publicCheckout.payload?.error !== 'PUBLIC_CHECKOUT_DISABLED'
-  ) {
-    throw smokeError('PUBLIC_CHECKOUT_DISABLED_BARRIER_FAILED');
-  }
-  responses.push(publicCheckout.payload);
-
   for (const responsePayload of responses) {
     assertPrivateValuesAbsent(responsePayload, [
       driveFileId,
@@ -149,7 +135,8 @@ async function main() {
     invalidQuantityRejectedInPreview: true,
     invalidQuantityRejectedInSubmit: true,
     invalidRequestsReachedLedger: false,
-    publicCheckoutDisabled: true,
+    publicCheckoutEnabled: true,
+    publicCheckoutProtected: true,
     privateDataExposed: false,
     productionChanged: false
   })}\n`);

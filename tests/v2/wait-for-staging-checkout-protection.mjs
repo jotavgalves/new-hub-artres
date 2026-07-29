@@ -90,11 +90,15 @@ export function validateStagingCheckoutProtection(result) {
     };
   }
 
-  if (checkout.enabled !== false || checkout.acceptsRealOrders !== false) {
+  if (
+    checkout.enabled !== true ||
+    checkout.implemented !== true ||
+    checkout.acceptsRealOrders !== true
+  ) {
     return {
       ok: false,
-      terminal: true,
-      code: 'PUBLIC_CHECKOUT_PROTECTION_STATE_UNSAFE'
+      terminal: false,
+      code: 'PUBLIC_CHECKOUT_PROTECTION_ACTIVE_STATE_NOT_READY'
     };
   }
 

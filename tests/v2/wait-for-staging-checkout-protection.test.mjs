@@ -10,8 +10,9 @@ function readyPayload(overrides = {}) {
   return {
     ok: true,
     publicCheckout: {
-      enabled: false,
-      acceptsRealOrders: false,
+      enabled: true,
+      implemented: true,
+      acceptsRealOrders: true,
       protection: {
         configured: true,
         requiresOrigin: true,
@@ -24,16 +25,23 @@ function readyPayload(overrides = {}) {
   };
 }
 
-test('classifica contrato antigo e binding ausente como propagação pendente', () => {
+test('classifica versão desligada e binding ausente como propagação pendente', () => {
   assert.deepEqual(
     validateStagingCheckoutProtection({
       status: 200,
-      payload: { ok: true, publicCheckout: { enabled: false, acceptsRealOrders: false } }
+      payload: {
+        ok: true,
+        publicCheckout: {
+          enabled: false,
+          implemented: true,
+          acceptsRealOrders: false
+        }
+      }
     }),
     {
       ok: false,
       terminal: false,
-      code: 'PUBLIC_CHECKOUT_PROTECTION_CONTRACT_NOT_READY'
+      code: 'PUBLIC_CHECKOUT_PROTECTION_ACTIVE_STATE_NOT_READY'
     }
   );
 
@@ -46,11 +54,15 @@ test('classifica contrato antigo e binding ausente como propagação pendente', 
   );
 });
 
-test('exige três respostas completas e consecutivas', async () => {
+test('exige três respostas ativas completas e consecutivas', async () => {
+  const oldDisabled = readyPayload();
+  oldDisabled.publicCheckout.enabled = false;
+  oldDisabled.publicCheckout.acceptsRealOrders = false;
+
   const responses = [
     { status: 200, payload: { ok: true } },
     { status: 200, payload: readyPayload() },
-    { status: 503, payload: { error: 'versão anterior' } },
+    { status: 200, payload: oldDisabled },
     { status: 200, payload: readyPayload() },
     { status: 200, payload: readyPayload() },
     { status: 200, payload: readyPayload() }
@@ -66,30 +78,26 @@ test('exige três respostas completas e consecutivas', async () => {
     sleep: async () => { sleeps += 1; }
   });
 
+  assert.equal(payload.publicCheckout.enabled, true);
+  assert.equal(payload.publicCheckout.acceptsRealOrders, true);
   assert.equal(payload.publicCheckout.protection.configured, true);
   assert.equal(calls, 6);
   assert.equal(sleeps, 5);
 });
 
-test('estado público inseguro falha imediatamente', async () => {
-  const unsafe = readyPayload();
-  unsafe.publicCheckout.enabled = true;
-  unsafe.publicCheckout.acceptsRealOrders = true;
-  let calls = 0;
+test('estado desligado não é aceito como proteção pronta', () => {
+  const disabled = readyPayload();
+  disabled.publicCheckout.enabled = false;
+  disabled.publicCheckout.acceptsRealOrders = false;
 
-  await assert.rejects(
-    waitForStagingCheckoutProtection({
-      attempts: 20,
-      intervalMs: 0,
-      request: async () => {
-        calls += 1;
-        return { status: 200, payload: unsafe };
-      },
-      sleep: async () => {}
-    }),
-    error => error.code === 'PUBLIC_CHECKOUT_PROTECTION_STATE_UNSAFE'
+  assert.deepEqual(
+    validateStagingCheckoutProtection({ status: 200, payload: disabled }),
+    {
+      ok: false,
+      terminal: false,
+      code: 'PUBLIC_CHECKOUT_PROTECTION_ACTIVE_STATE_NOT_READY'
+    }
   );
-  assert.equal(calls, 1);
 });
 
 test('timeout mantém o último código sanitizado', async () => {
