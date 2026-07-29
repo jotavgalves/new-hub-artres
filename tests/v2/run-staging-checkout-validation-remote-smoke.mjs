@@ -108,6 +108,54 @@ async function main() {
     'ORDER_QUANTITY_RULES_INVALID'
   );
 
+  const submissionCreatedAt = new Date().toISOString();
+  const idempotencyKey = `checkout-staging-${crypto.randomUUID()}`;
+  const submitBody = {
+    ...validRequest,
+    submissionCreatedAt
+  };
+  const created = await waitForCheckoutSubmit(submitBody, idempotencyKey);
+  if (
+    ![200, 201].includes(created.status) ||
+    created.payload?.ok !== true ||
+    !['CREATED', 'REPLAY'].includes(created.payload?.action) ||
+    !/^PED[0-9]{7}[A-Z]$/.test(String(created.payload?.orderNumber || '')) ||
+    Number(created.payload?.schemaVersion) !== 2 ||
+    Number(created.payload?.itemCount) !== 1 ||
+    Number(created.payload?.quantity) !== 6 ||
+    Number(created.payload?.pricing?.total) !== 58.5 ||
+    Number(created.payload?.catalogVersion) !== Number(metadata.catalogVersion) ||
+    created.payload?.canonicalDetailsPreserved !== true ||
+    created.payload?.customerPreserved !== true ||
+    created.payload?.sellerPreserved !== true
+  ) {
+    throw smokeError('CHECKOUT_IDEMPOTENT_CREATE_FAILED');
+  }
+
+  const replay = await postSubmit(submitBody, idempotencyKey);
+  if (
+    replay.status !== 200 ||
+    replay.payload?.ok !== true ||
+    replay.payload?.action !== 'REPLAY' ||
+    replay.payload?.replayed !== true ||
+    replay.payload?.orderNumber !== created.payload?.orderNumber ||
+    Number(replay.payload?.pricing?.total) !== 58.5
+  ) {
+    throw smokeError('CHECKOUT_IDEMPOTENT_REPLAY_FAILED');
+  }
+
+  const conflict = await postSubmit({
+    ...submitBody,
+    items: [{ ...baseItem, quantity: 8 }]
+  }, idempotencyKey);
+  if (
+    conflict.status !== 409 ||
+    conflict.payload?.ok !== false ||
+    conflict.payload?.error !== 'IDEMPOTENCY_KEY_CONFLICT'
+  ) {
+    throw smokeError('CHECKOUT_IDEMPOTENCY_CONFLICT_NOT_REJECTED');
+  }
+
   const publicCheckout = await requestJson('/api/orders/v2', {
     method: 'POST',
     headers: {
@@ -123,16 +171,19 @@ async function main() {
     throw smokeError('PUBLIC_CHECKOUT_DISABLED_BARRIER_FAILED');
   }
 
-  const serialized = JSON.stringify(valid.payload);
-  for (const privateValue of [
-    driveFileId,
-    privateCustomerName,
-    '81999999999',
-    privateObservation,
-    privatePersonalization
-  ]) {
-    if (serialized.includes(privateValue)) {
-      throw smokeError('CHECKOUT_VALIDATION_RESPONSE_EXPOSED_PRIVATE_DATA');
+  for (const responsePayload of [valid.payload, created.payload, replay.payload, conflict.payload]) {
+    const serialized = JSON.stringify(responsePayload);
+    for (const privateValue of [
+      driveFileId,
+      privateCustomerName,
+      '81999999999',
+      privateObservation,
+      privatePersonalization,
+      idempotencyKey
+    ]) {
+      if (serialized.includes(privateValue)) {
+        throw smokeError('CHECKOUT_VALIDATION_RESPONSE_EXPOSED_PRIVATE_DATA');
+      }
     }
   }
 
@@ -149,15 +200,43 @@ async function main() {
     observationsPreserved: true,
     personalizationPreserved: true,
     canonicalDraftReady: true,
+    idempotentCreateAccepted: true,
+    idempotentReplayAccepted: true,
+    idempotencyConflictRejected: true,
     minimumRejected: true,
     invalidStepRejected: true,
     productMismatchRejected: true,
     invalidVariantRejected: true,
     sizeMismatchRejected: true,
     publicCheckoutDisabled: true,
-    writesPerformed: false,
+    syntheticStagingOrderCreated: true,
+    realOrderCreated: false,
     productionChanged: false
   })}\n`);
+}
+
+async function waitForCheckoutSubmit(body, idempotencyKey) {
+  let lastCode = 'CHECKOUT_SUBMIT_EDGE_NOT_READY';
+  for (let attempt = 1; attempt <= 90; attempt += 1) {
+    const result = await postSubmit(body, idempotencyKey);
+    if (
+      [200, 201].includes(result.status) &&
+      result.payload?.ok === true &&
+      ['CREATED', 'REPLAY'].includes(result.payload?.action)
+    ) {
+      return result;
+    }
+    if (result.status === 401 || result.status === 403) {
+      throw smokeError('CHECKOUT_SUBMIT_AUTH_FAILED');
+    }
+    if (result.status !== 404 && result.status < 500) {
+      lastCode = publicCode(result.payload?.error, 'CHECKOUT_SUBMIT_RESPONSE_INVALID');
+      throw smokeError(lastCode);
+    }
+    lastCode = publicCode(result.payload?.error, 'CHECKOUT_SUBMIT_EDGE_NOT_READY');
+    if (attempt < 90) await sleep(1000);
+  }
+  throw smokeError(lastCode);
 }
 
 async function expectValidationError(item, expectedCode) {
@@ -189,6 +268,18 @@ async function postValidation(body) {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
+      'x-staging-token': STAGING_API_TOKEN
+    },
+    body: JSON.stringify(body)
+  });
+}
+
+async function postSubmit(body, idempotencyKey) {
+  return requestJson('/internal/v2/checkout/submit', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'idempotency-key': idempotencyKey,
       'x-staging-token': STAGING_API_TOKEN
     },
     body: JSON.stringify(body)
@@ -322,6 +413,10 @@ function normalizeOrigin(value) {
 function publicCode(value, fallback) {
   const text = String(value || '').trim();
   return /^[A-Z0-9_]{3,100}$/.test(text) ? text : fallback;
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function smokeError(code) {
