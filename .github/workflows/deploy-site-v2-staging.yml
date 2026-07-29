@@ -181,20 +181,20 @@ jobs:
         shell: bash
         run: |
           set +e
-          primary_output="$(node tests/v2/run-staging-checkout-validation-remote-smoke.mjs 2>&1)"
+          protection_output="$(node tests/v2/run-staging-checkout-protection-remote-smoke.mjs 2>&1)"
           status=$?
-          output="$primary_output"
+          output="$protection_output"
+
+          if [ "$status" -eq 0 ]; then
+            primary_output="$(node tests/v2/run-staging-checkout-validation-remote-smoke.mjs 2>&1)"
+            status=$?
+            output="${output}"$'\n'"${primary_output}"
+          fi
 
           if [ "$status" -eq 0 ]; then
             rejection_output="$(node tests/v2/run-staging-checkout-invalid-rejections-remote-smoke.mjs 2>&1)"
             status=$?
             output="${output}"$'\n'"${rejection_output}"
-          fi
-
-          if [ "$status" -eq 0 ]; then
-            protection_output="$(node tests/v2/run-staging-checkout-protection-remote-smoke.mjs 2>&1)"
-            status=$?
-            output="${output}"$'\n'"${protection_output}"
           fi
 
           if [ "$status" -eq 0 ]; then
