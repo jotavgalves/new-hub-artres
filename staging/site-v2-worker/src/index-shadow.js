@@ -12,6 +12,7 @@ import {
   scheduleSupabaseShadowProjection,
   supabaseShadowStatus
 } from './supabase-shadow-projector.js';
+import { isStaticAssetRoute, serveStaticAsset } from './static-assets-router.js';
 
 export { OrderLedger };
 
@@ -20,54 +21,67 @@ const PUBLIC_CATALOG_ROUTES = new Set(['/api/drive', '/api/catalog-meta']);
 
 export default {
   async fetch(request, env, ctx) {
-    const url = new URL(request.url);
-    const shadowStatus = supabaseShadowStatus(env);
-    const catalogStatus = catalogReadonlyBridgeStatus(env);
-    const acceptedCatalogStatus = catalogAcceptedStatus(env);
-
-    if (PUBLIC_CATALOG_ROUTES.has(url.pathname)) {
-      const requestId = safeRequestId(request.headers) || crypto.randomUUID();
-      return handleCatalogAcceptedPublicRoute(request, env, requestId);
-    }
-
-    if (url.pathname === CATALOG_READONLY_ROUTE) {
-      const requestId = safeRequestId(request.headers) || crypto.randomUUID();
-      const authorized = await constantTimeEqualSecrets(
-        request.headers.get('x-staging-token'),
-        env.STAGING_API_TOKEN
-      );
-      if (!authorized) return json({ ok: false, error: 'STAGING_TOKEN_INVALID', requestId }, 401);
-      if (request.method !== 'GET') return methodNotAllowed(['GET'], requestId);
-      return handleCatalogReadonlyRoute(request, env, requestId);
-    }
-
-    const hooks = shadowStatus.enabled && shadowStatus.configured
-      ? {
-          onOrderCommitted({ command, result }) {
-            return scheduleSupabaseShadowProjection({
-              ctx,
-              env,
-              command,
-              result,
-              logger: console
-            });
-          }
-        }
-      : {};
-
-    const response = await fetchStagingWorker(request, env, ctx, hooks);
-
-    if (url.pathname === '/health' && request.method === 'GET') {
-      return augmentHealthResponse(response, {
-        supabaseShadow: shadowStatus,
-        catalogReadonlyBridge: catalogStatus,
-        acceptedCatalog: acceptedCatalogStatus
-      });
-    }
-
-    return response;
+    return fetchStagingShadowWorker(request, env, ctx);
   }
 };
+
+export async function fetchStagingShadowWorker(request, env, ctx) {
+  const url = new URL(request.url);
+
+  // Todos os requests passam primeiro pelo Worker. As páginas e os arquivos do
+  // design atual são encaminhados explicitamente ao binding de assets. Isso
+  // evita depender do caminho asset-first do edge e não transforma o conteúdo.
+  if (isStaticAssetRoute(url.pathname)) {
+    const requestId = safeRequestId(request.headers) || crypto.randomUUID();
+    return serveStaticAsset(request, env, requestId);
+  }
+
+  const shadowStatus = supabaseShadowStatus(env);
+  const catalogStatus = catalogReadonlyBridgeStatus(env);
+  const acceptedCatalogStatus = catalogAcceptedStatus(env);
+
+  if (PUBLIC_CATALOG_ROUTES.has(url.pathname)) {
+    const requestId = safeRequestId(request.headers) || crypto.randomUUID();
+    return handleCatalogAcceptedPublicRoute(request, env, requestId);
+  }
+
+  if (url.pathname === CATALOG_READONLY_ROUTE) {
+    const requestId = safeRequestId(request.headers) || crypto.randomUUID();
+    const authorized = await constantTimeEqualSecrets(
+      request.headers.get('x-staging-token'),
+      env.STAGING_API_TOKEN
+    );
+    if (!authorized) return json({ ok: false, error: 'STAGING_TOKEN_INVALID', requestId }, 401);
+    if (request.method !== 'GET') return methodNotAllowed(['GET'], requestId);
+    return handleCatalogReadonlyRoute(request, env, requestId);
+  }
+
+  const hooks = shadowStatus.enabled && shadowStatus.configured
+    ? {
+        onOrderCommitted({ command, result }) {
+          return scheduleSupabaseShadowProjection({
+            ctx,
+            env,
+            command,
+            result,
+            logger: console
+          });
+        }
+      }
+    : {};
+
+  const response = await fetchStagingWorker(request, env, ctx, hooks);
+
+  if (url.pathname === '/health' && request.method === 'GET') {
+    return augmentHealthResponse(response, {
+      supabaseShadow: shadowStatus,
+      catalogReadonlyBridge: catalogStatus,
+      acceptedCatalog: acceptedCatalogStatus
+    });
+  }
+
+  return response;
+}
 
 async function augmentHealthResponse(response, statusFields) {
   if (response.status !== 200) return response;
