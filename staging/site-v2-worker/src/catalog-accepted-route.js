@@ -1,3 +1,8 @@
+import {
+  SupabaseRpcClient,
+  normalizeSupabaseUrl
+} from '../../../src/v2/persistence/supabase-rpc-client.mjs';
+
 const ALLOWED_BROWSE_MODES = new Set(['themes', 'products', 'items']);
 const ALLOWED_SEARCH_MODES = new Set(['search', 'globalSearch', 'folderSearch']);
 const DEFAULT_TIMEOUT_MS = 5000;
@@ -79,8 +84,6 @@ export async function handleCatalogAcceptedPublicRoute(request, env, requestId, 
 }
 
 async function catalogRpc(name, body, env, options) {
-  const baseUrl = normalizeSupabaseUrl(env.SUPABASE_V2_URL);
-  const key = String(env.SUPABASE_V2_SERVICE_ROLE_KEY || '').trim();
   const timeoutMs = boundedInteger(env.CATALOG_ACCEPTED_TIMEOUT_MS, 500, 15000, DEFAULT_TIMEOUT_MS);
   const maxResponseBytes = boundedInteger(
     env.CATALOG_ACCEPTED_MAX_RESPONSE_BYTES,
@@ -88,73 +91,54 @@ async function catalogRpc(name, body, env, options) {
     8 * 1024 * 1024,
     DEFAULT_MAX_RESPONSE_BYTES
   );
-  const fetchImpl = options.fetch || globalThis.fetch;
-  if (typeof fetchImpl !== 'function') throw routeError('CATALOG_ACCEPTED_FETCH_REQUIRED');
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const rpcUrl = new URL(`/rest/v1/rpc/${name}`, baseUrl);
-    const response = await Reflect.apply(fetchImpl, globalThis, [rpcUrl, {
-      method: 'POST',
-      redirect: 'error',
-      signal: controller.signal,
-      headers: {
-        apikey: key,
-        Authorization: `Bearer ${key}`,
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-store'
-      },
-      body: JSON.stringify(body || {})
-    }]);
-    const text = await readLimitedText(response, maxResponseBytes);
-    if (!response.ok) {
-      let message = '';
-      try { message = String(JSON.parse(text)?.message || ''); } catch (_) {}
-      throw routeError(/^[A-Z0-9_]{3,100}$/.test(message) ? message : `CATALOG_ACCEPTED_RPC_${response.status}`);
-    }
-    try {
-      const payload = text ? JSON.parse(text) : {};
-      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-        throw new Error('NOT_OBJECT');
-      }
-      return payload;
-    } catch (_) {
+    const client = new SupabaseRpcClient({
+      url: env.SUPABASE_V2_URL,
+      serviceKey: env.SUPABASE_V2_SERVICE_ROLE_KEY,
+      schema: 'public',
+      timeoutMs,
+      maxResponseBytes,
+      fetch: options.fetch || globalThis.fetch
+    });
+    const payload = await client.call(name, body || {});
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
       throw routeError('CATALOG_ACCEPTED_RPC_JSON_INVALID');
     }
+    return payload;
   } catch (error) {
-    if (error?.name === 'AbortError') throw routeError('CATALOG_ACCEPTED_TIMEOUT');
-    throw error;
-  } finally {
-    clearTimeout(timer);
+    throw mapSupabaseRpcError(error);
   }
 }
 
-async function readLimitedText(response, maxBytes) {
-  const declared = Number.parseInt(response.headers.get('content-length') || '', 10);
-  if (Number.isFinite(declared) && declared > maxBytes) throw routeError('CATALOG_ACCEPTED_RESPONSE_TOO_LARGE');
-  if (!response.body) return '';
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  const chunks = [];
-  let total = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > maxBytes) {
-        await reader.cancel('CATALOG_ACCEPTED_RESPONSE_TOO_LARGE').catch(() => {});
-        throw routeError('CATALOG_ACCEPTED_RESPONSE_TOO_LARGE');
-      }
-      chunks.push(decoder.decode(value, { stream: true }));
-    }
-    chunks.push(decoder.decode());
-    return chunks.join('');
-  } finally {
-    reader.releaseLock();
+function mapSupabaseRpcError(error) {
+  const code = String(error?.code || '').trim();
+  if (code === 'CATALOG_ACCEPTED_RPC_JSON_INVALID') return error;
+  if (code === 'SUPABASE_RPC_TIMEOUT') return routeError('CATALOG_ACCEPTED_TIMEOUT');
+  if (code === 'SUPABASE_RPC_RESPONSE_TOO_LARGE') return routeError('CATALOG_ACCEPTED_RESPONSE_TOO_LARGE');
+  if (code === 'SUPABASE_URL_INVALID' || code === 'SUPABASE_SECRET_KEY_INVALID') {
+    return routeError('CATALOG_ACCEPTED_NOT_CONFIGURED');
   }
+  if (code === 'SUPABASE_FETCH_REQUIRED') return routeError('CATALOG_ACCEPTED_FETCH_REQUIRED');
+  if (code === 'SUPABASE_RPC_REQUEST_FAILED') {
+    const remoteCode = uppercasePublicCode(error?.remoteCode) || uppercasePublicCode(error?.remoteMessage);
+    if (remoteCode) return routeError(remoteCode);
+    const status = Number(error?.status || 0);
+    return routeError(`CATALOG_ACCEPTED_RPC_${status >= 100 && status <= 599 ? status : 502}`);
+  }
+  if (/^SUPABASE_[A-Z0-9_]{3,80}$/.test(code)) {
+    return routeError(`CATALOG_ACCEPTED_TRANSPORT_${code}`.slice(0, 100));
+  }
+  const errorName = String(error?.name || 'ERROR')
+    .replace(/[^A-Za-z0-9]+/g, '_')
+    .toUpperCase()
+    .slice(0, 40) || 'ERROR';
+  return routeError(`CATALOG_ACCEPTED_TRANSPORT_${errorName}`);
+}
+
+function uppercasePublicCode(value) {
+  const text = String(value || '').trim();
+  return /^[A-Z0-9_]{3,100}$/.test(text) ? text : '';
 }
 
 function emptySearchPayload(mode) {
@@ -192,15 +176,6 @@ function cleanProductKey(value) {
   return /^[A-Za-z0-9._-]{1,120}$/.test(text) ? text : '50x50';
 }
 
-function normalizeSupabaseUrl(value) {
-  let url;
-  try { url = new URL(String(value || '').trim()); } catch (_) { return ''; }
-  if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || (url.pathname && url.pathname !== '/')) {
-    return '';
-  }
-  return url.origin;
-}
-
 function boundedInteger(value, minimum, maximum, fallback) {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed)) return fallback;
@@ -215,7 +190,7 @@ function publicErrorCode(error) {
 function statusForError(code) {
   if (code === 'CATALOG_ACCEPTED_TIMEOUT') return 504;
   if (code === 'CATALOG_ACCEPTED_RESPONSE_TOO_LARGE') return 502;
-  if (code.includes('NOT_READY') || code.includes('NOT_ACCEPTED')) return 503;
+  if (code.includes('NOT_READY') || code.includes('NOT_ACCEPTED') || code.includes('NOT_CONFIGURED')) return 503;
   if (code.includes('INVALID') || code.includes('REQUIRED') || code.includes('NOT_FOUND')) return 422;
   return 502;
 }
