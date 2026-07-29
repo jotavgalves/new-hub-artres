@@ -14,18 +14,19 @@ function jsonResponse(value, status = 200) {
   });
 }
 
-function previewPayload({ folders = [], artworks = [], version = 7, differences = 0, rejected = 0 } = {}) {
+function previewPayload({ folders = 0, artworks = 0, version = 7, differences = 0, rejected = 0 } = {}) {
   return {
     ok: differences === 0 && rejected === 0,
     readOnly: true,
     source: 'legacy-public-api',
     catalogVersion: version,
-    v2: { catalogVersion: version, rejectedCount: rejected, folders, artworks },
+    upstream: { folderCount: folders, artworkCount: artworks },
+    v2: { catalogVersion: version, rejectedCount: rejected, folders: [], artworks: [] },
     comparison: { totalDifferences: differences, equivalent: differences === 0 }
   };
 }
 
-test('percorre temas, subpastas e produtos sem persistir IDs no relatório', async () => {
+test('usa IDs brutos apenas para navegação e não os persiste no relatório', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'catalog-runtime-'));
   const reportPath = join(dir, 'report.json');
   const seen = [];
@@ -35,46 +36,62 @@ test('percorre temas, subpastas e produtos sem persistir IDs no relatório', asy
     seen.push({ url: parsed, init });
     assert.equal(init.method, 'GET');
 
-    if (parsed.pathname === '/health') {
+    if (parsed.hostname === 'staging.example.com' && parsed.pathname === '/health') {
       return jsonResponse({
         ok: true,
         catalogReadonlyBridge: { enabled: true, configured: true }
       });
     }
 
-    assert.equal(parsed.pathname, '/internal/v2/catalog/preview');
-    assert.equal(init.headers['x-staging-token'], 't'.repeat(40));
     const mode = parsed.searchParams.get('mode');
     const folderId = parsed.searchParams.get('folderId');
 
-    if (mode === 'themes') {
-      return jsonResponse(previewPayload({ folders: [{ id: 'theme-1' }] }));
+    if (parsed.hostname === 'staging.example.com') {
+      assert.equal(parsed.pathname, '/internal/v2/catalog/preview');
+      assert.equal(init.headers['x-staging-token'], 't'.repeat(40));
+      if (mode === 'themes') return jsonResponse(previewPayload({ folders: 1 }));
+      if (mode === 'products' && folderId === 'theme-1') return jsonResponse(previewPayload({ folders: 2 }));
+      if (mode === 'products' && folderId === 'sub-1') return jsonResponse(previewPayload({ folders: 1 }));
+      if (mode === 'items' && folderId?.includes('theme-1')) return jsonResponse(previewPayload({ artworks: 2 }));
+      if (mode === 'items' && folderId?.includes('sub-1')) return jsonResponse(previewPayload({ artworks: 2 }));
     }
-    if (mode === 'products' && folderId === 'theme-1') {
-      return jsonResponse(previewPayload({
-        folders: [
-          { id: 'sub-1' },
-          { id: 'catalog-index-product:theme-1:50x50:Bolinhas' }
-        ]
-      }));
+
+    if (parsed.hostname === 'legacy.example.com') {
+      assert.equal(parsed.pathname, '/api/drive');
+      assert.equal(Object.hasOwn(init.headers, 'x-staging-token'), false);
+      if (mode === 'themes') {
+        return jsonResponse({ ok: true, folders: [{ id: 'theme-1', kind: 'theme' }] });
+      }
+      if (mode === 'products' && folderId === 'theme-1') {
+        return jsonResponse({
+          ok: true,
+          folders: [
+            { id: 'sub-1', kind: 'folder' },
+            { id: 'catalog-index-product:theme-1:50x50:Bolinhas', kind: 'product', directItems: true }
+          ]
+        });
+      }
+      if (mode === 'products' && folderId === 'sub-1') {
+        return jsonResponse({
+          ok: true,
+          folders: [{ id: 'catalog-index-product:sub-1:50x50:Bolinhas', kind: 'product', directItems: true }]
+        });
+      }
+      if (mode === 'items' && folderId?.includes('theme-1')) {
+        return jsonResponse({ ok: true, items: [{ id: 'art-1' }, { id: 'art-2' }] });
+      }
+      if (mode === 'items' && folderId?.includes('sub-1')) {
+        return jsonResponse({ ok: true, items: [{ id: 'art-2' }, { id: 'art-3' }] });
+      }
     }
-    if (mode === 'products' && folderId === 'sub-1') {
-      return jsonResponse(previewPayload({
-        folders: [{ id: 'catalog-index-product:sub-1:50x50:Bolinhas' }]
-      }));
-    }
-    if (mode === 'items' && folderId?.includes('theme-1')) {
-      return jsonResponse(previewPayload({ artworks: [{ id: 'art-1' }, { id: 'art-2' }] }));
-    }
-    if (mode === 'items' && folderId?.includes('sub-1')) {
-      return jsonResponse(previewPayload({ artworks: [{ id: 'art-2' }, { id: 'art-3' }] }));
-    }
+
     return jsonResponse({ ok: false, error: 'UNEXPECTED_REQUEST' }, 500);
   };
 
   try {
     const report = await runCatalogReadonlyInspection({
       stagingUrl: 'https://staging.example.com',
+      legacyBaseUrl: 'https://legacy.example.com',
       token: 't'.repeat(40),
       reportPath,
       fetch: fetchMock
@@ -85,19 +102,20 @@ test('percorre temas, subpastas e produtos sem persistir IDs no relatório', asy
     assert.equal(report.folderCount, 2);
     assert.equal(report.productCount, 2);
     assert.equal(report.artworkCount, 3);
-    assert.equal(report.requestCount, 5);
+    assert.equal(report.requestCount, 11);
     assert.equal(report.traversalComplete, true);
     const persisted = await readFile(reportPath, 'utf8');
     assert.equal(persisted.includes('theme-1'), false);
     assert.equal(persisted.includes('art-1'), false);
+    assert.equal(persisted.includes('legacy.example.com'), false);
     assert.equal(persisted.includes('staging.example.com'), false);
-    assert.equal(seen.length, 6);
+    assert.equal(seen.length, 11);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
 });
 
-test('falha sanitizada quando a comparação encontra divergência', async () => {
+test('falha sanitizada e contabiliza divergência encontrada pela ponte', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'catalog-runtime-failure-'));
   const reportPath = join(dir, 'report.json');
   let calls = 0;
@@ -107,23 +125,28 @@ test('falha sanitizada quando a comparação encontra divergência', async () =>
     if (parsed.pathname === '/health') {
       return jsonResponse({ ok: true, catalogReadonlyBridge: { enabled: true, configured: true } });
     }
-    return jsonResponse(previewPayload({ folders: [{ id: 'theme-secret' }], differences: 1 }));
+    if (parsed.hostname === 'legacy.example.com') {
+      return jsonResponse({ ok: true, folders: [{ id: 'theme-secret' }] });
+    }
+    return jsonResponse(previewPayload({ folders: 1, differences: 1 }));
   };
 
   try {
     await assert.rejects(
       runCatalogReadonlyInspection({
         stagingUrl: 'https://staging.example.com',
+        legacyBaseUrl: 'https://legacy.example.com',
         token: 't'.repeat(40),
         reportPath,
         fetch: fetchMock
       }),
-      error => error?.code === 'CATALOG_PREVIEW_FAILED' || error?.code === 'CATALOG_SHADOW_DIFFERENCE_FOUND'
+      error => error?.code === 'CATALOG_SHADOW_DIFFERENCE_FOUND'
     );
-    const persisted = await readFile(reportPath, 'utf8');
-    assert.equal(persisted.includes('theme-secret'), false);
-    assert.match(persisted, /CATALOG_/);
-    assert.equal(calls, 2);
+    const persisted = JSON.parse(await readFile(reportPath, 'utf8'));
+    assert.equal(JSON.stringify(persisted).includes('theme-secret'), false);
+    assert.equal(persisted.error, 'CATALOG_SHADOW_DIFFERENCE_FOUND');
+    assert.equal(persisted.differenceCount, 1);
+    assert.equal(calls, 3);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
