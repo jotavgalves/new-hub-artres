@@ -17,6 +17,7 @@ on:
       - 'tests/v2/run-staging-supabase-shadow-remote-smoke.mjs'
       - 'tests/v2/run-staging-accepted-catalog-remote-smoke.mjs'
       - 'tests/v2/run-staging-checkout-validation-remote-smoke.mjs'
+      - 'tests/v2/run-staging-checkout-invalid-rejections-remote-smoke.mjs'
       - '.github/workflows/deploy-site-v2-staging.yml'
       - '.github/workflows/catalog-v2-auto-accept.yml'
   workflow_dispatch:
@@ -172,13 +173,21 @@ jobs:
           fi
           exit "$status"
 
-      - name: Validar produto, variante e tamanho no checkout real
+      - name: Validar contrato e rejeições do checkout real
         id: checkout-contract-smoke
         shell: bash
         run: |
           set +e
-          output="$(node tests/v2/run-staging-checkout-validation-remote-smoke.mjs 2>&1)"
+          primary_output="$(node tests/v2/run-staging-checkout-validation-remote-smoke.mjs 2>&1)"
           status=$?
+          output="$primary_output"
+
+          if [ "$status" -eq 0 ]; then
+            rejection_output="$(node tests/v2/run-staging-checkout-invalid-rejections-remote-smoke.mjs 2>&1)"
+            status=$?
+            output="${output}"$'\n'"${rejection_output}"
+          fi
+
           printf '%s\n' "$output"
           code="$(printf '%s\n' "$output" | grep -E '^[A-Z0-9_]{3,100}$' | tail -n 1 || true)"
           if [[ "$code" =~ ^[A-Z0-9_]{3,100}$ ]]; then
@@ -219,7 +228,7 @@ jobs:
           echo "Rotas de domínio de produção: nenhuma"
           echo "Escrita comercial: habilitada somente para pedidos sintéticos"
           echo "Checkout público V2: desativado"
-          echo "Validação interna de produto, variante e tamanho: aprovada sem escrita"
+          echo "Validação interna de produto, variante, tamanho e rejeições: aprovada"
           echo "Rota técnica do ledger: desabilitada"
           echo "Projeção Supabase sombra: habilitada e validada por pedido sintético"
           echo "Produção pública: não alterada"
