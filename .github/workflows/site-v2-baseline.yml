@@ -104,12 +104,12 @@ jobs:
           --secrets-file "$DRY_RUN_SECRETS_FILE"
           --outdir /tmp/site-v2-staging-dry-run
 
-      - name: Remover arquivos temporários do dry-run
-        if: always()
-        run: rm -f "$DRY_RUN_SECRETS_FILE" && rm -rf staging/site-v2-public
-
       - name: Executar Worker e Durable Object localmente
         run: bash tests/v2/run-staging-worker-smoke.sh
 
       - name: Validar painel administrativo somente leitura
         run: bash tests/v2/run-staging-admin-readonly-smoke.sh
+
+      - name: Remover arquivos temporários do dry-run
+        if: always()
+        run: rm -f "$DRY_RUN_SECRETS_FILE" && rm -rf staging/site-v2-public
