@@ -10,7 +10,7 @@ const token = `staging-token-${'a'.repeat(32)}`;
 const shadowKey = `sb_secret_${'b'.repeat(56)}`;
 const expectedUrl = 'https://kueklnkznwpbobqwugns.supabase.co';
 
-async function fixture({ shadowEnabled = false, url = expectedUrl } = {}) {
+async function fixture({ shadowEnabled = false, url = expectedUrl, publicCheckoutEnabled = true } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'site-v2-deploy-'));
   const sourcePath = join(directory, 'wrangler.jsonc');
   const rollbackPath = join(directory, 'rollback.jsonc');
@@ -19,6 +19,7 @@ async function fixture({ shadowEnabled = false, url = expectedUrl } = {}) {
     vars: {
       STAGING_WRITE_ENABLED: 'true',
       STAGING_LOW_LEVEL_LEDGER_ENABLED: 'false',
+      STAGING_PUBLIC_CHECKOUT_ENABLED: publicCheckoutEnabled ? 'true' : 'false',
       SUPABASE_SHADOW_ENABLED: shadowEnabled ? 'true' : 'false',
       SUPABASE_V2_URL: url
     }
@@ -49,9 +50,11 @@ test('flag sombra desligada não exige credencial e gera rollback seguro', async
 
   assert.deepEqual(result, {
     ok: true,
+    publicCheckoutEnabled: true,
     shadowEnabled: false,
     shadowCredentialIncluded: false,
     rollbackWritesEnabled: false,
+    rollbackPublicCheckoutEnabled: false,
     rollbackShadowEnabled: false
   });
 
@@ -59,6 +62,7 @@ test('flag sombra desligada não exige credencial e gera rollback seguro', async
   const rollback = await readFile(files.rollbackPath, 'utf8');
   assert.deepEqual(secrets, { STAGING_API_TOKEN: token });
   assert.ok(rollback.includes('"STAGING_WRITE_ENABLED": "false"'));
+  assert.ok(rollback.includes('"STAGING_PUBLIC_CHECKOUT_ENABLED": "false"'));
   assert.ok(rollback.includes('"SUPABASE_SHADOW_ENABLED": "false"'));
   assert.equal(rollback.includes(token), false);
 });
@@ -104,8 +108,10 @@ test('flag sombra ligada inclui credencial somente no arquivo temporário e a re
     supabaseServiceRoleKey: shadowKey
   });
 
+  assert.equal(result.publicCheckoutEnabled, true);
   assert.equal(result.shadowEnabled, true);
   assert.equal(result.shadowCredentialIncluded, true);
+  assert.equal(result.rollbackPublicCheckoutEnabled, false);
 
   const secrets = JSON.parse(await readFile(files.secretsPath, 'utf8'));
   const rollback = await readFile(files.rollbackPath, 'utf8');
@@ -114,11 +120,12 @@ test('flag sombra ligada inclui credencial somente no arquivo temporário e a re
     SUPABASE_V2_SERVICE_ROLE_KEY: shadowKey
   });
   assert.ok(rollback.includes('"STAGING_WRITE_ENABLED": "false"'));
+  assert.ok(rollback.includes('"STAGING_PUBLIC_CHECKOUT_ENABLED": "false"'));
   assert.ok(rollback.includes('"SUPABASE_SHADOW_ENABLED": "false"'));
   assert.equal(rollback.includes(shadowKey), false);
 });
 
-test('bloqueia ledger técnico, token curto e flags ambíguas', async t => {
+test('bloqueia ledger técnico, token curto e checkout público não ativo', async t => {
   const files = await fixture();
   t.after(files.cleanup);
 
@@ -144,5 +151,17 @@ test('bloqueia ledger técnico, token curto e flags ambíguas', async t => {
       stagingApiToken: token
     }),
     error => error?.code === 'LOW_LEVEL_LEDGER_MUST_REMAIN_DISABLED'
+  );
+
+  const disabled = await fixture({ publicCheckoutEnabled: false });
+  t.after(disabled.cleanup);
+  await assert.rejects(
+    prepareStagingDeployFiles({
+      sourcePath: disabled.sourcePath,
+      rollbackPath: disabled.rollbackPath,
+      secretsPath: disabled.secretsPath,
+      stagingApiToken: token
+    }),
+    error => error?.code === 'PUBLIC_CHECKOUT_ACTIVE_FLAG_INVALID'
   );
 });
