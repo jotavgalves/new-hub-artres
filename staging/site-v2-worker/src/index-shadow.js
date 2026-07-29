@@ -1,6 +1,10 @@
 import { constantTimeEqualSecrets } from '../../../src/v2/http/request-guard.mjs';
 import { fetchStagingWorker, OrderLedger } from './index.js';
 import {
+  catalogAcceptedStatus,
+  handleCatalogAcceptedPublicRoute
+} from './catalog-accepted-route.js';
+import {
   catalogReadonlyBridgeStatus,
   handleCatalogReadonlyRoute
 } from './catalog-readonly-route.js';
@@ -12,12 +16,19 @@ import {
 export { OrderLedger };
 
 const CATALOG_READONLY_ROUTE = '/internal/v2/catalog/preview';
+const PUBLIC_CATALOG_ROUTES = new Set(['/api/drive', '/api/catalog-meta']);
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const shadowStatus = supabaseShadowStatus(env);
     const catalogStatus = catalogReadonlyBridgeStatus(env);
+    const acceptedCatalogStatus = catalogAcceptedStatus(env);
+
+    if (PUBLIC_CATALOG_ROUTES.has(url.pathname)) {
+      const requestId = safeRequestId(request.headers) || crypto.randomUUID();
+      return handleCatalogAcceptedPublicRoute(request, env, requestId);
+    }
 
     if (url.pathname === CATALOG_READONLY_ROUTE) {
       const requestId = safeRequestId(request.headers) || crypto.randomUUID();
@@ -49,7 +60,8 @@ export default {
     if (url.pathname === '/health' && request.method === 'GET') {
       return augmentHealthResponse(response, {
         supabaseShadow: shadowStatus,
-        catalogReadonlyBridge: catalogStatus
+        catalogReadonlyBridge: catalogStatus,
+        acceptedCatalog: acceptedCatalogStatus
       });
     }
 
