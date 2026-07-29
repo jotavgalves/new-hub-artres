@@ -30,7 +30,7 @@ import {
 export { OrderLedger };
 
 const CATALOG_READONLY_ROUTE = '/internal/v2/catalog/preview';
-const CHECKOUT_PROTECTION_ROUTE = '/internal/v2/checkout/protection';
+const PUBLIC_CHECKOUT_PROTECTION_ROUTE = '/internal/v2/checkout/protection';
 const CHECKOUT_SUBMIT_ROUTE = '/internal/v2/checkout/submit';
 const CHECKOUT_VALIDATION_ROUTE = '/internal/v2/checkout/validate';
 const STATIC_ASSETS_PROBE_ROUTE = '/internal/v2/assets/probe';
@@ -69,7 +69,7 @@ export async function fetchStagingShadowWorker(request, env, ctx) {
     return handlePublicCheckoutRoute(request, env, requestId);
   }
 
-  if (url.pathname === CHECKOUT_PROTECTION_ROUTE) {
+  if (url.pathname === PUBLIC_CHECKOUT_PROTECTION_ROUTE) {
     const requestId = safeRequestId(request.headers) || crypto.randomUUID();
     const authorized = await constantTimeEqualSecrets(
       request.headers.get('x-staging-token'),
