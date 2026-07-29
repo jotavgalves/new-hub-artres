@@ -25,36 +25,39 @@ Este arquivo é a fonte principal de acompanhamento. Toda etapa concluída deve 
 6. Não serão adicionadas novas fases sem registrar motivo, escopo e critério de encerramento.
 7. O projeto termina quando todos os itens obrigatórios desta lista estiverem concluídos e a definição de pronto estiver satisfeita.
 
-## Limite rígido da entrega atual
+## Limite rígido da entrega encerrada
 
-A entrega em andamento é exclusivamente o encerramento do checkout visual V2 no staging por meio do PR #52.
+A entrega limitada ao checkout visual V2 no staging, iniciada no PR #52, foi encerrada em 2026-07-29. Os PRs #53 a #59 contiveram somente correções diretamente ligadas aos códigos terminais comprovados pelos deploys, sem abertura de nova frente ou ampliação do runtime.
 
-Ela termina obrigatoriamente quando estes cinco resultados forem comprovados:
+Os cinco resultados obrigatórios foram comprovados:
 
-1. As duas asserções antigas restantes forem corrigidas, sem ampliar o runtime.
-2. O `Site V2 Baseline` passar integralmente.
-3. O PR #52 for incorporado à `main`.
-4. O staging comprovar criação, `REPLAY`, abertura do WhatsApp e projeção no Supabase com dados sintéticos.
-5. O item `Conectar checkout visual à rota V2` for marcado como concluído neste arquivo com PR, commit e workflow de evidência.
+1. [x] As duas asserções antigas restantes foram corrigidas, sem ampliar o runtime.
+2. [x] O `Site V2 Baseline` passou integralmente.
+3. [x] O PR #52 foi incorporado à `main`.
+4. [x] O staging comprovou criação, `REPLAY`, fluxo visual do WhatsApp e projeção no Supabase com dados sintéticos.
+5. [x] O item `Conectar checkout visual à rota V2` foi marcado como concluído neste arquivo com PR, commit e workflow de evidência.
 
-Até essa conclusão, fica proibido abrir outra frente, adicionar módulo passivo, ampliar requisitos ou iniciar:
+Durante esta entrega ficou proibido abrir outra frente, adicionar módulo passivo, ampliar requisitos ou iniciar:
 
 - Produção V2 e compatibilidade com pedidos antigos.
 - Refatoração ou modularização ampla do frontend.
 - Consolidação de CSS e revisão visual geral.
 - Auditoria completa de acessibilidade.
 - Remoção do legado ou migração para produção.
-- Produto novo ou qualquer melhoria não necessária para fazer o PR #52 passar e validar o staging.
+- Produto novo ou qualquer melhoria não necessária para concluir e validar o checkout visual no staging.
 
-Uma falha encontrada durante o baseline ou deploy só pode gerar correção diretamente ligada ao código terminal comprovado. Melhorias adjacentes devem ser registradas como trabalho futuro, sem entrar no PR #52.
+Cada falha de baseline ou deploy gerou apenas correção diretamente ligada ao respectivo código terminal comprovado. Melhorias adjacentes permaneceram fora do escopo.
 
-Progresso desta entrega:
+Progresso final desta entrega:
 
 - [x] Duas asserções antigas restantes corrigidas.
-- [x] `Site V2 Baseline` runs `30481083905` e `30481227950` aprovados integralmente.
-- [-] Incorporar o PR #52 e validar o deploy final do staging.
+- [x] `Site V2 Baseline` runs `30481083905`, `30481227950` e `30481385598` aprovados para o PR #52.
+- [x] PR #52 incorporado no commit `40fc5c98deea42e9ab87a1d8838df2faeac6e959`.
+- [x] Correções terminais dos PRs #53 a #59 aprovadas em baselines completos.
+- [x] Deploy final do commit `2f879d15640d91a037a7be01da4d3445bff1c50c` aprovado integralmente no staging.
+- [x] Produção pública confirmada como inalterada.
 
-Próximo item único: incorporar o PR #52 e validar criação, `REPLAY`, WhatsApp e projeção no staging.
+Estado final: entrega encerrada. Nenhuma etapa seguinte foi iniciada automaticamente.
 
 ## Progresso consolidado
 
@@ -142,19 +145,23 @@ Critério de conclusão satisfeito: checkout do staging cria e reproduz pedido V
 - [x] Separar variantes e tamanhos da mesma arte.
 - [x] Aplicar mínimo e incremento de cada produto.
 - [x] Migrar ou restaurar carrinho antigo sem perda.
-- [-] Conectar checkout visual à rota V2.
+- [x] Conectar checkout visual à rota V2.
 - [ ] Preservar vendedora, medidas e observações.
 - [ ] Gerar WhatsApp com itens, variantes, quantidades e medidas corretos.
 - [ ] Tratar falha de envio e permitir repetição segura.
 
-Evidência parcial:
+Evidência:
 
 - PR #45 e `Site V2 Baseline` runs `30467114248` e `30467297205`, com deploy validado no commit `95302e0e02531cb1fba50ac3db73f4b9ac07c1cc`: contrato passivo de `lineId` alinhado ao `itemId` do pedido V2, distinguindo arquivo, produto, variante e tamanho; códigos visuais, quantidade, preço e observações não determinam identidade; frontend atual e produção pública permanecem inalterados.
 - PR #46 e `Site V2 Baseline` runs `30472053198` e `30472248722`, com deploy validado no commit `8bc1e4fe56bab63d514d5a44d11a9f9eb5d4593f`: coleção passiva soma apenas linhas com a mesma `lineId`, mantém o mesmo código visual em produtos e arquivos distintos, atualiza ou remove somente a linha selecionada e rejeita duplicações reais e quantidades inválidas; frontend atual e produção pública permanecem inalterados.
 - PR #47 e `Site V2 Baseline` runs `30472757733` e `30472926559`, com deploy validado no commit `b4e4c557971b491c5f3d9909f8c94f205fa3ce23`: camada passiva normaliza e valida variantes fechadas, interpreta `details.size` legado de sacolinhas como variante, mantém `sizeKey=default` nesse produto e separa variantes e tamanhos da mesma arte sem afetar outras linhas; frontend atual e produção pública permanecem inalterados.
 - PR #48 e `Site V2 Baseline` runs `30473507326` e `30473693881`, com deploy validado no commit `deb8b8e2edebc7e016b0200980cf5e0b70f6b0da`: motor passivo consome exclusivamente snapshots autoritativos, aplica mínimo, passo, quantidade inicial e escopo por item ou total do produto; o 50x50 real de staging inicia em 6 e avança de 2 em 2, quantidades 4 e 7 são rejeitadas, regras ausentes falham fechadas e o `PRODUCT_CONFIG` legado não é usado.
 - PR #49 e `Site V2 Baseline` run `30474279950`: plano passivo migra JSON do localStorage, arrays antigos e links Base64; cruza linhas com o catálogo, preserva vendedor, medidas, observações e quantidades, mantém backup bruto e interpretado, encaminha ambiguidades para revisão e não executa qualquer escrita automática.
-- PR #52, `Site V2 Baseline` runs `30481083905` e `30481227950`: as duas asserções antigas restantes foram alinhadas aos contratos atuais; testes, sintaxe, transformação isolada dos assets, bundle Cloudflare, Worker local e painel passaram integralmente. Merge e deploy remoto ainda pendentes.
+- PR #52, `Site V2 Baseline` runs `30481083905`, `30481227950` e `30481385598`, incorporado no commit `40fc5c98deea42e9ab87a1d8838df2faeac6e959`: rota pública ativa somente no staging, bridge visual injetado apenas na cópia publicada, origem e rate limit ativos, valores recalculados pelo servidor, abertura do WhatsApp condicionada a `CREATED` ou `REPLAY`, rollback triplo e produção pública inalterada.
+- PRs #53 a #59, com `Site V2 Baseline` runs `30487764182`, `30488136686`, `30488522434`, `30488901740`, `30489239424`, `30489723046` e `30490127449`: correções restritas aos códigos terminais dos smokes remotos, sem alteração do runtime ou ampliação do escopo.
+- Deploy final do commit `2f879d15640d91a037a7be01da4d3445bff1c50c`: catálogo, Worker, design, contrato do checkout real, pedido sintético, `REPLAY`, bloqueios e projeção sombra no Supabase aprovados; rollback não acionado; produção pública inalterada.
+
+Estado da etapa 6: conexão visual concluída. Os três itens seguintes permanecem pendentes e nenhuma atividade posterior foi iniciada automaticamente.
 
 Critério de conclusão: fluxo visual integral, da arte ao pedido e WhatsApp, aprovado no staging.
 
