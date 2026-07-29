@@ -4,7 +4,8 @@ import { pathToFileURL } from 'node:url';
 const DEFAULT_MAX_RESPONSE_BYTES = 3 * 1024 * 1024;
 
 export async function runCatalogReadonlyInspection(options = {}) {
-  const stagingUrl = normalizeHttpsOrigin(options.stagingUrl);
+  const stagingUrl = normalizeHttpsOrigin(options.stagingUrl, 'STAGING_URL_INVALID');
+  const legacyBaseUrl = normalizeHttpsOrigin(options.legacyBaseUrl, 'CATALOG_LEGACY_BASE_URL_INVALID');
   const token = String(options.token || '').trim();
   const reportPath = String(options.reportPath || '').trim();
   const fetchImpl = options.fetch || globalThis.fetch;
@@ -13,7 +14,7 @@ export async function runCatalogReadonlyInspection(options = {}) {
   if (typeof fetchImpl !== 'function') throw inspectionError('FETCH_REQUIRED');
 
   const limits = {
-    requests: boundedInteger(options.maxRequests, 10, 2000, 800),
+    requests: boundedInteger(options.maxRequests, 20, 4000, 1600),
     folders: boundedInteger(options.maxFolders, 10, 2000, 800),
     artworks: boundedInteger(options.maxArtworks, 100, 250000, 100000),
     responseBytes: boundedInteger(options.maxResponseBytes, 1024, 8 * 1024 * 1024, DEFAULT_MAX_RESPONSE_BYTES),
@@ -33,6 +34,7 @@ export async function runCatalogReadonlyInspection(options = {}) {
   };
 
   try {
+    state.requestCount += 1;
     const health = await requestJson(new URL('/health', stagingUrl), {
       fetchImpl,
       timeoutMs: limits.timeoutMs,
@@ -43,49 +45,54 @@ export async function runCatalogReadonlyInspection(options = {}) {
       throw inspectionError('CATALOG_BRIDGE_NOT_ACTIVE_AND_CONFIGURED');
     }
 
-    const requestPreview = async (mode, query = {}) => {
-      state.requestCount += 1;
+    const requestPair = async (mode, query = {}) => {
+      state.requestCount += 2;
       if (state.requestCount > limits.requests) throw inspectionError('CATALOG_REQUEST_LIMIT_REACHED');
-      const url = new URL('/internal/v2/catalog/preview', stagingUrl);
-      url.searchParams.set('mode', mode);
+
+      const previewUrl = new URL('/internal/v2/catalog/preview', stagingUrl);
+      previewUrl.searchParams.set('mode', mode);
+      const legacyUrl = new URL('/api/drive', legacyBaseUrl);
+      legacyUrl.searchParams.set('mode', mode);
       for (const [key, value] of Object.entries(query)) {
         const text = String(value || '').trim();
-        if (text) url.searchParams.set(key, text);
+        if (!text) continue;
+        previewUrl.searchParams.set(key, text);
+        legacyUrl.searchParams.set(key, text);
       }
-      const payload = await requestJson(url, {
-        fetchImpl,
-        timeoutMs: limits.timeoutMs,
-        maxResponseBytes: limits.responseBytes,
-        headers: { 'x-staging-token': token }
-      });
-      if (!payload?.ok) throw inspectionError(publicCode(payload?.error, 'CATALOG_PREVIEW_FAILED'));
-      if (payload?.readOnly !== true || payload?.source !== 'legacy-public-api') {
-        throw inspectionError('CATALOG_PREVIEW_NOT_READ_ONLY');
+
+      const [payload, legacy] = await Promise.all([
+        requestJson(previewUrl, {
+          fetchImpl,
+          timeoutMs: limits.timeoutMs,
+          maxResponseBytes: limits.responseBytes,
+          headers: { 'x-staging-token': token }
+        }),
+        requestJson(legacyUrl, {
+          fetchImpl,
+          timeoutMs: limits.timeoutMs,
+          maxResponseBytes: limits.responseBytes
+        })
+      ]);
+
+      if (!legacy?.ok) throw inspectionError(publicCode(legacy?.error, 'LEGACY_CATALOG_DIRECT_READ_FAILED'));
+      validatePreview(payload, state);
+
+      const directFolders = uniqueRawFolders(legacy);
+      const directArtworks = uniqueRawArtworks(legacy);
+      const upstreamFolders = Number(payload?.upstream?.folderCount || 0);
+      const upstreamArtworks = Number(payload?.upstream?.artworkCount || 0);
+      if (upstreamFolders !== directFolders.length || upstreamArtworks !== directArtworks.length) {
+        throw inspectionError('CATALOG_UPSTREAM_COUNT_MISMATCH');
       }
-      const rejected = Number(payload?.v2?.rejectedCount || 0);
-      const differences = Number(payload?.comparison?.totalDifferences || 0);
-      state.rejectedCount += Number.isFinite(rejected) ? rejected : 0;
-      state.differenceCount += Number.isFinite(differences) ? differences : 0;
-      if (rejected > 0) throw inspectionError('CATALOG_ROWS_REJECTED');
-      if (differences > 0 || payload?.comparison?.equivalent !== true) {
-        throw inspectionError('CATALOG_SHADOW_DIFFERENCE_FOUND');
-      }
-      const version = Number(payload?.catalogVersion || payload?.v2?.catalogVersion || 0);
-      if (Number.isInteger(version) && version > 0) {
-        if (state.catalogVersion && state.catalogVersion !== version) {
-          throw inspectionError('CATALOG_VERSION_CHANGED_DURING_INSPECTION');
-        }
-        state.catalogVersion = version;
-      }
-      return payload;
+
+      return { payload, legacy, directFolders, directArtworks };
     };
 
-    const themes = await requestPreview('themes');
-    const themeFolders = uniqueFolders(themes?.v2?.folders);
-    state.themeCount = themeFolders.length;
+    const themes = await requestPair('themes');
+    state.themeCount = themes.directFolders.length;
     if (!state.themeCount) throw inspectionError('CATALOG_THEMES_EMPTY');
 
-    const queue = themeFolders.map(folder => folder.id);
+    const queue = themes.directFolders.map(folder => rawIdentity(folder));
     const visitedFolders = new Set();
     const visitedProducts = new Set();
     const artworkIds = new Set();
@@ -96,16 +103,16 @@ export async function runCatalogReadonlyInspection(options = {}) {
       visitedFolders.add(folderId);
       if (visitedFolders.size > limits.folders) throw inspectionError('CATALOG_FOLDER_LIMIT_REACHED');
 
-      const products = await requestPreview('products', { folderId });
-      for (const folder of uniqueFolders(products?.v2?.folders)) {
-        const id = String(folder.id || '').trim();
+      const products = await requestPair('products', { folderId });
+      for (const folder of products.directFolders) {
+        const id = rawIdentity(folder);
         if (!id) continue;
-        if (id.startsWith('catalog-index-product:')) {
+        if (isRawProductFolder(folder, id)) {
           if (visitedProducts.has(id)) continue;
           visitedProducts.add(id);
-          const items = await requestPreview('items', { folderId: id, product: '50x50' });
-          for (const artwork of Array.isArray(items?.v2?.artworks) ? items.v2.artworks : []) {
-            const artworkId = String(artwork?.id || artwork?.driveFileId || '').trim();
+          const items = await requestPair('items', { folderId: id, product: '50x50' });
+          for (const artwork of items.directArtworks) {
+            const artworkId = rawArtworkIdentity(artwork);
             if (artworkId) artworkIds.add(artworkId);
             if (artworkIds.size > limits.artworks) throw inspectionError('CATALOG_ARTWORK_LIMIT_REACHED');
           }
@@ -146,13 +153,65 @@ export async function runCatalogReadonlyInspection(options = {}) {
   }
 }
 
-function uniqueFolders(value) {
+function validatePreview(payload, state) {
+  if (!payload || typeof payload !== 'object') throw inspectionError('CATALOG_PREVIEW_INVALID');
+  const rejected = Number(payload?.v2?.rejectedCount || 0);
+  const differences = Number(payload?.comparison?.totalDifferences || 0);
+  state.rejectedCount += Number.isFinite(rejected) ? rejected : 0;
+  state.differenceCount += Number.isFinite(differences) ? differences : 0;
+
+  if (rejected > 0) throw inspectionError('CATALOG_ROWS_REJECTED');
+  if (differences > 0 || payload?.comparison?.equivalent !== true) {
+    throw inspectionError('CATALOG_SHADOW_DIFFERENCE_FOUND');
+  }
+  if (!payload.ok) throw inspectionError(publicCode(payload?.error, 'CATALOG_PREVIEW_FAILED'));
+  if (payload.readOnly !== true || payload.source !== 'legacy-public-api') {
+    throw inspectionError('CATALOG_PREVIEW_NOT_READ_ONLY');
+  }
+
+  const version = Number(payload?.catalogVersion || payload?.v2?.catalogVersion || 0);
+  if (Number.isInteger(version) && version > 0) {
+    if (state.catalogVersion && state.catalogVersion !== version) {
+      throw inspectionError('CATALOG_VERSION_CHANGED_DURING_INSPECTION');
+    }
+    state.catalogVersion = version;
+  }
+}
+
+function uniqueRawFolders(payload) {
+  const candidates = [payload?.folders, payload?.results, payload?.themes, payload?.products];
+  const rows = candidates.find(Array.isArray) || [];
   const map = new Map();
-  for (const folder of Array.isArray(value) ? value : []) {
-    const id = String(folder?.id || '').trim();
-    if (id && !map.has(id)) map.set(id, folder);
+  for (const row of rows) {
+    const id = rawIdentity(row);
+    if (id && !map.has(id)) map.set(id, row);
   }
   return [...map.values()];
+}
+
+function uniqueRawArtworks(payload) {
+  const candidates = [payload?.items, payload?.artworks];
+  const rows = candidates.find(Array.isArray) || [];
+  const map = new Map();
+  for (const row of rows) {
+    const id = rawArtworkIdentity(row);
+    if (id && !map.has(id)) map.set(id, row);
+  }
+  return [...map.values()];
+}
+
+function rawIdentity(value) {
+  return String(value?.id || value?.driveId || value?.drive_id || '').trim();
+}
+
+function rawArtworkIdentity(value) {
+  return String(value?.driveFileId || value?.id || value?.drive_id || '').trim();
+}
+
+function isRawProductFolder(folder, id) {
+  return folder?.kind === 'product' ||
+    folder?.directItems === true ||
+    id.startsWith('catalog-index-product:');
 }
 
 async function requestJson(url, options) {
@@ -237,13 +296,13 @@ async function writePrivateReport(path, report) {
   await writeFile(path, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
 }
 
-function normalizeHttpsOrigin(value) {
+function normalizeHttpsOrigin(value, errorCode) {
   let url;
   try { url = new URL(String(value || '').trim()); } catch (_) {
-    throw inspectionError('STAGING_URL_INVALID');
+    throw inspectionError(errorCode);
   }
   if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || (url.pathname && url.pathname !== '/')) {
-    throw inspectionError('STAGING_URL_INVALID');
+    throw inspectionError(errorCode);
   }
   return url.origin;
 }
@@ -278,6 +337,7 @@ function inspectionError(code) {
 async function main() {
   await runCatalogReadonlyInspection({
     stagingUrl: process.env.STAGING_URL,
+    legacyBaseUrl: process.env.CATALOG_LEGACY_BASE_URL,
     token: process.env.SITE_V2_STAGING_API_TOKEN,
     reportPath: process.env.CATALOG_REPORT_FILE,
     maxRequests: process.env.CATALOG_INSPECTION_MAX_REQUESTS,
