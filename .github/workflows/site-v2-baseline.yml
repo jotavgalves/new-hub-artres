@@ -103,6 +103,7 @@ jobs:
           node --check tests/v2/run-staging-checkout-validation-remote-smoke.mjs
           node --check tests/v2/run-staging-checkout-invalid-rejections-remote-smoke.mjs
           node --check tests/v2/run-staging-checkout-protection-remote-smoke.mjs
+          node --check tests/v2/run-staging-synthetic-remote-smoke-with-code.mjs
           node --check tests/v2/run-staging-supabase-shadow-remote-smoke.mjs
 
       - name: Preparar cópia isolada do design atual
