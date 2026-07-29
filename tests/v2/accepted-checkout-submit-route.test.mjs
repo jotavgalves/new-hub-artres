@@ -6,6 +6,7 @@ import { handleAcceptedCheckoutSubmit } from '../../staging/site-v2-worker/src/a
 
 const URL = 'https://staging.example/internal/v2/checkout/submit';
 const requestId = 'checkout-submit-route-test';
+const writableEnv = Object.freeze({ STAGING_WRITE_ENABLED: 'true' });
 
 function request(body, options = {}) {
   const headers = new Headers({
@@ -172,24 +173,43 @@ async function payload(response) {
   return response.json();
 }
 
+test('rollback bloqueia a submissão antes de qualquer dependência', async () => {
+  let dependencyCalls = 0;
+  const response = await handleAcceptedCheckoutSubmit(
+    request(validBody()),
+    {},
+    requestId,
+    {
+      resolveItems: async () => {
+        dependencyCalls += 1;
+        return {};
+      }
+    }
+  );
+
+  assert.equal(response.status, 503);
+  assert.equal((await payload(response)).error, 'STAGING_WRITES_DISABLED');
+  assert.equal(dependencyCalls, 0);
+});
+
 test('aceita somente POST JSON com chave e data de tentativa válidas', async () => {
   const getResponse = await handleAcceptedCheckoutSubmit(
     request(undefined, { method: 'GET' }),
-    {},
+    writableEnv,
     requestId
   );
   assert.equal(getResponse.status, 405);
 
   const textResponse = await handleAcceptedCheckoutSubmit(
     request('{}', { headers: { 'content-type': 'text/plain' } }),
-    {},
+    writableEnv,
     requestId
   );
   assert.equal(textResponse.status, 415);
 
   const shortKey = await handleAcceptedCheckoutSubmit(
     request(validBody(), { idempotencyKey: 'curta' }),
-    {},
+    writableEnv,
     requestId
   );
   assert.equal(shortKey.status, 422);
@@ -197,7 +217,7 @@ test('aceita somente POST JSON com chave e data de tentativa válidas', async ()
 
   const missingDate = await handleAcceptedCheckoutSubmit(
     request(validBody({ submissionCreatedAt: '' })),
-    {},
+    writableEnv,
     requestId
   );
   assert.equal(missingDate.status, 422);
@@ -216,13 +236,13 @@ test('cria uma vez e reproduz o mesmo pedido com a mesma tentativa', async () =>
 
   const createdResponse = await handleAcceptedCheckoutSubmit(
     request(body),
-    {},
+    writableEnv,
     requestId,
     options
   );
   const replayResponse = await handleAcceptedCheckoutSubmit(
     request(body),
-    {},
+    writableEnv,
     requestId,
     options
   );
@@ -265,7 +285,7 @@ test('mesma chave com fingerprint diferente retorna conflito 409', async () => {
 
   const created = await handleAcceptedCheckoutSubmit(
     request(body),
-    {},
+    writableEnv,
     requestId,
     firstOptions
   );
@@ -273,7 +293,7 @@ test('mesma chave com fingerprint diferente retorna conflito 409', async () => {
 
   const conflict = await handleAcceptedCheckoutSubmit(
     request(body),
-    {},
+    writableEnv,
     requestId,
     conflictingOptions
   );
