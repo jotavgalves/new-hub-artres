@@ -1,5 +1,7 @@
 const STAGING_URL = normalizeOrigin(process.env.STAGING_URL);
 const MAX_FOLDERS = 80;
+const NETWORK_ATTEMPTS = 12;
+const NETWORK_INTERVAL_MS = 1000;
 
 async function main() {
   const [health, html, bridge] = await Promise.all([
@@ -52,12 +54,24 @@ async function main() {
   };
   const idempotencyKey = `visual-public-${crypto.randomUUID()}`;
 
-  const missingOrigin = await post(body, idempotencyKey, '');
+  const missingOrigin = await waitForExpectedError(
+    body,
+    idempotencyKey,
+    '',
+    403,
+    'PUBLIC_CHECKOUT_ORIGIN_NOT_ALLOWED'
+  );
   if (missingOrigin.status !== 403 || missingOrigin.payload?.error !== 'PUBLIC_CHECKOUT_ORIGIN_NOT_ALLOWED') {
     throw smokeError('PUBLIC_VISUAL_CHECKOUT_MISSING_ORIGIN_NOT_BLOCKED');
   }
 
-  const crossOrigin = await post(body, idempotencyKey, 'https://example.invalid');
+  const crossOrigin = await waitForExpectedError(
+    body,
+    idempotencyKey,
+    'https://example.invalid',
+    403,
+    'PUBLIC_CHECKOUT_ORIGIN_NOT_ALLOWED'
+  );
   if (crossOrigin.status !== 403 || crossOrigin.payload?.error !== 'PUBLIC_CHECKOUT_ORIGIN_NOT_ALLOWED') {
     throw smokeError('PUBLIC_VISUAL_CHECKOUT_CROSS_ORIGIN_NOT_BLOCKED');
   }
@@ -118,12 +132,23 @@ async function main() {
   })}\n`);
 }
 
+async function waitForExpectedError(body, key, origin, expectedStatus, expectedCode) {
+  let last = null;
+  for (let attempt = 1; attempt <= NETWORK_ATTEMPTS; attempt += 1) {
+    last = await post(body, key, origin);
+    if (last.status === expectedStatus && last.payload?.error === expectedCode) return last;
+    if (!isTransientStatus(last.status)) return last;
+    if (attempt < NETWORK_ATTEMPTS) await sleep(NETWORK_INTERVAL_MS);
+  }
+  return last;
+}
+
 async function waitForPublicSubmit(body, key) {
   let last = null;
   for (let attempt = 1; attempt <= 60; attempt += 1) {
     last = await post(body, key, STAGING_URL);
     if (last.status === 201 && last.payload?.action === 'CREATED') return last;
-    if (last.status !== 404 && last.status !== 503 && last.status < 500) return last;
+    if (!isTransientStatus(last.status)) return last;
     if (attempt < 60) await sleep(1000);
   }
   return last;
@@ -138,7 +163,7 @@ async function waitForPublicReplay(body, key, number) {
       last.payload?.action === 'REPLAY' &&
       last.payload?.orderNumber === number
     ) return last;
-    if (last.status !== 404 && last.status !== 503 && last.status < 500) return last;
+    if (!isTransientStatus(last.status)) return last;
     if (attempt < 60) await sleep(1000);
   }
   return last;
@@ -152,13 +177,23 @@ async function post(body, key, origin) {
     'X-Request-Id': `visual-smoke-${crypto.randomUUID()}`
   };
   if (origin) headers.Origin = origin;
-  const response = await fetch(new URL('/api/orders/v2', STAGING_URL), {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-    redirect: 'error'
-  });
-  const text = await response.text();
+
+  let response;
+  let text;
+  try {
+    ({ response, text } = await fetchTextOnce(new URL('/api/orders/v2', STAGING_URL), {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      redirect: 'error'
+    }));
+  } catch (_) {
+    return {
+      status: 0,
+      payload: { ok: false, error: 'PUBLIC_VISUAL_CHECKOUT_NETWORK_TRANSIENT' }
+    };
+  }
+
   let payload = null;
   try { payload = text ? JSON.parse(text) : null; } catch (_) {
     throw smokeError('PUBLIC_VISUAL_CHECKOUT_RESPONSE_JSON_INVALID');
@@ -206,11 +241,14 @@ async function catalogRequest(mode, query = {}) {
 }
 
 async function getJson(pathOrUrl) {
-  const response = await fetch(pathOrUrl instanceof URL ? pathOrUrl : new URL(pathOrUrl, STAGING_URL), {
-    headers: { Accept: 'application/json', 'Cache-Control': 'no-store' },
-    redirect: 'error'
-  });
-  const text = await response.text();
+  const { response, text } = await fetchTextWithRetry(
+    pathOrUrl instanceof URL ? pathOrUrl : new URL(pathOrUrl, STAGING_URL),
+    {
+      headers: { Accept: 'application/json', 'Cache-Control': 'no-store' },
+      redirect: 'error'
+    },
+    'PUBLIC_VISUAL_CHECKOUT_DEPENDENCY_NETWORK_FAILED'
+  );
   if (!response.ok) throw smokeError(`PUBLIC_VISUAL_CHECKOUT_DEPENDENCY_HTTP_${response.status}`);
   try { return JSON.parse(text); } catch (_) {
     throw smokeError('PUBLIC_VISUAL_CHECKOUT_DEPENDENCY_JSON_INVALID');
@@ -218,16 +256,51 @@ async function getJson(pathOrUrl) {
 }
 
 async function getText(path) {
-  const response = await fetch(new URL(path, STAGING_URL), {
-    headers: { Accept: 'text/html,application/javascript', 'Cache-Control': 'no-store' },
-    redirect: 'error'
-  });
+  const { response, text } = await fetchTextWithRetry(
+    new URL(path, STAGING_URL),
+    {
+      headers: { Accept: 'text/html,application/javascript', 'Cache-Control': 'no-store' },
+      redirect: 'error'
+    },
+    'PUBLIC_VISUAL_CHECKOUT_ASSET_NETWORK_FAILED'
+  );
   if (!response.ok) throw smokeError(`PUBLIC_VISUAL_CHECKOUT_ASSET_HTTP_${response.status}`);
-  const text = await response.text();
   if (new TextEncoder().encode(text).byteLength > 2 * 1024 * 1024) {
     throw smokeError('PUBLIC_VISUAL_CHECKOUT_ASSET_TOO_LARGE');
   }
   return text;
+}
+
+async function fetchTextWithRetry(url, options, failureCode) {
+  let last = null;
+  for (let attempt = 1; attempt <= NETWORK_ATTEMPTS; attempt += 1) {
+    try {
+      last = await fetchTextOnce(url, options);
+      if (!isTransientStatus(last.response.status)) return last;
+    } catch (_) {
+      last = null;
+    }
+    if (attempt < NETWORK_ATTEMPTS) await sleep(NETWORK_INTERVAL_MS);
+  }
+  if (last) return last;
+  throw smokeError(failureCode);
+}
+
+async function fetchTextOnce(url, options = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    const text = await response.text();
+    return { response, text };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function isTransientStatus(status) {
+  const value = Number(status || 0);
+  return value === 0 || value === 404 || value === 503 || value >= 500;
 }
 
 function uniqueFolders(payload) {
