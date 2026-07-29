@@ -9,6 +9,10 @@ import {
   handleCatalogReadonlyRoute
 } from './catalog-readonly-route.js';
 import {
+  handlePublicCheckoutRoute,
+  publicCheckoutStatus
+} from './public-checkout-route.js';
+import {
   scheduleSupabaseShadowProjection,
   supabaseShadowStatus
 } from './supabase-shadow-projector.js';
@@ -22,6 +26,7 @@ export { OrderLedger };
 
 const CATALOG_READONLY_ROUTE = '/internal/v2/catalog/preview';
 const STATIC_ASSETS_PROBE_ROUTE = '/internal/v2/assets/probe';
+const PUBLIC_CHECKOUT_ROUTE = '/api/orders/v2';
 const PUBLIC_CATALOG_ROUTES = new Set(['/api/drive', '/api/catalog-meta']);
 
 export default {
@@ -44,10 +49,16 @@ export async function fetchStagingShadowWorker(request, env, ctx) {
   const shadowStatus = supabaseShadowStatus(env);
   const catalogStatus = catalogReadonlyBridgeStatus(env);
   const acceptedCatalogStatus = catalogAcceptedStatus(env);
+  const checkoutStatus = publicCheckoutStatus(env);
 
   if (PUBLIC_CATALOG_ROUTES.has(url.pathname)) {
     const requestId = safeRequestId(request.headers) || crypto.randomUUID();
     return handleCatalogAcceptedPublicRoute(request, env, requestId);
+  }
+
+  if (url.pathname === PUBLIC_CHECKOUT_ROUTE) {
+    const requestId = safeRequestId(request.headers) || crypto.randomUUID();
+    return handlePublicCheckoutRoute(request, env, requestId);
   }
 
   if (url.pathname === STATIC_ASSETS_PROBE_ROUTE) {
@@ -91,7 +102,8 @@ export async function fetchStagingShadowWorker(request, env, ctx) {
     return augmentHealthResponse(response, {
       supabaseShadow: shadowStatus,
       catalogReadonlyBridge: catalogStatus,
-      acceptedCatalog: acceptedCatalogStatus
+      acceptedCatalog: acceptedCatalogStatus,
+      publicCheckout: checkoutStatus
     });
   }
 
