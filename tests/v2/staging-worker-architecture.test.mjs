@@ -61,5 +61,6 @@ test('entrypoint sombra usa o Worker consolidado preserva Durable Object e proje
   assert.equal(wrapperSource.includes('markOutboxDelivered'), false);
   assert.ok(ledgerSource.includes("'order.created.v2'"));
   assert.ok(fixtureSource.includes('STAGING_PRODUCT_SNAPSHOT'));
-  assert.ok(atomicCommandSource.includes('createOrderFingerprint'));
+  assert.ok(atomicCommandSource.includes('createAtomicLedgerCommandV2'));
+  assert.ok(atomicCommandSource.includes('createOrderIntentFingerprint'));
 });
