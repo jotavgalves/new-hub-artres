@@ -12,12 +12,12 @@ import {
   scheduleSupabaseShadowProjection,
   supabaseShadowStatus
 } from './supabase-shadow-projector.js';
+import { isStaticAssetRoute, serveStaticAsset } from './static-assets-router.js';
 
 export { OrderLedger };
 
 const CATALOG_READONLY_ROUTE = '/internal/v2/catalog/preview';
 const PUBLIC_CATALOG_ROUTES = new Set(['/api/drive', '/api/catalog-meta']);
-const STATIC_METHODS = new Set(['GET', 'HEAD']);
 
 export default {
   async fetch(request, env, ctx) {
@@ -32,7 +32,8 @@ export async function fetchStagingShadowWorker(request, env, ctx) {
   // design atual são encaminhados explicitamente ao binding de assets. Isso
   // evita depender do caminho asset-first do edge e não transforma o conteúdo.
   if (isStaticAssetRoute(url.pathname)) {
-    return serveStaticAsset(request, env);
+    const requestId = safeRequestId(request.headers) || crypto.randomUUID();
+    return serveStaticAsset(request, env, requestId);
   }
 
   const shadowStatus = supabaseShadowStatus(env);
@@ -80,38 +81,6 @@ export async function fetchStagingShadowWorker(request, env, ctx) {
   }
 
   return response;
-}
-
-function isStaticAssetRoute(pathname) {
-  if (pathname === '/health') return false;
-  if (pathname === '/admin' || pathname === '/admin/' || pathname.startsWith('/admin/')) return false;
-  if (pathname.startsWith('/api/')) return false;
-  if (pathname.startsWith('/internal/')) return false;
-  return true;
-}
-
-async function serveStaticAsset(request, env) {
-  const requestId = safeRequestId(request.headers) || crypto.randomUUID();
-  if (!STATIC_METHODS.has(request.method)) {
-    return methodNotAllowed(['GET', 'HEAD'], requestId);
-  }
-
-  const assetFetcher = env?.ASSETS?.fetch;
-  if (typeof assetFetcher !== 'function') {
-    return json({ ok: false, error: 'STAGING_ASSETS_NOT_CONFIGURED', requestId }, 503);
-  }
-
-  try {
-    return await Reflect.apply(assetFetcher, env.ASSETS, [request]);
-  } catch (_) {
-    console.error(JSON.stringify({
-      level: 'error',
-      service: 'new-hub-artres-v2-staging',
-      event: 'static-asset-fetch-failed',
-      code: 'STAGING_ASSET_FETCH_FAILED'
-    }));
-    return json({ ok: false, error: 'STAGING_ASSET_FETCH_FAILED', requestId }, 502);
-  }
 }
 
 async function augmentHealthResponse(response, statusFields) {
