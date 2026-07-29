@@ -54,7 +54,8 @@ export async function handlePublicCheckoutRoute(request, env, requestId, options
   );
   if (!protection.ok) return protection.response;
 
-  return handleAcceptedCheckoutSubmit(request, env, requestId, {
+  const submit = options.submit || handleAcceptedCheckoutSubmit;
+  return submit(request, env, requestId, {
     onOrderCommitted: options.onOrderCommitted
   });
 }
