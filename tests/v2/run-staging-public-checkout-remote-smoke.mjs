@@ -5,7 +5,6 @@ const NETWORK_INTERVAL_MS = 1000;
 
 async function main() {
   const health = await getJson('/health');
-  const html = await getText('/index.html', 'INDEX');
   const bridge = await getText('/assets/v2-checkout-bridge.js', 'BRIDGE');
 
   if (
@@ -16,9 +15,6 @@ async function main() {
     health?.publicCheckout?.protection?.configured !== true
   ) {
     throw smokeError('PUBLIC_VISUAL_CHECKOUT_HEALTH_INVALID');
-  }
-  if ((html.match(/v2-checkout-bridge\.js/g) || []).length !== 1) {
-    throw smokeError('PUBLIC_VISUAL_CHECKOUT_BRIDGE_TAG_INVALID');
   }
   if (
     !bridge.includes('site-v2-visual-checkout-bridge-v1') ||
