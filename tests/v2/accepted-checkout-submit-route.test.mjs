@@ -224,6 +224,59 @@ test('aceita somente POST JSON com chave e data de tentativa válidas', async ()
   assert.equal((await payload(missingDate)).error, 'SUBMISSION_CREATED_AT_INVALID');
 });
 
+test('rejeita arte inexistente antes de preço rascunho e ledger sem expor o ID', async () => {
+  const missingArtworkId = 'private-missing-artwork-id';
+  let pricingCalls = 0;
+  let draftCalls = 0;
+  let ledgerCalls = 0;
+  const response = await handleAcceptedCheckoutSubmit(
+    request(validBody({
+      items: [{
+        ...validBody().items[0],
+        driveFileId: missingArtworkId
+      }]
+    })),
+    writableEnv,
+    requestId,
+    {
+      resolveItems: async () => ({ catalogVersion: 49, items: [] }),
+      validateItems: () => {
+        const error = new Error('ARTWORK_NOT_FOUND');
+        error.code = 'ARTWORK_NOT_FOUND';
+        error.itemIndex = 0;
+        throw error;
+      },
+      priceDraft: () => {
+        pricingCalls += 1;
+        return {};
+      },
+      prepareDraft: async () => {
+        draftCalls += 1;
+        return {};
+      },
+      ledger: {
+        async submit() {
+          ledgerCalls += 1;
+          return {};
+        }
+      }
+    }
+  );
+
+  assert.equal(response.status, 422);
+  const result = await payload(response);
+  assert.deepEqual(result, {
+    ok: false,
+    error: 'ARTWORK_NOT_FOUND',
+    requestId,
+    itemIndex: 0
+  });
+  assert.equal(JSON.stringify(result).includes(missingArtworkId), false);
+  assert.equal(pricingCalls, 0);
+  assert.equal(draftCalls, 0);
+  assert.equal(ledgerCalls, 0);
+});
+
 test('cria uma vez e reproduz o mesmo pedido com a mesma tentativa', async () => {
   const ledger = memoryLedger();
   const committed = [];
