@@ -43,7 +43,7 @@ function body(overrides = {}) {
   };
 }
 
-async function build(inputBody = body()) {
+async function build(inputBody = body(), options = {}) {
   const resolved = { catalogVersion: 49, items: catalogItems };
   const validated = validateAcceptedCheckoutItems(inputBody.items, catalogItems);
   const priced = priceAcceptedCheckoutDraft({
@@ -58,7 +58,8 @@ async function build(inputBody = body()) {
     validated,
     priced,
     requestId: 'canonical-draft-request-001',
-    submissionCreatedAt: '2026-07-29T12:00:00.000Z'
+    submissionCreatedAt: '2026-07-29T12:00:00.000Z',
+    ...options
   });
 }
 
@@ -133,4 +134,22 @@ test('mesmo conteúdo comercial produz fingerprint estável', async () => {
   assert.equal(first.command.idempotencyKey, second.command.idempotencyKey);
   assert.equal(Object.isFrozen(first.command), true);
   assert.equal(Object.isFrozen(first.command.preparedOrder), true);
+});
+
+test('submissão usa chave real derivada e metadados de staging sem expor a chave bruta', async () => {
+  const rawKey = 'checkout-real-attempt-000000000001';
+  const result = await build(body(), {
+    idempotencyKey: rawKey,
+    source: 'catalog-v2-staging-accepted-synthetic',
+    actor: 'staging-checkout-synthetic',
+    dryRun: false
+  });
+
+  assert.equal(result.dryRun, false);
+  assert.match(result.command.idempotencyKey, /^idempotency:v2:[a-f0-9]{64}$/);
+  assert.notEqual(result.command.idempotencyKey, rawKey);
+  assert.equal(result.command.preparedOrder.source, 'catalog-v2-staging-accepted-synthetic');
+  assert.equal(result.command.actor, 'staging-checkout-synthetic');
+  assert.equal(JSON.stringify(result.summary).includes(rawKey), false);
+  assert.equal(JSON.stringify(result.summary).includes(result.command.idempotencyKey), false);
 });
