@@ -74,20 +74,23 @@ test('rejeita corpo excessivo e JSON inválido antes das dependências', async (
   assert.equal(calls, 0);
 });
 
-test('resolve o catálogo e devolve somente resumo sem escrita', async () => {
+test('resolve, valida e precifica sem escrita ou exposição de dados', async () => {
   let receivedIds;
   let receivedItems;
+  let pricingInput;
   const response = await handleCheckoutValidationPreview(
     request({
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         customer: { name: 'Cliente que não pode aparecer' },
+        total: 0.01,
         items: [{
           driveFileId: 'arquivo-secreto-001',
           productKey: '50x50',
           variantKey: 'default',
           sizeKey: '50x50',
-          quantity: 6
+          quantity: 6,
+          unitPrice: 0.01
         }]
       })
     }),
@@ -107,7 +110,34 @@ test('resolve o catálogo e devolve somente resumo sem escrita', async () => {
           itemCount: 1,
           productKeys: ['50x50'],
           variantKeys: ['default'],
-          sizeKeys: ['50x50']
+          sizeKeys: ['50x50'],
+          items: [{
+            driveFileId: 'arquivo-secreto-001',
+            productKey: '50x50',
+            variantKey: 'default',
+            sizeKey: '50x50',
+            quantity: 6,
+            details: {}
+          }]
+        };
+      },
+      priceDraft: input => {
+        pricingInput = input;
+        return {
+          authoritative: true,
+          summary: {
+            currency: 'BRL',
+            itemCount: 1,
+            quantity: 6,
+            subtotal: 58.5,
+            discountPercent: 0,
+            discountAmount: 0,
+            total: 58.5,
+            catalogVersion: 49,
+            configVersion: 9001,
+            clientValuesIgnored: true
+          },
+          warnings: ['CLIENT_ITEM_PRICE_IGNORED', 'CLIENT_ORDER_TOTALS_IGNORED']
         };
       }
     }
@@ -117,18 +147,35 @@ test('resolve o catálogo e devolve somente resumo sem escrita', async () => {
   assert.deepEqual(receivedIds, ['arquivo-secreto-001']);
   assert.equal(receivedItems.items[0].quantity, 6);
   assert.equal(receivedItems.catalogItems.length, 1);
+  assert.equal(pricingInput.body.total, 0.01);
+  assert.equal(pricingInput.resolved.catalogVersion, 49);
+  assert.equal(pricingInput.validated.itemCount, 1);
 
   const result = await payload(response);
   assert.deepEqual(result, {
     ok: true,
     dryRun: true,
     writesPerformed: false,
+    authoritativePricing: true,
     requestId,
     catalogVersion: 49,
     itemCount: 1,
     productKeys: ['50x50'],
     variantKeys: ['default'],
-    sizeKeys: ['50x50']
+    sizeKeys: ['50x50'],
+    pricing: {
+      currency: 'BRL',
+      itemCount: 1,
+      quantity: 6,
+      subtotal: 58.5,
+      discountPercent: 0,
+      discountAmount: 0,
+      total: 58.5,
+      catalogVersion: 49,
+      configVersion: 9001,
+      clientValuesIgnored: true
+    },
+    warnings: ['CLIENT_ITEM_PRICE_IGNORED', 'CLIENT_ORDER_TOTALS_IGNORED']
   });
 
   const text = JSON.stringify(result);
@@ -165,6 +212,36 @@ test('erros de contrato preservam apenas código e índice', async () => {
     itemIndex: 0
   });
   assert.equal(JSON.stringify(result).includes('arquivo-secreto-002'), false);
+});
+
+test('erro de quantidade calculado pelo servidor retorna somente código público', async () => {
+  const response = await handleCheckoutValidationPreview(
+    request({
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ items: [{ driveFileId: 'arquivo-secreto-003', quantity: 7 }] })
+    }),
+    {},
+    requestId,
+    {
+      resolveItems: async () => ({ catalogVersion: 49, items: [{}] }),
+      validateItems: () => ({ itemCount: 1, productKeys: [], variantKeys: [], sizeKeys: [], items: [{}] }),
+      priceDraft: () => {
+        const error = new Error('ORDER_QUANTITY_RULES_INVALID');
+        error.code = 'ORDER_QUANTITY_RULES_INVALID';
+        error.details = [{ itemId: 'arquivo-secreto-003' }];
+        throw error;
+      }
+    }
+  );
+
+  assert.equal(response.status, 422);
+  const result = await payload(response);
+  assert.deepEqual(result, {
+    ok: false,
+    error: 'ORDER_QUANTITY_RULES_INVALID',
+    requestId
+  });
+  assert.equal(JSON.stringify(result).includes('arquivo-secreto-003'), false);
 });
 
 test('entrypoint protege a rota interna com token antes do handler', async () => {
