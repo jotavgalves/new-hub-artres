@@ -1,4 +1,5 @@
 import { createAtomicLedgerCommandV2 } from '../../../src/v2/orders/atomic-command.mjs';
+import { createCanonicalItemV2 } from '../../../src/v2/orders/schema.mjs';
 import {
   STAGING_CONFIG_VERSION,
   STAGING_PRODUCT_SNAPSHOT
@@ -14,6 +15,7 @@ export async function prepareAcceptedCheckoutCanonicalDraft(input = {}) {
   const submissionCreatedAt = validIsoDate(input.submissionCreatedAt) || new Date().toISOString();
 
   if (!requestId) throw draftError('CHECKOUT_DRAFT_REQUEST_ID_INVALID');
+  validateParties(body);
   if (!Array.isArray(resolved.items) || !resolved.items.length) {
     throw draftError('CHECKOUT_DRAFT_CATALOG_ITEMS_REQUIRED');
   }
@@ -46,7 +48,7 @@ export async function prepareAcceptedCheckoutCanonicalDraft(input = {}) {
     actor: 'staging-checkout-preview'
   });
 
-  assertPreservedContract(command, validated.items);
+  assertPreservedContract(command, validated.items, quote.items);
   return deepFreeze({
     ok: true,
     dryRun: true,
@@ -56,7 +58,21 @@ export async function prepareAcceptedCheckoutCanonicalDraft(input = {}) {
   });
 }
 
-function assertPreservedContract(command, validatedItems) {
+function validateParties(body) {
+  const seller = record(body.seller);
+  const customer = record(body.customer);
+  const sellerId = identity(seller.id || seller.sellerId || seller.username);
+  const customerName = clean(customer.name || customer.nome);
+  const whatsapp = digits(customer.whatsapp || customer.phone);
+
+  if (!sellerId) throw draftError('SELLER_REQUIRED');
+  if (!customerName) throw draftError('CUSTOMER_NAME_REQUIRED');
+  if (whatsapp.length < 10 || whatsapp.length > 20) {
+    throw draftError('CUSTOMER_WHATSAPP_INVALID');
+  }
+}
+
+function assertPreservedContract(command, validatedItems, quoteItems) {
   const order = command?.preparedOrder;
   if (!order || order.schemaVersion !== 2) throw draftError('CHECKOUT_DRAFT_ORDER_INVALID');
   if (!Array.isArray(order.items) || order.items.length !== validatedItems.length) {
@@ -66,6 +82,7 @@ function assertPreservedContract(command, validatedItems) {
   for (let index = 0; index < order.items.length; index += 1) {
     const canonical = order.items[index];
     const validated = validatedItems[index];
+    const expected = createCanonicalItemV2(quoteItems[index]);
     if (canonical.itemId !== validated.itemId) throw draftError('CHECKOUT_DRAFT_ITEM_ID_MISMATCH');
     if (canonical.driveFileId !== validated.driveFileId) {
       throw draftError('CHECKOUT_DRAFT_DRIVE_FILE_ID_MISMATCH');
@@ -77,7 +94,7 @@ function assertPreservedContract(command, validatedItems) {
       throw draftError('CHECKOUT_DRAFT_VARIANT_MISMATCH');
     }
     if (canonical.sizeKey !== validated.sizeKey) throw draftError('CHECKOUT_DRAFT_SIZE_MISMATCH');
-    if (!sameJson(canonical.details, validated.details)) {
+    if (!sameJson(canonical.details, expected.details)) {
       throw draftError('CHECKOUT_DRAFT_DETAILS_MISMATCH');
     }
   }
@@ -127,6 +144,20 @@ function validIsoDate(value) {
 function positiveInteger(value) {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function identity(value) {
+  return clean(value)
+    .replace(/[:\s]+/g, '-')
+    .replace(/[^a-zA-Z0-9._-]/g, '');
+}
+
+function digits(value) {
+  return String(value ?? '').replace(/\D/g, '');
+}
+
+function clean(value) {
+  return String(value ?? '').replace(/\s+/g, ' ').trim();
 }
 
 function record(value) {
