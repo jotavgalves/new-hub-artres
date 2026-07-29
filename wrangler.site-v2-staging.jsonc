@@ -19,7 +19,7 @@
     "ENVIRONMENT": "staging",
     "STAGING_WRITE_ENABLED": "true",
     "STAGING_LOW_LEVEL_LEDGER_ENABLED": "false",
-    "STAGING_PUBLIC_CHECKOUT_ENABLED": "false",
+    "STAGING_PUBLIC_CHECKOUT_ENABLED": "true",
     "PUBLIC_CHECKOUT_ALLOWED_ORIGINS": "https://new-hub-artres-v2-staging.jvgacontato.workers.dev",
     "SUPABASE_SHADOW_ENABLED": "true",
     "SUPABASE_V2_URL": "https://kueklnkznwpbobqwugns.supabase.co",
