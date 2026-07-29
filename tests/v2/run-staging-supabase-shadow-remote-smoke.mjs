@@ -136,6 +136,7 @@ async function waitForProjectedOrder(orderNumber) {
     await sleep(1500);
   }
   throw new Error(`SUPABASE_SHADOW_ORDER_NOT_PROJECTED:${JSON.stringify({
+    orderNumber,
     ok: lastPayload?.ok,
     orderCount: Array.isArray(lastPayload?.orders) ? lastPayload.orders.length : null
   })}`);
@@ -144,6 +145,8 @@ async function waitForProjectedOrder(orderNumber) {
 const workerHealth = await waitForShadowDeployment();
 const healthBefore = await supabaseRpc('armazem_v2_projection_health_v1');
 assert(healthBefore?.ok === true, 'SUPABASE_HEALTH_BEFORE_INVALID', healthBefore);
+const ordersBefore = Number(healthBefore?.orders);
+assert(Number.isInteger(ordersBefore) && ordersBefore >= 0, 'SUPABASE_ORDER_COUNT_BEFORE_INVALID');
 
 const customer = {
   name: 'Cliente Sintético da Sombra',
@@ -223,7 +226,12 @@ assert(duplicateCount === 1, 'SUPABASE_REPLAY_CREATED_DUPLICATE', { duplicateCou
 
 const healthAfter = await supabaseRpc('armazem_v2_projection_health_v1');
 assert(healthAfter?.ok === true, 'SUPABASE_HEALTH_AFTER_INVALID', healthAfter);
-assert(Number(healthAfter?.orders) >= Number(healthBefore?.orders), 'SUPABASE_ORDER_COUNT_REGRESSED');
+const ordersAfter = Number(healthAfter?.orders);
+assert(
+  ordersAfter === ordersBefore + 1,
+  'SUPABASE_SHADOW_ORDER_COUNT_INCREMENT_INVALID',
+  { ordersBefore, ordersAfter }
+);
 assert(Number(healthAfter?.items) >= 1, 'SUPABASE_ITEM_COUNT_INVALID');
 
 console.log(JSON.stringify({
@@ -236,6 +244,7 @@ console.log(JSON.stringify({
   projectedExactlyOnce: duplicateCount === 1,
   customerRedacted: order.customer.redacted,
   total: Number(order.pricing.total),
-  supabaseOrders: Number(healthAfter.orders),
+  ordersBefore,
+  ordersAfter,
   supabaseItems: Number(healthAfter.items)
 }, null, 2));
