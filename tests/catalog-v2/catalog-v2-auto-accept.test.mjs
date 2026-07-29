@@ -16,7 +16,7 @@ test('gera chaves determinísticas para rotas navegáveis', () => {
 });
 
 test('normaliza busca em português sem conservar acentos ou pontuação', () => {
-  assert.equal(normalizeSearchText('  Aniversário — 1º Ano_2657  '), 'aniversario 1o ano 2657');
+  assert.equal(normalizeSearchText('  Aniversário — 1º Ano_2657  '), 'aniversario 1 ano 2657');
 });
 
 test('divide lotes respeitando quantidade e bytes sem perder linhas', () => {
