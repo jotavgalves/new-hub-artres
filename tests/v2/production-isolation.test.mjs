@@ -10,6 +10,7 @@ const SKIPPED_DIRECTORIES = new Set([
   'docs',
   'node_modules',
   'src',
+  'staging',
   'tests'
 ]);
 const TEXT_EXTENSIONS = new Set(['.css', '.html', '.js', '.json', '.mjs', '.md', '.txt']);
@@ -19,7 +20,7 @@ function extension(path) {
   return match ? match[0].toLowerCase() : '';
 }
 
-function runtimeFiles(directory = ROOT) {
+function productionRuntimeFiles(directory = ROOT) {
   const files = [];
 
   for (const name of readdirSync(directory)) {
@@ -29,7 +30,7 @@ function runtimeFiles(directory = ROOT) {
     const stats = statSync(absolute);
 
     if (stats.isDirectory()) {
-      files.push(...runtimeFiles(absolute));
+      files.push(...productionRuntimeFiles(absolute));
       continue;
     }
 
@@ -39,7 +40,7 @@ function runtimeFiles(directory = ROOT) {
   return files;
 }
 
-test('nenhum arquivo de runtime importa ou carrega o registro passivo', () => {
+test('nenhum arquivo do runtime público de produção importa ou carrega o registro V2', () => {
   const forbiddenPatterns = [
     /src\/v2\/products\/registry\.mjs/i,
     /product-registry\.test\.mjs/i,
@@ -48,7 +49,7 @@ test('nenhum arquivo de runtime importa ou carrega o registro passivo', () => {
 
   const violations = [];
 
-  for (const file of runtimeFiles()) {
+  for (const file of productionRuntimeFiles()) {
     const content = readFileSync(file, 'utf8');
     for (const pattern of forbiddenPatterns) {
       if (pattern.test(content)) {
@@ -58,4 +59,12 @@ test('nenhum arquivo de runtime importa ou carrega o registro passivo', () => {
   }
 
   assert.deepEqual(violations, []);
+});
+
+test('staging permanece explicitamente fora do conjunto de runtime público', () => {
+  assert.equal(SKIPPED_DIRECTORIES.has('staging'), true);
+  assert.equal(
+    productionRuntimeFiles().some(file => relative(ROOT, file).startsWith(`staging${process.platform === 'win32' ? '\\' : '/'}`)),
+    false
+  );
 });
