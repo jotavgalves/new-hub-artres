@@ -27,6 +27,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: site-v2-staging-deploy
@@ -80,6 +81,7 @@ jobs:
       SUPABASE_V2_URL: https://kueklnkznwpbobqwugns.supabase.co
       STAGING_SECRETS_FILE: /tmp/site-v2-staging-secrets.json
       ROLLBACK_CONFIG_FILE: wrangler.site-v2-staging.rollback.runtime.jsonc
+      TRACKING_ISSUE_NUMBER: '16'
 
     steps:
       - name: Baixar repositório
@@ -168,6 +170,7 @@ jobs:
         run: node tests/v2/run-staging-supabase-shadow-remote-smoke.mjs
 
       - name: Reverter automaticamente escrita e sombra em caso de falha
+        id: rollback
         if: failure() && steps.deploy.outcome == 'success'
         run: >-
           npx --yes wrangler@4.114.0 deploy
@@ -193,3 +196,17 @@ jobs:
           echo "Rota técnica do ledger: desabilitada"
           echo "Projeção Supabase sombra: habilitada e validada por pedido sintético"
           echo "Produção pública: não alterada"
+
+      - name: Registrar resultado sanitizado na issue
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          WORKFLOW_STATUS: ${{ job.status }}
+          CATALOG_ACCEPT_OUTCOME: ${{ steps.catalog-accept.outcome }}
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          CATALOG_SMOKE_OUTCOME: ${{ steps.catalog-smoke.outcome }}
+          REMOTE_SMOKE_OUTCOME: ${{ steps.remote-smoke.outcome }}
+          SHADOW_SMOKE_OUTCOME: ${{ steps.shadow-smoke.outcome }}
+          ROLLBACK_OUTCOME: ${{ steps.rollback.outcome }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: node scripts/v2/post-site-v2-staging-deploy-status.mjs
