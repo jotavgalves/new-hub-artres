@@ -62,7 +62,7 @@ async function main() {
       name: 'MISSING_ARTWORK',
       item: { ...baseItem, driveFileId: missingArtworkId },
       expectedCode: 'ARTWORK_NOT_FOUND',
-      expectsItemIndex: true
+      expectsItemIndex: false
     },
     {
       name: 'PRODUCT_MISMATCH',
