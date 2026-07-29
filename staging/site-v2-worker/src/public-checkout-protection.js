@@ -155,7 +155,7 @@ function publicValidationFailure(validation) {
   ].includes(error))) {
     return { code: 'PUBLIC_CHECKOUT_ORIGIN_NOT_ALLOWED', status: 403 };
   }
-  if (errors.includes('IDEMPOTENCY_KEY_INVALID')) {
+  if (errors.some(error => String(error || '').startsWith('IDEMPOTENCY_KEY_'))) {
     return { code: 'IDEMPOTENCY_KEY_INVALID', status: 422 };
   }
 
