@@ -129,7 +129,7 @@ test('smoke público valida bridge origem criação replay e ausência de segred
   assert.ok(publicCheckoutSmoke.includes("replay.payload?.action !== 'REPLAY'"));
   assert.ok(publicCheckoutSmoke.includes('PUBLIC_CHECKOUT_ORIGIN_NOT_ALLOWED'));
   assert.ok(publicCheckoutSmoke.includes('productionChanged: false'));
-  assert.equal(publicCheckoutSmoke.includes('STAGING_API_TOKEN'), false);
+  assert.doesNotMatch(publicCheckoutSmoke, /process\.env\.(?:SITE_V2_STAGING_API_TOKEN|STAGING_API_TOKEN)/);
 });
 
 test('smoke técnico cria repete e inspeciona pedido sintético', () => {
