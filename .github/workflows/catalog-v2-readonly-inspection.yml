@@ -1,6 +1,9 @@
 name: Inspecionar Catálogo V2 Somente Leitura
 
 on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -11,7 +14,7 @@ on:
       - 'tests/catalog-v2/**'
 
 permissions:
-  contents: read
+  contents: write
   issues: write
 
 concurrency:
@@ -20,8 +23,8 @@ concurrency:
 
 jobs:
   inspect-readonly-catalog:
-    name: Ler catálogo e validar contrato V2 localmente
-    if: contains(github.event.head_commit.message, '[catalog-readonly-inspection]')
+    name: Validar e aceitar catálogo V2 no staging
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[catalog-readonly-inspection]')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: site-v2-staging
@@ -32,6 +35,7 @@ jobs:
       CATALOG_LEGACY_BASE_URL: https://new-hub-artres.pages.dev
       CATALOG_V2_ROOT_DRIVE_ID: 193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae
       CATALOG_REPORT_FILE: /tmp/catalog-v2-readonly-inspection-report.json
+      CATALOG_ACCEPTED_STATE_FILE: config/catalog-v2-accepted-version.json
       CATALOG_INSPECTION_MAX_REQUESTS: '2000'
       CATALOG_INSPECTION_MAX_FOLDERS: '2000'
       CATALOG_INSPECTION_MAX_ARTWORKS: '100000'
@@ -41,7 +45,7 @@ jobs:
       - name: Baixar repositório
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          persist-credentials: false
+          persist-credentials: true
 
       - name: Configurar Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -66,6 +70,22 @@ jobs:
       - name: Ler catálogo público e validar contrato V2 localmente
         id: inspect_catalog
         run: node scripts/catalog-v2/run-catalog-v2-local-readonly-inspection.mjs
+
+      - name: Aceitar versão validada no staging
+        id: accept_catalog
+        run: node scripts/catalog-v2/accept-validated-catalog-version.mjs
+
+      - name: Persistir nova versão aceita
+        if: steps.accept_catalog.outputs.changed == 'true'
+        env:
+          ACCEPTED_VERSION: ${{ steps.accept_catalog.outputs.accepted_version }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$CATALOG_ACCEPTED_STATE_FILE"
+          git commit -m "Aceita catálogo V2 versão ${ACCEPTED_VERSION} no staging"
+          git push origin HEAD:main
 
       - name: Anexar relatório sanitizado
         if: always()
