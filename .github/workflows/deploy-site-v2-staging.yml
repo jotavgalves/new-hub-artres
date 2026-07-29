@@ -18,6 +18,7 @@ on:
       - 'tests/v2/run-staging-accepted-catalog-remote-smoke.mjs'
       - 'tests/v2/run-staging-checkout-validation-remote-smoke.mjs'
       - 'tests/v2/run-staging-checkout-invalid-rejections-remote-smoke.mjs'
+      - 'tests/v2/run-staging-checkout-protection-remote-smoke.mjs'
       - '.github/workflows/deploy-site-v2-staging.yml'
       - '.github/workflows/catalog-v2-auto-accept.yml'
   workflow_dispatch:
@@ -173,7 +174,7 @@ jobs:
           fi
           exit "$status"
 
-      - name: Validar contrato e rejeições do checkout real
+      - name: Validar contrato rejeições e proteção do checkout real
         id: checkout-contract-smoke
         shell: bash
         run: |
@@ -186,6 +187,12 @@ jobs:
             rejection_output="$(node tests/v2/run-staging-checkout-invalid-rejections-remote-smoke.mjs 2>&1)"
             status=$?
             output="${output}"$'\n'"${rejection_output}"
+          fi
+
+          if [ "$status" -eq 0 ]; then
+            protection_output="$(node tests/v2/run-staging-checkout-protection-remote-smoke.mjs 2>&1)"
+            status=$?
+            output="${output}"$'\n'"${protection_output}"
           fi
 
           printf '%s\n' "$output"
@@ -229,6 +236,7 @@ jobs:
           echo "Escrita comercial: habilitada somente para pedidos sintéticos"
           echo "Checkout público V2: desativado"
           echo "Validação interna de produto, variante, tamanho e rejeições: aprovada"
+          echo "Proteção de origem e rate limit do checkout: aprovada em modo seco"
           echo "Rota técnica do ledger: desabilitada"
           echo "Projeção Supabase sombra: habilitada e validada por pedido sintético"
           echo "Produção pública: não alterada"
