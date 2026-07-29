@@ -20,31 +20,21 @@ concurrency:
 
 jobs:
   inspect-readonly-catalog:
-    name: Ativar, comparar e desativar ponte somente leitura
+    name: Ler catálogo e validar contrato V2 localmente
     if: contains(github.event.head_commit.message, '[catalog-readonly-inspection]')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: site-v2-staging
 
     env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       SITE_V2_STAGING_API_TOKEN: ${{ secrets.SITE_V2_STAGING_API_TOKEN }}
-      SUPABASE_V2_STAGING_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_V2_STAGING_SERVICE_ROLE_KEY }}
       STAGING_URL: https://new-hub-artres-v2-staging.jvgacontato.workers.dev
       CATALOG_LEGACY_BASE_URL: https://new-hub-artres.pages.dev
       CATALOG_V2_ROOT_DRIVE_ID: 193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae
-      CATALOG_ACTIVE_CONFIG_FILE: wrangler.catalog-readonly-active.runtime.jsonc
-      CATALOG_SAFE_CONFIG_FILE: wrangler.catalog-readonly-safe.runtime.jsonc
-      ROLLBACK_CONFIG_FILE: wrangler.catalog-readonly-emergency-rollback.runtime.jsonc
-      STAGING_SECRETS_FILE: /tmp/catalog-readonly-staging-secrets.json
       CATALOG_REPORT_FILE: /tmp/catalog-v2-readonly-inspection-report.json
-      CATALOG_INSPECTION_MAX_REQUESTS: '1600'
+      CATALOG_INSPECTION_MAX_REQUESTS: '800'
       CATALOG_INSPECTION_MAX_FOLDERS: '800'
       CATALOG_INSPECTION_MAX_ARTWORKS: '100000'
-      CATALOG_ACTIVATION_MAX_ATTEMPTS: '90'
-      CATALOG_ACTIVATION_INTERVAL_MS: '1000'
-      CATALOG_ACTIVATION_HEALTH_TIMEOUT_MS: '5000'
       TRACKING_ISSUE_NUMBER: '16'
 
     steps:
@@ -58,65 +48,24 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Validar segredos obrigatórios
+      - name: Validar token de verificação do staging
         run: |
           set -euo pipefail
-          missing=0
-          for variable in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID SITE_V2_STAGING_API_TOKEN SUPABASE_V2_STAGING_SERVICE_ROLE_KEY; do
-            if [ -z "${!variable}" ]; then
-              echo "Segredo obrigatório ausente: $variable"
-              missing=1
-            fi
-          done
-          if [ "$missing" -ne 0 ]; then
+          if [ -z "$SITE_V2_STAGING_API_TOKEN" ]; then
+            echo "Segredo obrigatório ausente: SITE_V2_STAGING_API_TOKEN"
             exit 1
           fi
 
       - name: Executar testes defensivos
         run: node --test tests/v2/*.test.mjs tests/catalog-v2/*.test.mjs
 
-      - name: Preparar secrets e rollback emergencial
-        run: |
-          set -euo pipefail
-          umask 077
-          node scripts/v2/prepare-site-v2-staging-deploy.mjs
+      - name: Confirmar ponte desativada antes da leitura
+        id: verify_disabled_before
+        run: node scripts/catalog-v2/verify-staging-catalog-bridge-disabled.mjs
 
-      - name: Preparar configurações temporária e segura
-        run: node scripts/catalog-v2/prepare-catalog-readonly-inspection.mjs
-
-      - name: Validar bundles sem publicar
-        run: |
-          set -euo pipefail
-          npx --yes wrangler@4.114.0 deploy --dry-run --strict \
-            --config "$CATALOG_ACTIVE_CONFIG_FILE" \
-            --secrets-file "$STAGING_SECRETS_FILE" \
-            --outdir /tmp/catalog-readonly-active-dry-run
-          npx --yes wrangler@4.114.0 deploy --dry-run --strict \
-            --config "$CATALOG_SAFE_CONFIG_FILE" \
-            --secrets-file "$STAGING_SECRETS_FILE" \
-            --outdir /tmp/catalog-readonly-safe-dry-run
-          npx --yes wrangler@4.114.0 deploy --dry-run --strict \
-            --config "$ROLLBACK_CONFIG_FILE" \
-            --secrets-file "$STAGING_SECRETS_FILE" \
-            --outdir /tmp/catalog-readonly-emergency-dry-run
-
-      - name: Ativar ponte somente leitura temporariamente
-        id: deploy_active
-        run: >-
-          npx --yes wrangler@4.114.0 deploy
-          --strict
-          --config "$CATALOG_ACTIVE_CONFIG_FILE"
-          --secrets-file "$STAGING_SECRETS_FILE"
-          --message "Inspeção temporária do catálogo V2 somente leitura"
-          --tag "catalog-v2-readonly-temporary-inspection"
-
-      - name: Aguardar propagação da configuração ativa
-        id: wait_active
-        run: node scripts/catalog-v2/wait-for-staging-catalog-bridge-active.mjs
-
-      - name: Percorrer e comparar catálogo real
+      - name: Ler catálogo público e validar contrato V2 localmente
         id: inspect_catalog
-        run: node scripts/catalog-v2/run-staging-catalog-readonly-inspection.mjs
+        run: node scripts/catalog-v2/run-catalog-v2-local-readonly-inspection.mjs
 
       - name: Anexar relatório sanitizado
         if: always()
@@ -127,49 +76,21 @@ jobs:
           retention-days: 1
           if-no-files-found: ignore
 
-      - name: Desativar ponte e remover origem do runtime
-        id: deactivate
-        if: always() && steps.deploy_active.outcome == 'success'
-        run: >-
-          npx --yes wrangler@4.114.0 deploy
-          --strict
-          --config "$CATALOG_SAFE_CONFIG_FILE"
-          --secrets-file "$STAGING_SECRETS_FILE"
-          --message "Inspeção concluída: ponte de catálogo desativada"
-          --tag "catalog-v2-readonly-disabled-after-inspection"
-
-      - name: Confirmar ponte desativada
-        id: verify_disabled
-        if: always() && steps.deactivate.outcome == 'success'
+      - name: Confirmar ponte continua desativada
+        id: verify_disabled_after
+        if: always()
         run: node scripts/catalog-v2/verify-staging-catalog-bridge-disabled.mjs
-
-      - name: Executar rollback emergencial
-        id: emergency_rollback
-        if: always() && steps.deploy_active.outcome == 'success' && (steps.deactivate.outcome != 'success' || steps.verify_disabled.outcome != 'success')
-        run: >-
-          npx --yes wrangler@4.114.0 deploy
-          --strict
-          --config "$ROLLBACK_CONFIG_FILE"
-          --secrets-file "$STAGING_SECRETS_FILE"
-          --message "Rollback emergencial da inspeção do catálogo"
-          --tag "catalog-v2-readonly-emergency-rollback"
 
       - name: Registrar resultado sanitizado na issue
         if: always()
         env:
           GITHUB_TOKEN: ${{ github.token }}
           INSPECTION_OUTCOME: ${{ steps.inspect_catalog.outcome }}
-          DEACTIVATION_OUTCOME: ${{ steps.deactivate.outcome }}
-          VERIFY_OUTCOME: ${{ steps.verify_disabled.outcome }}
-          ROLLBACK_OUTCOME: ${{ steps.emergency_rollback.outcome }}
+          DEACTIVATION_OUTCOME: skipped
+          VERIFY_OUTCOME: ${{ steps.verify_disabled_after.outcome }}
+          ROLLBACK_OUTCOME: skipped
         run: node scripts/catalog-v2/post-catalog-inspection-status.mjs
 
-      - name: Remover arquivos temporários
+      - name: Remover relatório temporário
         if: always()
-        run: >-
-          rm -f
-          "$STAGING_SECRETS_FILE"
-          "$CATALOG_ACTIVE_CONFIG_FILE"
-          "$CATALOG_SAFE_CONFIG_FILE"
-          "$ROLLBACK_CONFIG_FILE"
-          "$CATALOG_REPORT_FILE"
+        run: rm -f "$CATALOG_REPORT_FILE"
