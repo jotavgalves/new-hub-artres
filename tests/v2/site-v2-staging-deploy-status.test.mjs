@@ -43,17 +43,21 @@ test('checkout desconhecido impede declaração de sucesso', () => {
   assert.doesNotMatch(body, /Resultado final: \*\*sucesso\*\*/);
 });
 
-test('falha inclui somente código público e sanitizado do smoke', () => {
+test('falha inclui somente códigos públicos e sanitizados dos smokes', () => {
   const body = buildSiteV2StagingDeployComment({
     workflowStatus: 'failure',
-    catalogSmoke: 'failure',
-    checkoutSmoke: 'skipped',
+    catalogSmoke: 'success',
+    checkoutSmoke: 'failure',
     catalogSmokeError: 'STAGING_ASSET_PROBE_INDEX_FETCH_FAILED',
-    token: 'nao-pode-vazar'
+    checkoutSmokeError: 'CHECKOUT_VALIDATION_VALID_ITEM_FAILED',
+    token: 'nao-pode-vazar',
+    artworkId: 'drive-id-nao-pode-vazar'
   });
 
   assert.match(body, /Código do smoke do catálogo: `STAGING_ASSET_PROBE_INDEX_FETCH_FAILED`/);
+  assert.match(body, /Código do smoke do checkout: `CHECKOUT_VALIDATION_VALID_ITEM_FAILED`/);
   assert.doesNotMatch(body, /nao-pode-vazar/);
+  assert.doesNotMatch(body, /drive-id-nao-pode-vazar/);
 });
 
 test('resultado desconhecido é sanitizado e não inventa sucesso', () => {
@@ -61,6 +65,7 @@ test('resultado desconhecido é sanitizado e não inventa sucesso', () => {
     workflowStatus: 'qualquer-coisa',
     deploy: '<script>alert(1)</script>',
     checkoutSmoke: '<script>checkout</script>',
+    checkoutSmokeError: '<script>codigo</script>',
     catalogSmokeError: '<script>erro</script>',
     commit: 'nao-e-sha'
   });
@@ -70,5 +75,6 @@ test('resultado desconhecido é sanitizado e não inventa sucesso', () => {
   assert.match(body, /Contrato do checkout com catálogo real: \*\*unknown\*\*/);
   assert.match(body, /Commit: `desconhecido`/);
   assert.doesNotMatch(body, /Código do smoke do catálogo/);
+  assert.doesNotMatch(body, /Código do smoke do checkout/);
   assert.doesNotMatch(body, /<script>/);
 });
