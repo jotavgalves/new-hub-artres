@@ -74,15 +74,17 @@ test('rejeita corpo excessivo e JSON inválido antes das dependências', async (
   assert.equal(calls, 0);
 });
 
-test('resolve, valida e precifica sem escrita ou exposição de dados', async () => {
+test('resolve valida precifica e prepara comando sem escrita ou exposição de dados', async () => {
   let receivedIds;
   let receivedItems;
   let pricingInput;
+  let draftInput;
   const response = await handleCheckoutValidationPreview(
     request({
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        customer: { name: 'Cliente que não pode aparecer' },
+        seller: { id: 'vendedora-1', label: 'Ana' },
+        customer: { name: 'Cliente que não pode aparecer', whatsapp: '81999999999' },
         total: 0.01,
         items: [{
           driveFileId: 'arquivo-secreto-001',
@@ -90,7 +92,8 @@ test('resolve, valida e precifica sem escrita ou exposição de dados', async ()
           variantKey: 'default',
           sizeKey: '50x50',
           quantity: 6,
-          unitPrice: 0.01
+          unitPrice: 0.01,
+          observacoes: 'Não pode aparecer'
         }]
       })
     }),
@@ -112,12 +115,13 @@ test('resolve, valida e precifica sem escrita ou exposição de dados', async ()
           variantKeys: ['default'],
           sizeKeys: ['50x50'],
           items: [{
+            itemId: 'arquivo-secreto-001:50x50:default:50x50',
             driveFileId: 'arquivo-secreto-001',
             productKey: '50x50',
             variantKey: 'default',
             sizeKey: '50x50',
             quantity: 6,
-            details: {}
+            details: { observations: 'Não pode aparecer' }
           }]
         };
       },
@@ -125,6 +129,19 @@ test('resolve, valida e precifica sem escrita ou exposição de dados', async ()
         pricingInput = input;
         return {
           authoritative: true,
+          quote: {
+            items: [{
+              driveFileId: 'arquivo-secreto-001',
+              productKey: '50x50',
+              variantKey: 'default',
+              sizeKey: '50x50',
+              quantity: 6,
+              unitPrice: 9.75,
+              lineSubtotal: 58.5,
+              details: { observations: 'Não pode aparecer' }
+            }],
+            pricing: { discountPercent: 0 }
+          },
           summary: {
             currency: 'BRL',
             itemCount: 1,
@@ -139,6 +156,39 @@ test('resolve, valida e precifica sem escrita ou exposição de dados', async ()
           },
           warnings: ['CLIENT_ITEM_PRICE_IGNORED', 'CLIENT_ORDER_TOTALS_IGNORED']
         };
+      },
+      prepareDraft: async input => {
+        draftInput = input;
+        return {
+          ok: true,
+          summary: {
+            schemaVersion: 2,
+            status: 'Novo',
+            sellerPresent: true,
+            sellerLabelPresent: true,
+            customerNamePresent: true,
+            customerWhatsappPresent: true,
+            customerPhonePresent: true,
+            itemCount: 1,
+            quantity: 6,
+            pricing: {
+              currency: 'BRL',
+              subtotal: 58.5,
+              discountPercent: 0,
+              discountAmount: 0,
+              total: 58.5,
+              calculationVersion: 1
+            },
+            catalogVersion: 49,
+            configVersion: 9001,
+            detailsItemCount: 1,
+            measurementsItemCount: 0,
+            observationsItemCount: 1,
+            personalizationItemCount: 0,
+            canonicalFingerprintReady: true,
+            idempotencyStorageKeyReady: true
+          }
+        };
       }
     }
   );
@@ -150,37 +200,25 @@ test('resolve, valida e precifica sem escrita ou exposição de dados', async ()
   assert.equal(pricingInput.body.total, 0.01);
   assert.equal(pricingInput.resolved.catalogVersion, 49);
   assert.equal(pricingInput.validated.itemCount, 1);
+  assert.equal(draftInput.requestId, requestId);
+  assert.equal(draftInput.priced.authoritative, true);
 
   const result = await payload(response);
-  assert.deepEqual(result, {
-    ok: true,
-    dryRun: true,
-    writesPerformed: false,
-    authoritativePricing: true,
-    requestId,
-    catalogVersion: 49,
-    itemCount: 1,
-    productKeys: ['50x50'],
-    variantKeys: ['default'],
-    sizeKeys: ['50x50'],
-    pricing: {
-      currency: 'BRL',
-      itemCount: 1,
-      quantity: 6,
-      subtotal: 58.5,
-      discountPercent: 0,
-      discountAmount: 0,
-      total: 58.5,
-      catalogVersion: 49,
-      configVersion: 9001,
-      clientValuesIgnored: true
-    },
-    warnings: ['CLIENT_ITEM_PRICE_IGNORED', 'CLIENT_ORDER_TOTALS_IGNORED']
-  });
+  assert.equal(result.ok, true);
+  assert.equal(result.dryRun, true);
+  assert.equal(result.writesPerformed, false);
+  assert.equal(result.authoritativePricing, true);
+  assert.equal(result.canonicalDraftReady, true);
+  assert.equal(result.orderDraft.customerNamePresent, true);
+  assert.equal(result.orderDraft.sellerPresent, true);
+  assert.equal(result.orderDraft.observationsItemCount, 1);
+  assert.equal(result.pricing.total, 58.5);
+  assert.deepEqual(result.warnings, ['CLIENT_ITEM_PRICE_IGNORED', 'CLIENT_ORDER_TOTALS_IGNORED']);
 
   const text = JSON.stringify(result);
   assert.equal(text.includes('arquivo-secreto-001'), false);
   assert.equal(text.includes('Cliente que não pode aparecer'), false);
+  assert.equal(text.includes('Não pode aparecer'), false);
   assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
 });
 
