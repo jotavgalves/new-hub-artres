@@ -133,16 +133,8 @@ async function main() {
   }
 
   const replay = await postSubmit(submitBody, idempotencyKey);
-  if (
-    replay.status !== 200 ||
-    replay.payload?.ok !== true ||
-    replay.payload?.action !== 'REPLAY' ||
-    replay.payload?.replayed !== true ||
-    replay.payload?.orderNumber !== created.payload?.orderNumber ||
-    Number(replay.payload?.pricing?.total) !== 58.5
-  ) {
-    throw smokeError('CHECKOUT_IDEMPOTENT_REPLAY_FAILED');
-  }
+  const replayFailure = checkoutReplayFailureCode(replay, created.payload?.orderNumber);
+  if (replayFailure) throw smokeError(replayFailure);
 
   const conflict = await postSubmit({
     ...submitBody,
@@ -237,6 +229,30 @@ async function waitForCheckoutSubmit(body, idempotencyKey) {
     if (attempt < 90) await sleep(1000);
   }
   throw smokeError(lastCode);
+}
+
+function checkoutReplayFailureCode(result, expectedOrderNumber) {
+  const status = Number(result?.status || 0);
+  const payload = result?.payload;
+  if (status !== 200) {
+    return Number.isInteger(status) && status >= 100 && status <= 599
+      ? `CHECKOUT_REPLAY_HTTP_${status}`
+      : 'CHECKOUT_REPLAY_HTTP_INVALID';
+  }
+  if (payload?.ok !== true) {
+    return payload?.error === 'IDEMPOTENCY_KEY_CONFLICT'
+      ? 'CHECKOUT_REPLAY_UNEXPECTED_CONFLICT'
+      : 'CHECKOUT_REPLAY_OK_FALSE';
+  }
+  if (payload?.action !== 'REPLAY') {
+    return payload?.action === 'CREATED'
+      ? 'CHECKOUT_REPLAY_ACTION_CREATED'
+      : 'CHECKOUT_REPLAY_ACTION_INVALID';
+  }
+  if (payload?.replayed !== true) return 'CHECKOUT_REPLAY_FLAG_FALSE';
+  if (payload?.orderNumber !== expectedOrderNumber) return 'CHECKOUT_REPLAY_ORDER_MISMATCH';
+  if (Number(payload?.pricing?.total) !== 58.5) return 'CHECKOUT_REPLAY_PRICE_MISMATCH';
+  return '';
 }
 
 async function expectValidationError(item, expectedCode) {
