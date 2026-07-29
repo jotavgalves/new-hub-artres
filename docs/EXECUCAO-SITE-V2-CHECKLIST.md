@@ -25,6 +25,31 @@ Este arquivo é a fonte principal de acompanhamento. Toda etapa concluída deve 
 6. Não serão adicionadas novas fases sem registrar motivo, escopo e critério de encerramento.
 7. O projeto termina quando todos os itens obrigatórios desta lista estiverem concluídos e a definição de pronto estiver satisfeita.
 
+## Limite rígido da entrega atual
+
+A entrega em andamento é exclusivamente o encerramento do checkout visual V2 no staging por meio do PR #52.
+
+Ela termina obrigatoriamente quando estes cinco resultados forem comprovados:
+
+1. As duas asserções antigas restantes forem corrigidas, sem ampliar o runtime.
+2. O `Site V2 Baseline` passar integralmente.
+3. O PR #52 for incorporado à `main`.
+4. O staging comprovar criação, `REPLAY`, abertura do WhatsApp e projeção no Supabase com dados sintéticos.
+5. O item `Conectar checkout visual à rota V2` for marcado como concluído neste arquivo com PR, commit e workflow de evidência.
+
+Até essa conclusão, fica proibido abrir outra frente, adicionar módulo passivo, ampliar requisitos ou iniciar:
+
+- Produção V2 e compatibilidade com pedidos antigos.
+- Refatoração ou modularização ampla do frontend.
+- Consolidação de CSS e revisão visual geral.
+- Auditoria completa de acessibilidade.
+- Remoção do legado ou migração para produção.
+- Produto novo ou qualquer melhoria não necessária para fazer o PR #52 passar e validar o staging.
+
+Uma falha encontrada durante o baseline ou deploy só pode gerar correção diretamente ligada ao código terminal comprovado. Melhorias adjacentes devem ser registradas como trabalho futuro, sem entrar no PR #52.
+
+Próximo item único: corrigir as duas asserções antigas restantes, executar o baseline completo e concluir o PR #52.
+
 ## Progresso consolidado
 
 ### 0. Preservação e rollback
