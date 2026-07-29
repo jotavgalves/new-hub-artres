@@ -1,14 +1,12 @@
 const STAGING_URL = normalizeOrigin(process.env.STAGING_URL);
 const MAX_FOLDERS = 80;
-const NETWORK_ATTEMPTS = 12;
+const NETWORK_ATTEMPTS = 60;
 const NETWORK_INTERVAL_MS = 1000;
 
 async function main() {
-  const [health, html, bridge] = await Promise.all([
-    getJson('/health'),
-    getText('/index.html'),
-    getText('/assets/v2-checkout-bridge.js')
-  ]);
+  const health = await getJson('/health');
+  const html = await getText('/index.html', 'INDEX');
+  const bridge = await getText('/assets/v2-checkout-bridge.js', 'BRIDGE');
 
   if (
     health?.ok !== true ||
@@ -255,18 +253,18 @@ async function getJson(pathOrUrl) {
   }
 }
 
-async function getText(path) {
+async function getText(path, assetName) {
   const { response, text } = await fetchTextWithRetry(
     new URL(path, STAGING_URL),
     {
       headers: { Accept: 'text/html,application/javascript', 'Cache-Control': 'no-store' },
       redirect: 'error'
     },
-    'PUBLIC_VISUAL_CHECKOUT_ASSET_NETWORK_FAILED'
+    `PUBLIC_VISUAL_CHECKOUT_${assetName}_NETWORK_FAILED`
   );
-  if (!response.ok) throw smokeError(`PUBLIC_VISUAL_CHECKOUT_ASSET_HTTP_${response.status}`);
+  if (!response.ok) throw smokeError(`PUBLIC_VISUAL_CHECKOUT_${assetName}_HTTP_${response.status}`);
   if (new TextEncoder().encode(text).byteLength > 2 * 1024 * 1024) {
-    throw smokeError('PUBLIC_VISUAL_CHECKOUT_ASSET_TOO_LARGE');
+    throw smokeError(`PUBLIC_VISUAL_CHECKOUT_${assetName}_TOO_LARGE`);
   }
   return text;
 }
