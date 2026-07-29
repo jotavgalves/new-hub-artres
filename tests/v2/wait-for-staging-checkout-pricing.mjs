@@ -105,6 +105,27 @@ export function validateStagingCheckoutPricing(result, expectedCatalogVersion) {
     return { ok: false, terminal: false, code: 'CHECKOUT_PRICING_WARNINGS_NOT_READY' };
   }
 
+  const draft = payload?.orderDraft;
+  if (
+    payload?.canonicalDraftReady !== true ||
+    draft?.schemaVersion !== 2 ||
+    draft?.status !== 'Novo' ||
+    draft?.sellerPresent !== true ||
+    draft?.customerNamePresent !== true ||
+    draft?.customerWhatsappPresent !== true ||
+    Number(draft?.itemCount) !== 1 ||
+    Number(draft?.quantity) !== 6 ||
+    Number(draft?.catalogVersion) !== expectedCatalogVersion ||
+    Number(draft?.detailsItemCount) !== 1 ||
+    Number(draft?.measurementsItemCount) !== 1 ||
+    Number(draft?.observationsItemCount) !== 1 ||
+    Number(draft?.personalizationItemCount) !== 1 ||
+    draft?.canonicalFingerprintReady !== true ||
+    draft?.idempotencyStorageKeyReady !== true
+  ) {
+    return { ok: false, terminal: false, code: 'CHECKOUT_CANONICAL_DRAFT_NOT_READY' };
+  }
+
   return { ok: true, terminal: false, code: 'CHECKOUT_PRICING_READY' };
 }
 
