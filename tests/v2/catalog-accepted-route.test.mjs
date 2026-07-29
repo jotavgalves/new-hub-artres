@@ -24,14 +24,20 @@ test('status só fica configurado com URL HTTPS e segredo servidor', () => {
   assert.equal(catalogAcceptedStatus({ ...ENV, SUPABASE_V2_SERVICE_ROLE_KEY: '' }).configured, false);
 });
 
-test('expõe metadados sanitizados da versão aceita', async () => {
+test('expõe metadados sanitizados usando o cliente RPC compartilhado', async () => {
   const response = await handleCatalogAcceptedPublicRoute(
     new Request('https://staging.example/api/catalog-meta'),
     ENV,
     'request-1',
     {
-      fetch: async (_url, init) => {
+      fetch: async function (url, init) {
+        assert.equal(this, globalThis);
+        assert.equal(typeof url, 'string');
+        assert.equal(url, 'https://catalog-staging.supabase.co/rest/v1/rpc/armazem_v2_catalog_status_v1');
         assert.equal(init.method, 'POST');
+        assert.equal(init.redirect, undefined);
+        assert.equal(init.headers['Content-Profile'], 'public');
+        assert.equal(init.headers.Prefer, 'return=representation');
         assert.match(String(init.headers.Authorization), /^Bearer /);
         return Response.json({
           ok: true,
@@ -58,7 +64,8 @@ test('mantém o contrato da rota de temas armazenada no Supabase', async () => {
     ENV,
     'request-2',
     {
-      fetch: async (_url, init) => {
+      fetch: async (url, init) => {
+        assert.equal(typeof url, 'string');
         const body = JSON.parse(init.body);
         assert.equal(body.p_mode, 'themes');
         return Response.json({ ok: true, mode: 'themes', source: 'catalog_index', folders: [{ id: 'tema-1' }] });
@@ -84,6 +91,55 @@ test('normaliza a pesquisa antes de consultar a projeção aceita', async () => 
     }
   );
   assert.equal(response.status, 200);
+});
+
+test('mapeia timeout e resposta grande sem expor detalhes internos', async () => {
+  const timeoutResponse = await handleCatalogAcceptedPublicRoute(
+    new Request('https://staging.example/api/catalog-meta'),
+    ENV,
+    'request-timeout',
+    {
+      fetch: async () => {
+        const error = new Error('aborted');
+        error.name = 'AbortError';
+        throw error;
+      }
+    }
+  );
+  assert.equal(timeoutResponse.status, 504);
+  assert.equal((await timeoutResponse.json()).error, 'CATALOG_ACCEPTED_TIMEOUT');
+
+  const largeResponse = await handleCatalogAcceptedPublicRoute(
+    new Request('https://staging.example/api/catalog-meta'),
+    { ...ENV, CATALOG_ACCEPTED_MAX_RESPONSE_BYTES: '1024' },
+    'request-large',
+    {
+      fetch: async () => new Response('x'.repeat(2048), {
+        status: 200,
+        headers: { 'content-length': '2048' }
+      })
+    }
+  );
+  assert.equal(largeResponse.status, 502);
+  assert.equal((await largeResponse.json()).error, 'CATALOG_ACCEPTED_RESPONSE_TOO_LARGE');
+});
+
+test('mapeia falha HTTP da RPC para código sanitizado', async () => {
+  const response = await handleCatalogAcceptedPublicRoute(
+    new Request('https://staging.example/api/catalog-meta'),
+    ENV,
+    'request-rpc-error',
+    {
+      fetch: async () => Response.json({
+        code: 'PGRST500',
+        message: 'detalhes internos em formato livre'
+      }, { status: 500 })
+    }
+  );
+  assert.equal(response.status, 502);
+  const payload = await response.json();
+  assert.equal(payload.error, 'CATALOG_ACCEPTED_RPC_500');
+  assert.doesNotMatch(JSON.stringify(payload), /detalhes internos/i);
 });
 
 test('não consulta Supabase quando o catálogo aceito está desativado', async () => {
