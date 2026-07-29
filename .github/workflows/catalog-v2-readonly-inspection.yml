@@ -42,6 +42,9 @@ jobs:
       CATALOG_INSPECTION_MAX_REQUESTS: '1600'
       CATALOG_INSPECTION_MAX_FOLDERS: '800'
       CATALOG_INSPECTION_MAX_ARTWORKS: '100000'
+      CATALOG_ACTIVATION_MAX_ATTEMPTS: '90'
+      CATALOG_ACTIVATION_INTERVAL_MS: '1000'
+      CATALOG_ACTIVATION_HEALTH_TIMEOUT_MS: '5000'
       TRACKING_ISSUE_NUMBER: '16'
 
     steps:
@@ -106,6 +109,10 @@ jobs:
           --secrets-file "$STAGING_SECRETS_FILE"
           --message "Inspeção temporária do catálogo V2 somente leitura"
           --tag "catalog-v2-readonly-temporary-inspection"
+
+      - name: Aguardar propagação da configuração ativa
+        id: wait_active
+        run: node scripts/catalog-v2/wait-for-staging-catalog-bridge-active.mjs
 
       - name: Percorrer e comparar catálogo real
         id: inspect_catalog
