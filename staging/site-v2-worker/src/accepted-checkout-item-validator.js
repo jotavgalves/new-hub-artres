@@ -76,10 +76,7 @@ function validateOneItem(rawItem, catalogMap) {
 
   const variantKey = validateVariant(rawItem, definition);
   const sizeKey = validateSize(rawItem, catalogItem);
-  const details = rawItem.details === undefined ? {} : rawItem.details;
-  if (!details || typeof details !== 'object' || Array.isArray(details)) {
-    throw validationError('CHECKOUT_DETAILS_INVALID');
-  }
+  const details = normalizeDetails(rawItem);
 
   const itemId = buildItemId({
     driveFileId,
@@ -102,8 +99,56 @@ function validateOneItem(rawItem, catalogMap) {
     variantKey,
     sizeKey,
     quantity: rawItem.quantity ?? rawItem.qty,
-    details: { ...details }
+    details
   });
+}
+
+function normalizeDetails(rawItem) {
+  const rawDetails = rawItem.details === undefined ? {} : rawItem.details;
+  if (!rawDetails || typeof rawDetails !== 'object' || Array.isArray(rawDetails)) {
+    throw validationError('CHECKOUT_DETAILS_INVALID');
+  }
+
+  const normalized = { ...rawDetails };
+  copyAlias(normalized, 'measurements', [
+    rawItem.measurements,
+    rawItem.medidas,
+    rawDetails.measurements,
+    rawDetails.medidas
+  ]);
+  copyAlias(normalized, 'observations', [
+    rawItem.observations,
+    rawItem.observation,
+    rawItem.observacoes,
+    rawItem.observacao,
+    rawDetails.observations,
+    rawDetails.observation,
+    rawDetails.observacoes,
+    rawDetails.observacao
+  ]);
+  copyAlias(normalized, 'personalization', [
+    rawItem.personalization,
+    rawItem.customization,
+    rawItem.personalizacao,
+    rawDetails.personalization,
+    rawDetails.customization,
+    rawDetails.personalizacao
+  ]);
+
+  delete normalized.medidas;
+  delete normalized.observacoes;
+  delete normalized.observacao;
+  delete normalized.personalizacao;
+  delete normalized.customization;
+  delete normalized.observation;
+
+  return deepFreeze(normalized);
+}
+
+function copyAlias(target, canonicalKey, candidates) {
+  if (target[canonicalKey] !== undefined) return;
+  const value = candidates.find(candidate => candidate !== undefined && candidate !== null && candidate !== '');
+  if (value !== undefined) target[canonicalKey] = value;
 }
 
 function validateVariant(rawItem, definition) {
