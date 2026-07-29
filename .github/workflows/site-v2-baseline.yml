@@ -64,6 +64,7 @@ jobs:
 
       - name: Verificar sintaxe do Worker, persistência e deploy V2
         run: |
+          node --check src/v2/cart/collection.mjs
           node --check src/v2/cart/line-identity.mjs
           node --check src/v2/catalog/legacy-readonly-bridge.mjs
           node --check src/v2/persistence/supabase-rpc-client.mjs
