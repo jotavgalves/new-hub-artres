@@ -106,8 +106,8 @@ Critério de conclusão satisfeito: checkout do staging cria e reproduz pedido V
 
 ### 6. Carrinho e frontend V2 no staging
 
-- [-] Criar identidade inequívoca para linhas do carrinho.
-- [ ] Separar códigos iguais em produtos diferentes.
+- [x] Criar identidade inequívoca para linhas do carrinho.
+- [-] Separar códigos iguais em produtos diferentes.
 - [ ] Separar variantes e tamanhos da mesma arte.
 - [ ] Aplicar mínimo e incremento de cada produto.
 - [ ] Migrar ou restaurar carrinho antigo sem perda.
@@ -115,6 +115,10 @@ Critério de conclusão satisfeito: checkout do staging cria e reproduz pedido V
 - [ ] Preservar vendedora, medidas e observações.
 - [ ] Gerar WhatsApp com itens, variantes, quantidades e medidas corretos.
 - [ ] Tratar falha de envio e permitir repetição segura.
+
+Evidência parcial:
+
+- PR #45 e `Site V2 Baseline` run `30467114248`: contrato passivo de `lineId` alinhado ao `itemId` do pedido V2, distinguindo arquivo, produto, variante e tamanho; códigos visuais, quantidade, preço e observações não determinam identidade; frontend atual e produção pública permanecem inalterados.
 
 Critério de conclusão: fluxo visual integral, da arte ao pedido e WhatsApp, aprovado no staging.
 
