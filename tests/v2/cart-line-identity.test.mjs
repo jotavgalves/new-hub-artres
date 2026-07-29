@@ -91,14 +91,23 @@ test('alias de produto converge para a chave canônica', () => {
   );
 });
 
-test('sacolinha lê variante legada de details.size e exige variante', () => {
-  const legacy = line({
+test('sacolinha lê variante legada de size e details.size sem duplicar tamanho', () => {
+  const legacyDetails = line({
     product: 'sacolinha',
     variantKey: undefined,
     sizeKey: undefined,
     details: { size: 'M' }
   });
-  assert.equal(cartLineId(legacy), 'drive-file-001:sacolinha:M:M');
+  const legacyRoot = line({
+    product: 'sacolinha',
+    variantKey: undefined,
+    sizeKey: undefined,
+    size: 'G',
+    details: {}
+  });
+
+  assert.equal(cartLineId(legacyDetails), 'drive-file-001:sacolinha:M:default');
+  assert.equal(cartLineId(legacyRoot), 'drive-file-001:sacolinha:G:default');
 
   assert.throws(
     () => cartLineId(line({
