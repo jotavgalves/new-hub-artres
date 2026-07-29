@@ -39,6 +39,9 @@ async function main() {
     throw smokeError('CHECKOUT_VALIDATION_ARTWORK_CONTRACT_INVALID');
   }
 
+  const privateCustomerName = 'Cliente Sintético do Rascunho';
+  const privateObservation = 'Observação Sintética Privada';
+  const privatePersonalization = 'Helena Sintética';
   const baseItem = {
     driveFileId,
     productKey,
@@ -47,9 +50,17 @@ async function main() {
     quantity: 6,
     unitPrice: 0.01,
     lineSubtotal: 0.06,
-    details: {}
+    medidas: { larguraCm: 50, alturaCm: 50 },
+    observacoes: privateObservation,
+    personalizacao: { nome: privatePersonalization, idade: 6 }
   };
   const validRequest = {
+    seller: { id: 'staging-seller-preview', label: 'Vendedora Sintética' },
+    customer: {
+      name: privateCustomerName,
+      whatsapp: '(81) 99999-9999',
+      phone: '(81) 98888-7777'
+    },
     subtotal: 0.01,
     total: 0.01,
     clientTotals: { total: 0.01 },
@@ -64,9 +75,16 @@ async function main() {
   if (
     Number(valid.payload?.itemCount) !== 1 ||
     !Array.isArray(valid.payload?.productKeys) ||
-    valid.payload.productKeys.length !== 1
+    valid.payload.productKeys.length !== 1 ||
+    valid.payload?.canonicalDraftReady !== true ||
+    valid.payload?.orderDraft?.sellerPresent !== true ||
+    valid.payload?.orderDraft?.customerNamePresent !== true ||
+    valid.payload?.orderDraft?.customerWhatsappPresent !== true ||
+    Number(valid.payload?.orderDraft?.measurementsItemCount) !== 1 ||
+    Number(valid.payload?.orderDraft?.observationsItemCount) !== 1 ||
+    Number(valid.payload?.orderDraft?.personalizationItemCount) !== 1
   ) {
-    throw smokeError('CHECKOUT_VALIDATION_PRODUCT_SUMMARY_FAILED');
+    throw smokeError('CHECKOUT_CANONICAL_DRAFT_SUMMARY_FAILED');
   }
 
   await expectValidationError(
@@ -106,8 +124,16 @@ async function main() {
   }
 
   const serialized = JSON.stringify(valid.payload);
-  if (serialized.includes(driveFileId)) {
-    throw smokeError('CHECKOUT_VALIDATION_RESPONSE_EXPOSED_ARTWORK_ID');
+  for (const privateValue of [
+    driveFileId,
+    privateCustomerName,
+    '81999999999',
+    privateObservation,
+    privatePersonalization
+  ]) {
+    if (serialized.includes(privateValue)) {
+      throw smokeError('CHECKOUT_VALIDATION_RESPONSE_EXPOSED_PRIVATE_DATA');
+    }
   }
 
   process.stdout.write(`${JSON.stringify({
@@ -117,6 +143,12 @@ async function main() {
     authoritativePriceApplied: true,
     clientPriceIgnored: true,
     clientTotalIgnored: true,
+    customerPreserved: true,
+    sellerPreserved: true,
+    measurementsPreserved: true,
+    observationsPreserved: true,
+    personalizationPreserved: true,
+    canonicalDraftReady: true,
     minimumRejected: true,
     invalidStepRejected: true,
     productMismatchRejected: true,

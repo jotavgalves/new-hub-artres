@@ -12,6 +12,7 @@ function readyPayload(overrides = {}) {
     dryRun: true,
     writesPerformed: false,
     authoritativePricing: true,
+    canonicalDraftReady: true,
     catalogVersion: 49,
     pricing: {
       currency: 'BRL',
@@ -24,6 +25,33 @@ function readyPayload(overrides = {}) {
       catalogVersion: 49,
       configVersion: 9001,
       clientValuesIgnored: true
+    },
+    orderDraft: {
+      schemaVersion: 2,
+      status: 'Novo',
+      sellerPresent: true,
+      sellerLabelPresent: true,
+      customerNamePresent: true,
+      customerWhatsappPresent: true,
+      customerPhonePresent: true,
+      itemCount: 1,
+      quantity: 6,
+      pricing: {
+        currency: 'BRL',
+        subtotal: 58.5,
+        discountPercent: 0,
+        discountAmount: 0,
+        total: 58.5,
+        calculationVersion: 1
+      },
+      catalogVersion: 49,
+      configVersion: 9001,
+      detailsItemCount: 1,
+      measurementsItemCount: 1,
+      observationsItemCount: 1,
+      personalizationItemCount: 1,
+      canonicalFingerprintReady: true,
+      idempotencyStorageKeyReady: true
     },
     warnings: ['CLIENT_ITEM_PRICE_IGNORED', 'CLIENT_ORDER_TOTALS_IGNORED'],
     ...overrides
@@ -70,6 +98,7 @@ test('exige três respostas completas e consecutivas', async () => {
   });
 
   assert.equal(result.payload.pricing.total, 58.5);
+  assert.equal(result.payload.orderDraft.personalizationItemCount, 1);
   assert.equal(calls, 6);
   assert.equal(sleeps, 5);
 });
@@ -115,7 +144,7 @@ test('timeout mantém somente código sanitizado', async () => {
   );
 });
 
-test('detecta divergências de versão valores e avisos', () => {
+test('detecta divergências de versão valores avisos e rascunho', () => {
   assert.equal(
     validateStagingCheckoutPricing({ status: 200, payload: readyPayload({ catalogVersion: 48 }) }, 49).code,
     'CHECKOUT_PRICING_VERSION_NOT_READY'
@@ -133,5 +162,12 @@ test('detecta divergências de versão valores e avisos', () => {
       payload: readyPayload({ warnings: [] })
     }, 49).code,
     'CHECKOUT_PRICING_WARNINGS_NOT_READY'
+  );
+  assert.equal(
+    validateStagingCheckoutPricing({
+      status: 200,
+      payload: readyPayload({ orderDraft: { ...readyPayload().orderDraft, sellerPresent: false } })
+    }, 49).code,
+    'CHECKOUT_CANONICAL_DRAFT_NOT_READY'
   );
 });

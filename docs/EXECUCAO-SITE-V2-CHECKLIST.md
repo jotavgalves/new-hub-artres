@@ -84,8 +84,8 @@ Evidência: commit `318597cfbda45f94364a75a9bb11cb2567bca2c7`.
 - [x] Manter a rota desativada por flag até os testes finais desta etapa.
 - [x] Resolver cada item contra a versão aceita do catálogo.
 - [x] Validar produto, variante, tamanho e vínculo da arte no servidor.
-- [-] Recalcular quantidade, preço, desconto e total no servidor.
-- [ ] Preservar cliente, vendedora, medidas, observações e personalizações.
+- [x] Recalcular quantidade, preço, desconto e total no servidor.
+- [-] Preservar cliente, vendedora, medidas, observações e personalizações.
 - [ ] Aplicar idempotência contra duplo clique e repetição de requisição.
 - [ ] Rejeitar arte inexistente, produto incorreto, variante inválida e quantidade inválida.
 - [ ] Adicionar proteção de origem, limite de requisições e resposta sanitizada.
@@ -96,6 +96,7 @@ Evidência parcial:
 - PR #31, `Site V2 Baseline` run `30452012797` e deploy do commit `7ee4c59e4bf76a478d0236e0d75dcc79d1401268`: rota `/api/orders/v2` restrita ao staging, desligada e incapaz de gravar pedidos.
 - PR #32, `Site V2 Baseline` run `30452445872`, migration `catalog_checkout_items_rpc` aplicada ao Supabase de staging e validação remota da versão 49: IDs duplicados são deduplicados, itens existentes são resolvidos e ausentes produzem contagem incompleta para rejeição pelo Worker.
 - PR #33, `Site V2 Baseline` run `30453757686` e deploy validado no commit `6548a7748ed274316d771f56f9882b33cfa1d742`: arte real aprovada com produto, variante e tamanho corretos; adulterações rejeitadas; nenhuma escrita pela rota seca; produção pública inalterada.
+- PR #35, `Site V2 Baseline` run `30455143822`, e PR #36, `Site V2 Baseline` run `30455666318`, com deploy validado no commit `46d0f05219b298b5b1c310d128754caafdc27e2a`: preço de R$ 0,01 e total adulterado ignorados, seis unidades recalculadas para R$ 58,50, quantidades 4 e 7 rejeitadas, checkout público desligado e produção inalterada.
 
 Critério de conclusão: checkout do staging cria e reproduz pedido V2 usando arte e produto reais do catálogo aceito, com valores calculados pelo servidor e sem alterar produção.
 

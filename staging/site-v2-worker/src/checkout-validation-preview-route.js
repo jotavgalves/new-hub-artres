@@ -1,6 +1,7 @@
 import { resolveAcceptedCatalogCheckoutItems } from './accepted-catalog-checkout-resolver.js';
 import { validateAcceptedCheckoutItems } from './accepted-checkout-item-validator.js';
 import { priceAcceptedCheckoutDraft } from './accepted-checkout-pricing.js';
+import { prepareAcceptedCheckoutCanonicalDraft } from './accepted-checkout-canonical-draft.js';
 
 const MAX_JSON_BYTES = 128 * 1024;
 
@@ -20,15 +21,25 @@ export async function handleCheckoutValidationPreview(request, env, requestId, o
     const resolveItems = options.resolveItems || resolveAcceptedCatalogCheckoutItems;
     const validateItems = options.validateItems || validateAcceptedCheckoutItems;
     const priceDraft = options.priceDraft || priceAcceptedCheckoutDraft;
+    const prepareDraft = options.prepareDraft || prepareAcceptedCheckoutCanonicalDraft;
     const resolved = await resolveItems(driveFileIds, env, options);
     const validated = validateItems(requestItems, resolved.items);
     const priced = priceDraft({ body, resolved, validated, env });
+    const canonical = await prepareDraft({
+      body,
+      resolved,
+      validated,
+      priced,
+      requestId,
+      submissionCreatedAt: options.submissionCreatedAt
+    });
 
     return json({
       ok: true,
       dryRun: true,
       writesPerformed: false,
       authoritativePricing: priced.authoritative === true,
+      canonicalDraftReady: canonical.ok === true,
       requestId,
       catalogVersion: Number(resolved.catalogVersion),
       itemCount: Number(validated.itemCount),
@@ -36,6 +47,7 @@ export async function handleCheckoutValidationPreview(request, env, requestId, o
       variantKeys: validated.variantKeys,
       sizeKeys: validated.sizeKeys,
       pricing: priced.summary,
+      orderDraft: canonical.summary,
       warnings: priced.warnings
     });
   } catch (error) {
