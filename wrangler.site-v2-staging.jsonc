@@ -20,6 +20,7 @@
     "STAGING_WRITE_ENABLED": "true",
     "STAGING_LOW_LEVEL_LEDGER_ENABLED": "false",
     "STAGING_PUBLIC_CHECKOUT_ENABLED": "false",
+    "PUBLIC_CHECKOUT_ALLOWED_ORIGINS": "https://new-hub-artres-v2-staging.jvgacontato.workers.dev",
     "SUPABASE_SHADOW_ENABLED": "true",
     "SUPABASE_V2_URL": "https://kueklnkznwpbobqwugns.supabase.co",
     "SUPABASE_SHADOW_TIMEOUT_MS": "3500",
@@ -30,6 +31,16 @@
     "CATALOG_READONLY_TIMEOUT_MS": "5000",
     "CATALOG_READONLY_MAX_RESPONSE_BYTES": "2097152"
   },
+  "ratelimits": [
+    {
+      "name": "PUBLIC_CHECKOUT_ATTEMPT_RATE_LIMITER",
+      "namespace_id": "2026072901",
+      "simple": {
+        "limit": 8,
+        "period": 60
+      }
+    }
+  ],
   "secrets": {
     "required": ["STAGING_API_TOKEN"]
   },
