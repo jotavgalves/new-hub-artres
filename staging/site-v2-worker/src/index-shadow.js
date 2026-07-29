@@ -8,6 +8,7 @@ import {
   catalogReadonlyBridgeStatus,
   handleCatalogReadonlyRoute
 } from './catalog-readonly-route.js';
+import { handleAcceptedCheckoutSubmit } from './accepted-checkout-submit-route.js';
 import { handleCheckoutValidationPreview } from './checkout-validation-preview-route.js';
 import {
   handlePublicCheckoutRoute,
@@ -26,6 +27,7 @@ import {
 export { OrderLedger };
 
 const CATALOG_READONLY_ROUTE = '/internal/v2/catalog/preview';
+const CHECKOUT_SUBMIT_ROUTE = '/internal/v2/checkout/submit';
 const CHECKOUT_VALIDATION_ROUTE = '/internal/v2/checkout/validate';
 const STATIC_ASSETS_PROBE_ROUTE = '/internal/v2/assets/probe';
 const PUBLIC_CHECKOUT_ROUTE = '/api/orders/v2';
@@ -61,6 +63,26 @@ export async function fetchStagingShadowWorker(request, env, ctx) {
   if (url.pathname === PUBLIC_CHECKOUT_ROUTE) {
     const requestId = safeRequestId(request.headers) || crypto.randomUUID();
     return handlePublicCheckoutRoute(request, env, requestId);
+  }
+
+  if (url.pathname === CHECKOUT_SUBMIT_ROUTE) {
+    const requestId = safeRequestId(request.headers) || crypto.randomUUID();
+    const authorized = await constantTimeEqualSecrets(
+      request.headers.get('x-staging-token'),
+      env.STAGING_API_TOKEN
+    );
+    if (!authorized) return json({ ok: false, error: 'STAGING_TOKEN_INVALID', requestId }, 401);
+    return handleAcceptedCheckoutSubmit(request, env, requestId, {
+      onOrderCommitted({ command, result }) {
+        return scheduleSupabaseShadowProjection({
+          ctx,
+          env,
+          command,
+          result,
+          logger: console
+        });
+      }
+    });
   }
 
   if (url.pathname === CHECKOUT_VALIDATION_ROUTE) {
