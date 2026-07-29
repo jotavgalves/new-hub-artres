@@ -7,6 +7,7 @@ export function buildSiteV2StagingDeployComment(input = {}) {
   const success = status.workflow === 'success' &&
     status.deploy === 'success' &&
     status.catalogSmoke === 'success' &&
+    status.checkoutSmoke === 'success' &&
     status.remoteSmoke === 'success' &&
     status.shadowSmoke === 'success';
 
@@ -18,6 +19,7 @@ export function buildSiteV2StagingDeployComment(input = {}) {
     `- Aceitação do catálogo: **${status.catalogAccept}**`,
     `- Publicação do Worker: **${status.deploy}**`,
     `- Design e catálogo aceito: **${status.catalogSmoke}**`,
+    `- Contrato do checkout com catálogo real: **${status.checkoutSmoke}**`,
     `- Pedido sintético, replay e bloqueios: **${status.remoteSmoke}**`,
     `- Projeção sombra no Supabase: **${status.shadowSmoke}**`,
     `- Rollback automático: **${status.rollback}**`
@@ -74,6 +76,7 @@ function sanitizeStatus(input) {
     deploy: outcome(input.deploy),
     catalogSmoke: outcome(input.catalogSmoke),
     catalogSmokeError: publicCode(input.catalogSmokeError),
+    checkoutSmoke: outcome(input.checkoutSmoke),
     remoteSmoke: outcome(input.remoteSmoke),
     shadowSmoke: outcome(input.shadowSmoke),
     rollback: outcome(input.rollback),
@@ -112,6 +115,7 @@ async function main() {
     deploy: process.env.DEPLOY_OUTCOME,
     catalogSmoke: process.env.CATALOG_SMOKE_OUTCOME,
     catalogSmokeError: process.env.CATALOG_SMOKE_ERROR_CODE,
+    checkoutSmoke: process.env.CHECKOUT_SMOKE_OUTCOME,
     remoteSmoke: process.env.REMOTE_SMOKE_OUTCOME,
     shadowSmoke: process.env.SHADOW_SMOKE_OUTCOME,
     rollback: process.env.ROLLBACK_OUTCOME,
