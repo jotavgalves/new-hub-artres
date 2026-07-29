@@ -1,4 +1,5 @@
 const STAGING_URL = normalizeOrigin(process.env.STAGING_URL);
+const STAGING_API_TOKEN = String(process.env.SITE_V2_STAGING_API_TOKEN || '').trim();
 const MAX_FOLDERS = 40;
 const PROPAGATION_MAX_ATTEMPTS = 90;
 const PROPAGATION_INTERVAL_MS = 1000;
@@ -6,6 +7,8 @@ const REQUIRED_STABLE_RESPONSES = 3;
 const TRANSIENT_STATUSES = new Set([404, 429, 500, 502, 503, 504]);
 
 async function main() {
+  if (STAGING_API_TOKEN.length < 32) throw smokeError('SITE_V2_STAGING_API_TOKEN_MISSING_OR_SHORT');
+
   const stable = await waitForAcceptedCatalogDeployment();
   const metadata = stable.metadata;
 
@@ -54,6 +57,7 @@ async function main() {
     productCount,
     reachableItemCount: itemCount,
     currentDesignServed: true,
+    assetProbe: stable.assetProbeSummary,
     productionChanged: false
   })}\n`);
 }
@@ -64,19 +68,9 @@ async function waitForAcceptedCatalogDeployment() {
 
   for (let attempt = 1; attempt <= PROPAGATION_MAX_ATTEMPTS; attempt += 1) {
     try {
-      const home = await fetchText(new URL('/', STAGING_URL), 2 * 1024 * 1024);
-      if (!home.response.ok || !/<title>Escolha suas Artes \| Armazém Festa e Eventos<\/title>/i.test(home.text)) {
-        lastCode = home.response.ok
-          ? 'STAGING_CURRENT_DESIGN_NOT_SERVED'
-          : `STAGING_HOME_HTTP_${home.response.status}`;
-        consecutive = 0;
-        await waitBeforeRetry(attempt, lastCode);
-        continue;
-      }
-
       const healthResult = await fetchJsonResult(new URL('/health', STAGING_URL));
       if (!healthResult.ok) {
-        lastCode = healthResult.code;
+        lastCode = stageCode('HEALTH', healthResult.code);
         consecutive = 0;
         await waitBeforeRetry(attempt, lastCode);
         continue;
@@ -88,7 +82,36 @@ async function waitForAcceptedCatalogDeployment() {
         health?.acceptedCatalog?.configured !== true ||
         health?.catalogReadonlyBridge?.enabled !== false
       ) {
-        lastCode = 'STAGING_ACCEPTED_CATALOG_HEALTH_PENDING';
+        lastCode = 'STAGING_HEALTH_ACCEPTED_CATALOG_PENDING';
+        consecutive = 0;
+        await waitBeforeRetry(attempt, lastCode);
+        continue;
+      }
+
+      const assetProbeResult = await fetchJsonResult(
+        new URL('/internal/v2/assets/probe', STAGING_URL),
+        { 'x-staging-token': STAGING_API_TOKEN }
+      );
+      if (!assetProbeResult.ok) {
+        lastCode = stageCode('ASSET_PROBE', assetProbeResult.code);
+        consecutive = 0;
+        await waitBeforeRetry(attempt, lastCode);
+        continue;
+      }
+      const assetProbe = assetProbeResult.payload;
+      const assetProbeValidation = validateAssetProbe(assetProbe);
+      if (!assetProbeValidation.ok) {
+        lastCode = assetProbeValidation.code;
+        consecutive = 0;
+        await waitBeforeRetry(attempt, lastCode);
+        continue;
+      }
+
+      const home = await fetchText(new URL('/', STAGING_URL), 2 * 1024 * 1024);
+      if (!home.response.ok || !/<title>Escolha suas Artes \| Armazém Festa e Eventos<\/title>/i.test(home.text)) {
+        lastCode = home.response.ok
+          ? 'STAGING_ROOT_DESIGN_TITLE_NOT_MATCHED'
+          : `STAGING_ROOT_HTTP_${home.response.status}`;
         consecutive = 0;
         await waitBeforeRetry(attempt, lastCode);
         continue;
@@ -96,7 +119,7 @@ async function waitForAcceptedCatalogDeployment() {
 
       const metadataResult = await fetchJsonResult(new URL('/api/catalog-meta', STAGING_URL));
       if (!metadataResult.ok) {
-        lastCode = metadataResult.code;
+        lastCode = stageCode('CATALOG_META', metadataResult.code);
         consecutive = 0;
         await waitBeforeRetry(attempt, lastCode);
         continue;
@@ -114,14 +137,16 @@ async function waitForAcceptedCatalogDeployment() {
         event: 'staging-accepted-catalog-stable-probe',
         attempt,
         consecutive,
-        catalogVersion: Number(metadata.catalogVersion)
+        catalogVersion: Number(metadata.catalogVersion),
+        assetProbe: assetProbeValidation.summary
       })}\n`);
 
       if (consecutive >= REQUIRED_STABLE_RESPONSES) {
         return Object.freeze({
           attempts: attempt,
           consecutive,
-          metadata
+          metadata,
+          assetProbeSummary: assetProbeValidation.summary
         });
       }
     } catch (error) {
@@ -131,7 +156,51 @@ async function waitForAcceptedCatalogDeployment() {
     }
   }
 
-  throw smokeError('STAGING_ACCEPTED_CATALOG_PROPAGATION_TIMEOUT');
+  throw smokeError(`STAGING_ACCEPTED_CATALOG_PROPAGATION_TIMEOUT_${lastCode}`.slice(0, 100));
+}
+
+function validateAssetProbe(payload) {
+  if (payload?.ok !== true) return { ok: false, code: 'STAGING_ASSET_PROBE_PAYLOAD_INVALID' };
+  if (payload.bindingConfigured !== true) return { ok: false, code: 'STAGING_ASSET_BINDING_NOT_CONFIGURED' };
+
+  const probes = Array.isArray(payload.probes) ? payload.probes : [];
+  const indexProbe = probes.find(item => item?.pathname === '/index.html');
+  const rootProbe = probes.find(item => item?.pathname === '/');
+
+  const indexResult = validateOneAssetProbe(indexProbe, 'INDEX');
+  if (!indexResult.ok) return indexResult;
+  const rootResult = validateOneAssetProbe(rootProbe, 'ROOT_BINDING');
+  if (!rootResult.ok) return rootResult;
+
+  return {
+    ok: true,
+    summary: Object.freeze({
+      indexStatus: Number(indexProbe.status),
+      rootBindingStatus: Number(rootProbe.status),
+      indexTitleMatched: indexProbe.titleMatched === true,
+      rootBindingTitleMatched: rootProbe.titleMatched === true
+    })
+  };
+}
+
+function validateOneAssetProbe(probe, label) {
+  if (!probe || typeof probe !== 'object') {
+    return { ok: false, code: `STAGING_ASSET_${label}_PROBE_MISSING` };
+  }
+  if (probe.responseReceived !== true) {
+    const error = publicCode(probe.error, 'STAGING_ASSET_FETCH_FAILED');
+    return { ok: false, code: `STAGING_ASSET_${label}_${error}`.slice(0, 100) };
+  }
+  if (probe.ok !== true || Number(probe.status) !== 200) {
+    return { ok: false, code: `STAGING_ASSET_${label}_HTTP_${Number(probe.status) || 0}` };
+  }
+  if (probe.contentType !== 'text/html') {
+    return { ok: false, code: `STAGING_ASSET_${label}_CONTENT_TYPE_INVALID` };
+  }
+  if (probe.titleMatched !== true) {
+    return { ok: false, code: `STAGING_ASSET_${label}_TITLE_NOT_MATCHED` };
+  }
+  return { ok: true };
 }
 
 function validAcceptedMetadata(metadata) {
@@ -164,38 +233,46 @@ async function catalogRequest(mode, query = {}) {
   return payload;
 }
 
-async function fetchJson(url) {
-  const result = await fetchJsonResult(url);
+async function fetchJson(url, headers = {}) {
+  const result = await fetchJsonResult(url, headers);
   if (!result.ok) throw smokeError(result.code);
   return result.payload;
 }
 
-async function fetchJsonResult(url) {
-  const { response, text } = await fetchText(url, 8 * 1024 * 1024);
+async function fetchJsonResult(url, headers = {}) {
+  const { response, text } = await fetchText(url, 8 * 1024 * 1024, headers);
   if (!response.ok) {
+    let remoteCode = '';
+    try { remoteCode = publicCode(JSON.parse(text)?.error, ''); } catch (_) {}
     return {
       ok: false,
-      code: TRANSIENT_STATUSES.has(response.status)
-        ? `STAGING_TRANSIENT_HTTP_${response.status}`
-        : `STAGING_HTTP_${response.status}`
+      code: remoteCode || (TRANSIENT_STATUSES.has(response.status)
+        ? `TRANSIENT_HTTP_${response.status}`
+        : `HTTP_${response.status}`)
     };
   }
   try {
     return { ok: true, payload: JSON.parse(text) };
   } catch (_) {
-    return { ok: false, code: 'STAGING_RESPONSE_JSON_INVALID' };
+    return { ok: false, code: 'RESPONSE_JSON_INVALID' };
   }
 }
 
-async function fetchText(url, maxBytes) {
+async function fetchText(url, maxBytes, extraHeaders = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
   try {
+    const headers = new Headers({
+      Accept: 'application/json,text/html;q=0.9,*/*;q=0.8',
+      'Cache-Control': 'no-store'
+    });
+    for (const [key, value] of Object.entries(extraHeaders || {})) headers.set(key, String(value));
+
     const response = await fetch(url, {
       method: 'GET',
       redirect: 'error',
       signal: controller.signal,
-      headers: { Accept: 'application/json,text/html;q=0.9,*/*;q=0.8', 'Cache-Control': 'no-store' }
+      headers
     });
     const text = await response.text();
     if (new TextEncoder().encode(text).byteLength > maxBytes) throw smokeError('STAGING_RESPONSE_TOO_LARGE');
@@ -229,6 +306,10 @@ function normalizeOrigin(value) {
     throw smokeError('STAGING_URL_INVALID');
   }
   return url.origin;
+}
+
+function stageCode(stage, code) {
+  return publicCode(`STAGING_${stage}_${code}`, `STAGING_${stage}_FAILED`);
 }
 
 function publicCode(value, fallback) {
