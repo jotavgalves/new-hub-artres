@@ -1,3 +1,5 @@
+import { waitForStagingCheckoutPricing } from './wait-for-staging-checkout-pricing.mjs';
+
 const STAGING_URL = normalizeOrigin(process.env.STAGING_URL);
 const STAGING_API_TOKEN = String(process.env.SITE_V2_STAGING_API_TOKEN || '').trim();
 const MAX_FOLDERS = 40;
@@ -47,35 +49,24 @@ async function main() {
     lineSubtotal: 0.06,
     details: {}
   };
-
-  const valid = await postValidation({
+  const validRequest = {
     subtotal: 0.01,
     total: 0.01,
     clientTotals: { total: 0.01 },
     items: [baseItem]
+  };
+
+  const valid = await waitForStagingCheckoutPricing({
+    expectedCatalogVersion: Number(metadata.catalogVersion),
+    request: async () => postValidation(validRequest)
   });
+
   if (
-    valid.status !== 200 ||
-    valid.payload?.ok !== true ||
-    valid.payload?.dryRun !== true ||
-    valid.payload?.writesPerformed !== false ||
-    valid.payload?.authoritativePricing !== true ||
-    Number(valid.payload?.catalogVersion) !== Number(metadata.catalogVersion) ||
     Number(valid.payload?.itemCount) !== 1 ||
     !Array.isArray(valid.payload?.productKeys) ||
-    valid.payload.productKeys.length !== 1 ||
-    valid.payload?.pricing?.currency !== 'BRL' ||
-    Number(valid.payload?.pricing?.quantity) !== 6 ||
-    Number(valid.payload?.pricing?.subtotal) !== 58.5 ||
-    Number(valid.payload?.pricing?.discountPercent) !== 0 ||
-    Number(valid.payload?.pricing?.discountAmount) !== 0 ||
-    Number(valid.payload?.pricing?.total) !== 58.5 ||
-    valid.payload?.pricing?.clientValuesIgnored !== true ||
-    !Array.isArray(valid.payload?.warnings) ||
-    !valid.payload.warnings.includes('CLIENT_ITEM_PRICE_IGNORED') ||
-    !valid.payload.warnings.includes('CLIENT_ORDER_TOTALS_IGNORED')
+    valid.payload.productKeys.length !== 1
   ) {
-    throw smokeError('CHECKOUT_VALIDATION_SERVER_PRICING_FAILED');
+    throw smokeError('CHECKOUT_VALIDATION_PRODUCT_SUMMARY_FAILED');
   }
 
   await expectValidationError(
