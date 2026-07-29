@@ -6,24 +6,32 @@ const workflowUrl = new URL('../../.github/workflows/deploy-site-v2-staging.yml'
 const preparationUrl = new URL('../../scripts/v2/prepare-site-v2-staging-deploy.mjs', import.meta.url);
 const smokeUrl = new URL('./run-staging-synthetic-remote-smoke.mjs', import.meta.url);
 const shadowSmokeUrl = new URL('./run-staging-supabase-shadow-remote-smoke.mjs', import.meta.url);
+const acceptedCatalogSmokeUrl = new URL('./run-staging-accepted-catalog-remote-smoke.mjs', import.meta.url);
 const wranglerUrl = new URL('../../wrangler.site-v2-staging.jsonc', import.meta.url);
 const workflow = await readFile(workflowUrl, 'utf8');
 const preparation = await readFile(preparationUrl, 'utf8');
 const smoke = await readFile(smokeUrl, 'utf8');
 const shadowSmoke = await readFile(shadowSmokeUrl, 'utf8');
+const acceptedCatalogSmoke = await readFile(acceptedCatalogSmokeUrl, 'utf8');
 const wrangler = await readFile(wranglerUrl, 'utf8');
 
 test('deploy automático reage somente a mudanças V2 incorporadas à main e mantém contingência manual', () => {
   assert.ok(workflow.includes('push:'));
   assert.ok(workflow.includes('branches:'));
   assert.ok(workflow.includes('- main'));
+  assert.ok(workflow.includes("- 'index.html'"));
+  assert.ok(workflow.includes("- 'assets/**'"));
   assert.ok(workflow.includes("- 'src/v2/**'"));
   assert.ok(workflow.includes("- 'scripts/v2/**'"));
+  assert.ok(workflow.includes("- 'scripts/catalog-v2/**'"));
   assert.ok(workflow.includes("- 'staging/site-v2-worker/**'"));
+  assert.ok(workflow.includes("- 'supabase/migrations/**'"));
   assert.ok(workflow.includes("- 'wrangler.site-v2-staging.jsonc'"));
   assert.ok(workflow.includes("- 'tests/v2/run-staging-synthetic-remote-smoke.mjs'"));
   assert.ok(workflow.includes("- 'tests/v2/run-staging-supabase-shadow-remote-smoke.mjs'"));
+  assert.ok(workflow.includes("- 'tests/v2/run-staging-accepted-catalog-remote-smoke.mjs'"));
   assert.ok(workflow.includes("- '.github/workflows/deploy-site-v2-staging.yml'"));
+  assert.ok(workflow.includes("- '.github/workflows/catalog-v2-auto-accept.yml'"));
   assert.ok(workflow.includes('workflow_dispatch:'));
   assert.equal(/^\s+pull_request:/m.test(workflow), false);
   assert.equal(/^\s+schedule:/m.test(workflow), false);
@@ -36,9 +44,9 @@ test('autoriza automaticamente apenas push na main e exige frase no modo manual'
   assert.ok(workflow.includes('CONFIRMACAO: ${{ inputs.confirmacao || \'\' }}'));
   assert.ok(workflow.includes('[ "$EVENT_NAME" = "push" ] && [ "$REF_NAME" = "main" ]'));
   assert.ok(workflow.includes('[ "$EVENT_NAME" = "workflow_dispatch" ]'));
-  assert.ok(workflow.includes('[ "$CONFIRMACAO" = "PUBLICAR STAGING SINTETICO" ]'));
+  assert.ok(workflow.includes('[ "$CONFIRMACAO" = "PUBLICAR STAGING V2" ]'));
   assert.ok(workflow.includes('needs: authorize-deploy'));
-  assert.ok(workflow.includes('Digite PUBLICAR STAGING SINTETICO para confirmar'));
+  assert.ok(workflow.includes('Digite PUBLICAR STAGING V2 para confirmar'));
   assert.equal(workflow.includes('needs: validate-confirmation'), false);
 });
 
@@ -78,6 +86,7 @@ test('ativação exige credenciais base e segredo sombra sem valor literal', () 
 test('preparação de secrets e rollback é testável, temporária e removida sempre', () => {
   assert.ok(workflow.includes('STAGING_SECRETS_FILE: /tmp/site-v2-staging-secrets.json'));
   assert.ok(workflow.includes('ROLLBACK_CONFIG_FILE: wrangler.site-v2-staging.rollback.runtime.jsonc'));
+  assert.ok(workflow.includes('CATALOG_REPORT_FILE: /tmp/catalog-v2-deploy-accept-report.json'));
   assert.ok(workflow.includes('umask 077'));
   assert.ok(workflow.includes('node scripts/v2/prepare-site-v2-staging-deploy.mjs'));
   assert.ok(preparation.includes('const secrets = { STAGING_API_TOKEN: stagingApiToken };'));
@@ -86,20 +95,24 @@ test('preparação de secrets e rollback é testável, temporária e removida se
   assert.ok(preparation.includes('STAGING_WRITE_ENABLED'));
   assert.ok(preparation.includes('SUPABASE_SHADOW_ENABLED'));
   assert.ok(workflow.includes('if: always()'));
-  assert.ok(workflow.includes('rm -f "$STAGING_SECRETS_FILE" "$ROLLBACK_CONFIG_FILE"'));
+  assert.ok(workflow.includes('rm -f "$STAGING_SECRETS_FILE" "$ROLLBACK_CONFIG_FILE" "$CATALOG_REPORT_FILE"'));
   assert.equal(workflow.includes('secret put STAGING_API_TOKEN'), false);
 });
 
-test('valida testes e bundles ativo e de rollback antes do deploy real', () => {
+test('valida catálogo, testes e bundles ativo e de rollback antes do deploy real', () => {
   const preparationIndex = workflow.indexOf('node scripts/v2/prepare-site-v2-staging-deploy.mjs');
-  const testsIndex = workflow.indexOf('node --test tests/v2/*.test.mjs');
+  const testsIndex = workflow.indexOf('node --test tests/v2/*.test.mjs tests/catalog-v2/*.test.mjs');
+  const catalogAcceptIndex = workflow.indexOf('node scripts/catalog-v2/publish-accepted-catalog-v2.mjs');
+  const assetPreparationIndex = workflow.indexOf('node scripts/v2/prepare-site-v2-static-assets.mjs');
   const activeDryRunIndex = workflow.indexOf('Validar bundle ativo sem publicar');
   const rollbackDryRunIndex = workflow.indexOf('Validar bundle de rollback sem publicar');
-  const deployIndex = workflow.indexOf('Publicar Worker com escrita exclusivamente sintética');
+  const deployIndex = workflow.indexOf('Publicar Worker, design atual e catálogo aceito');
 
   assert.ok(preparationIndex >= 0);
   assert.ok(testsIndex > preparationIndex);
-  assert.ok(activeDryRunIndex > testsIndex);
+  assert.ok(catalogAcceptIndex > testsIndex);
+  assert.ok(assetPreparationIndex > catalogAcceptIndex);
+  assert.ok(activeDryRunIndex > assetPreparationIndex);
   assert.ok(rollbackDryRunIndex > activeDryRunIndex);
   assert.ok(deployIndex > rollbackDryRunIndex);
   assert.ok(workflow.includes('--config wrangler.site-v2-staging.jsonc'));
@@ -108,17 +121,24 @@ test('valida testes e bundles ativo e de rollback antes do deploy real', () => {
   assert.equal(workflow.includes('--env production'), false);
 });
 
-test('deploy ativo declara escrita sintética, painel, rota técnica desligada e sombra habilitada', () => {
-  assert.ok(workflow.includes('staging-synthetic-supabase-shadow-enabled'));
-  assert.ok(workflow.includes('Escrita comercial: habilitada somente para catálogo sintético'));
+test('deploy mantém pedidos sintéticos, catálogo aceito somente leitura e sombra habilitada', () => {
+  assert.ok(workflow.includes('staging-v2-accepted-catalog'));
+  assert.ok(workflow.includes('Escrita comercial: habilitada somente para pedidos sintéticos'));
+  assert.ok(workflow.includes('Catálogo: versão aceita no Supabase de staging, somente leitura'));
   assert.ok(workflow.includes('Rota técnica do ledger: desabilitada'));
   assert.ok(workflow.includes('Projeção Supabase sombra: habilitada e validada por pedido sintético'));
   assert.ok(workflow.includes('Painel: /admin'));
   assert.ok(smoke.includes("result.payload?.catalog === 'synthetic-staging-only'"));
   assert.ok(smoke.includes('catalogVersion === 9001'));
   assert.ok(smoke.includes("lowLevelResult.payload?.error === 'LOW_LEVEL_LEDGER_DISABLED'"));
+  assert.ok(acceptedCatalogSmoke.includes("new URL('/api/catalog-meta', STAGING_URL)"));
+  assert.ok(acceptedCatalogSmoke.includes("catalogRequest('themes')"));
+  assert.ok(acceptedCatalogSmoke.includes("catalogRequest('products'"));
+  assert.ok(acceptedCatalogSmoke.includes("catalogRequest('items'"));
   assert.ok(wrangler.includes('"main": "staging/site-v2-worker/src/index-shadow.js"'));
   assert.ok(wrangler.includes('"SUPABASE_SHADOW_ENABLED": "true"'));
+  assert.ok(wrangler.includes('"CATALOG_ACCEPTED_ENABLED": "true"'));
+  assert.ok(wrangler.includes('"directory": "./staging/site-v2-public"'));
   assert.equal(wrangler.includes('"SUPABASE_SHADOW_ENABLED": "false"'), false);
 });
 
@@ -178,6 +198,7 @@ test('smoke aguarda propagação estável e repete somente respostas transitóri
 
 test('falha posterior ao deploy aciona rollback automático para escrita e sombra desativadas', () => {
   assert.ok(workflow.includes('id: deploy'));
+  assert.ok(workflow.includes('id: catalog-smoke'));
   assert.ok(workflow.includes('id: shadow-smoke'));
   assert.ok(workflow.includes("if: failure() && steps.deploy.outcome == 'success'"));
   assert.ok(workflow.includes('Rollback automático: escrita e sombra do staging desativadas'));
@@ -185,10 +206,12 @@ test('falha posterior ao deploy aciona rollback automático para escrita e sombr
   assert.ok(workflow.includes('--config "$ROLLBACK_CONFIG_FILE"'));
 });
 
-test('workflow automático não referencia recursos ou rotas do site público atual', () => {
-  assert.equal(workflow.includes('new-hub-artres.pages.dev'), false);
+test('workflow lê somente a API pública aprovada e não referencia recursos de produção protegidos', () => {
+  assert.ok(workflow.includes('CATALOG_LEGACY_BASE_URL: https://new-hub-artres.pages.dev'));
+  assert.equal((workflow.match(/https:\/\/new-hub-artres\.pages\.dev/g) || []).length, 1);
   assert.equal(workflow.includes('CONFIG_KV'), false);
   assert.equal(workflow.includes('ADMIN_SECRET_KEY'), false);
   assert.equal(workflow.includes('environment: production'), false);
   assert.equal(workflow.includes('SUPABASE_PRODUCTION'), false);
+  assert.equal(workflow.includes('routes:'), false);
 });
