@@ -10,6 +10,17 @@
     "enabled": true,
     "head_sampling_rate": 1
   },
+  "assets": {
+    "directory": "./staging/site-v2-public",
+    "binding": "ASSETS",
+    "run_worker_first": [
+      "/api/*",
+      "/internal/*",
+      "/health",
+      "/admin",
+      "/admin/*"
+    ]
+  },
   "vars": {
     "ENVIRONMENT": "staging",
     "STAGING_WRITE_ENABLED": "true",
@@ -17,6 +28,9 @@
     "SUPABASE_SHADOW_ENABLED": "true",
     "SUPABASE_V2_URL": "https://kueklnkznwpbobqwugns.supabase.co",
     "SUPABASE_SHADOW_TIMEOUT_MS": "3500",
+    "CATALOG_ACCEPTED_ENABLED": "true",
+    "CATALOG_ACCEPTED_TIMEOUT_MS": "5000",
+    "CATALOG_ACCEPTED_MAX_RESPONSE_BYTES": "8388608",
     "CATALOG_READONLY_BRIDGE_ENABLED": "false",
     "CATALOG_READONLY_TIMEOUT_MS": "5000",
     "CATALOG_READONLY_MAX_RESPONSE_BYTES": "2097152"
