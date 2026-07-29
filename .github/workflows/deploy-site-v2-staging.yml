@@ -16,6 +16,7 @@ on:
       - 'tests/v2/run-staging-synthetic-remote-smoke.mjs'
       - 'tests/v2/run-staging-supabase-shadow-remote-smoke.mjs'
       - 'tests/v2/run-staging-accepted-catalog-remote-smoke.mjs'
+      - 'tests/v2/run-staging-checkout-validation-remote-smoke.mjs'
       - '.github/workflows/deploy-site-v2-staging.yml'
       - '.github/workflows/catalog-v2-auto-accept.yml'
   workflow_dispatch:
@@ -171,6 +172,10 @@ jobs:
           fi
           exit "$status"
 
+      - name: Validar produto, variante e tamanho no checkout real
+        id: checkout-contract-smoke
+        run: node tests/v2/run-staging-checkout-validation-remote-smoke.mjs
+
       - name: Validar pedido, replay, painel e bloqueios
         id: remote-smoke
         run: node tests/v2/run-staging-synthetic-remote-smoke.mjs
@@ -203,6 +208,8 @@ jobs:
           echo "Painel: /admin"
           echo "Rotas de domínio de produção: nenhuma"
           echo "Escrita comercial: habilitada somente para pedidos sintéticos"
+          echo "Checkout público V2: desativado"
+          echo "Validação interna de produto, variante e tamanho: aprovada sem escrita"
           echo "Rota técnica do ledger: desabilitada"
           echo "Projeção Supabase sombra: habilitada e validada por pedido sintético"
           echo "Produção pública: não alterada"
@@ -216,6 +223,7 @@ jobs:
           DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
           CATALOG_SMOKE_OUTCOME: ${{ steps.catalog-smoke.outcome }}
           CATALOG_SMOKE_ERROR_CODE: ${{ steps.catalog-smoke.outputs.error_code }}
+          CHECKOUT_SMOKE_OUTCOME: ${{ steps.checkout-contract-smoke.outcome }}
           REMOTE_SMOKE_OUTCOME: ${{ steps.remote-smoke.outcome }}
           SHADOW_SMOKE_OUTCOME: ${{ steps.shadow-smoke.outcome }}
           ROLLBACK_OUTCOME: ${{ steps.rollback.outcome }}
