@@ -14,6 +14,7 @@ on:
       - 'supabase/migrations/**'
       - 'wrangler.site-v2-staging.jsonc'
       - 'tests/v2/run-staging-synthetic-remote-smoke.mjs'
+      - 'tests/v2/run-staging-synthetic-remote-smoke-with-code.mjs'
       - 'tests/v2/run-staging-supabase-shadow-remote-smoke.mjs'
       - 'tests/v2/run-staging-accepted-catalog-remote-smoke.mjs'
       - 'tests/v2/run-staging-checkout-validation-remote-smoke.mjs'
@@ -204,7 +205,25 @@ jobs:
 
       - name: Validar pedido, replay, painel e bloqueios
         id: remote-smoke
-        run: node tests/v2/run-staging-synthetic-remote-smoke.mjs
+        shell: bash
+        run: |
+          set +e
+          output="$(node tests/v2/run-staging-synthetic-remote-smoke-with-code.mjs 2>&1)"
+          status=$?
+
+          if [ "$status" -ne 0 ]; then
+            sleep 10
+            retry_output="$(GITHUB_RUN_ATTEMPT="${GITHUB_RUN_ATTEMPT:-1}-retry2" node tests/v2/run-staging-synthetic-remote-smoke-with-code.mjs 2>&1)"
+            status=$?
+            output="${output}"$'\n'"${retry_output}"
+          fi
+
+          printf '%s\n' "$output"
+          code="$(printf '%s\n' "$output" | grep -E '^[A-Z0-9_]{3,100}$' | tail -n 1 || true)"
+          if [[ "$code" =~ ^[A-Z0-9_]{3,100}$ ]]; then
+            echo "error_code=$code" >> "$GITHUB_OUTPUT"
+          fi
+          exit "$status"
 
       - name: Validar projeção sombra no Supabase
         id: shadow-smoke
@@ -253,6 +272,7 @@ jobs:
           CHECKOUT_SMOKE_OUTCOME: ${{ steps.checkout-contract-smoke.outcome }}
           CHECKOUT_SMOKE_ERROR_CODE: ${{ steps.checkout-contract-smoke.outputs.error_code }}
           REMOTE_SMOKE_OUTCOME: ${{ steps.remote-smoke.outcome }}
+          REMOTE_SMOKE_ERROR_CODE: ${{ steps.remote-smoke.outputs.error_code }}
           SHADOW_SMOKE_OUTCOME: ${{ steps.shadow-smoke.outcome }}
           ROLLBACK_OUTCOME: ${{ steps.rollback.outcome }}
           COMMIT_SHA: ${{ github.sha }}

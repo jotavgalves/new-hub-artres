@@ -5,12 +5,14 @@ import { readFile } from 'node:fs/promises';
 const workflowUrl = new URL('../../.github/workflows/deploy-site-v2-staging.yml', import.meta.url);
 const preparationUrl = new URL('../../scripts/v2/prepare-site-v2-staging-deploy.mjs', import.meta.url);
 const smokeUrl = new URL('./run-staging-synthetic-remote-smoke.mjs', import.meta.url);
+const smokeWrapperUrl = new URL('./run-staging-synthetic-remote-smoke-with-code.mjs', import.meta.url);
 const shadowSmokeUrl = new URL('./run-staging-supabase-shadow-remote-smoke.mjs', import.meta.url);
 const acceptedCatalogSmokeUrl = new URL('./run-staging-accepted-catalog-remote-smoke.mjs', import.meta.url);
 const wranglerUrl = new URL('../../wrangler.site-v2-staging.jsonc', import.meta.url);
 const workflow = await readFile(workflowUrl, 'utf8');
 const preparation = await readFile(preparationUrl, 'utf8');
 const smoke = await readFile(smokeUrl, 'utf8');
+const smokeWrapper = await readFile(smokeWrapperUrl, 'utf8');
 const shadowSmoke = await readFile(shadowSmokeUrl, 'utf8');
 const acceptedCatalogSmoke = await readFile(acceptedCatalogSmokeUrl, 'utf8');
 const wrangler = await readFile(wranglerUrl, 'utf8');
@@ -28,6 +30,7 @@ test('deploy automático reage somente a mudanças V2 incorporadas à main e man
   assert.ok(workflow.includes("- 'supabase/migrations/**'"));
   assert.ok(workflow.includes("- 'wrangler.site-v2-staging.jsonc'"));
   assert.ok(workflow.includes("- 'tests/v2/run-staging-synthetic-remote-smoke.mjs'"));
+  assert.ok(workflow.includes("- 'tests/v2/run-staging-synthetic-remote-smoke-with-code.mjs'"));
   assert.ok(workflow.includes("- 'tests/v2/run-staging-supabase-shadow-remote-smoke.mjs'"));
   assert.ok(workflow.includes("- 'tests/v2/run-staging-accepted-catalog-remote-smoke.mjs'"));
   assert.ok(workflow.includes("- '.github/workflows/deploy-site-v2-staging.yml'"));
@@ -143,7 +146,11 @@ test('deploy mantém pedidos sintéticos, catálogo aceito somente leitura e som
 });
 
 test('smoke remoto cria, repete e inspeciona somente pedido sintético', () => {
-  assert.ok(workflow.includes('node tests/v2/run-staging-synthetic-remote-smoke.mjs'));
+  assert.ok(workflow.includes('node tests/v2/run-staging-synthetic-remote-smoke-with-code.mjs'));
+  assert.ok(workflow.includes('GITHUB_RUN_ATTEMPT="${GITHUB_RUN_ATTEMPT:-1}-retry2"'));
+  assert.ok(workflow.includes('REMOTE_SMOKE_ERROR_CODE'));
+  assert.ok(smokeWrapper.includes("await import(`./run-staging-synthetic-remote-smoke.mjs?invocation="));
+  assert.ok(smokeWrapper.includes('publicFailureCode'));
   assert.ok(smoke.includes('staging-artwork-2657'));
   assert.ok(smoke.includes("first?.action === 'CREATED'"));
   assert.ok(smoke.includes("replay?.action === 'REPLAY'"));
