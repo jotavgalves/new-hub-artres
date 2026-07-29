@@ -13,6 +13,11 @@ export async function prepareAcceptedCheckoutCanonicalDraft(input = {}) {
   const quote = record(priced.quote);
   const requestId = safeRequestId(input.requestId);
   const submissionCreatedAt = validIsoDate(input.submissionCreatedAt) || new Date().toISOString();
+  const idempotencyKey = input.idempotencyKey === undefined
+    ? previewIdempotencyKey(requestId)
+    : String(input.idempotencyKey || '').trim();
+  const source = safeSource(input.source, 'catalog-v2-staging-accepted-preview');
+  const actor = safeActor(input.actor, 'staging-checkout-preview');
 
   if (!requestId) throw draftError('CHECKOUT_DRAFT_REQUEST_ID_INVALID');
   validateParties(body);
@@ -27,7 +32,7 @@ export async function prepareAcceptedCheckoutCanonicalDraft(input = {}) {
   }
 
   const command = await createAtomicLedgerCommandV2({
-    idempotencyKey: previewIdempotencyKey(requestId),
+    idempotencyKey,
     submissionCreatedAt,
     body: {
       status: body.status || 'Novo',
@@ -43,15 +48,15 @@ export async function prepareAcceptedCheckoutCanonicalDraft(input = {}) {
     serverDiscountPercent: Number(quote.pricing?.discountPercent || 0),
     productRegistryVersion: 1,
     mode: 'active',
-    source: 'catalog-v2-staging-accepted-preview',
+    source,
     requestId,
-    actor: 'staging-checkout-preview'
+    actor
   });
 
   assertPreservedContract(command, validated.items, quote.items);
   return deepFreeze({
     ok: true,
-    dryRun: true,
+    dryRun: input.dryRun !== false,
     writesPerformed: false,
     command,
     summary: commandSummary(command)
@@ -129,6 +134,16 @@ function previewIdempotencyKey(requestId) {
   const suffix = requestId.slice(0, 100);
   const value = `checkout-preview:${suffix}`;
   return value.length >= 16 ? value.slice(0, 128) : `checkout-preview:${suffix.padEnd(16, '0')}`;
+}
+
+function safeSource(value, fallback) {
+  const text = clean(value || fallback);
+  return /^[A-Za-z0-9._:-]{1,160}$/.test(text) ? text : fallback;
+}
+
+function safeActor(value, fallback) {
+  const text = clean(value || fallback);
+  return /^[A-Za-z0-9._:@-]{1,120}$/.test(text) ? text : fallback;
 }
 
 function safeRequestId(value) {
