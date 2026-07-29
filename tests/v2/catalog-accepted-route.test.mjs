@@ -14,6 +14,16 @@ const ENV = {
   CATALOG_ACCEPTED_MAX_RESPONSE_BYTES: '8388608'
 };
 
+const STATUS_PAYLOAD = {
+  ok: true,
+  configured: true,
+  catalogVersion: 49,
+  acceptedAt: '2026-07-29T01:00:00.000Z',
+  routeCount: 998,
+  folderCount: 499,
+  itemCount: 4132
+};
+
 test('status só fica configurado com URL HTTPS e segredo servidor', () => {
   assert.deepEqual(catalogAcceptedStatus(ENV), {
     enabled: true,
@@ -33,15 +43,8 @@ test('expõe metadados sanitizados da versão aceita', async () => {
       fetch: async (_url, init) => {
         assert.equal(init.method, 'POST');
         assert.match(String(init.headers.Authorization), /^Bearer /);
-        return Response.json({
-          ok: true,
-          configured: true,
-          catalogVersion: 49,
-          acceptedAt: '2026-07-29T01:00:00.000Z',
-          routeCount: 998,
-          folderCount: 499,
-          itemCount: 4132
-        });
+        assert.equal(init.headers['Content-Profile'], 'public');
+        return Response.json(STATUS_PAYLOAD);
       }
     }
   );
@@ -50,6 +53,44 @@ test('expõe metadados sanitizados da versão aceita', async () => {
   assert.equal(payload.catalogVersion, 49);
   assert.equal(payload.itemCount, 4132);
   assert.equal(payload.source, 'catalog_v2_accepted');
+});
+
+test('usa fallback de texto quando a resposta não expõe stream getReader', async () => {
+  const response = await handleCatalogAcceptedPublicRoute(
+    new Request('https://staging.example/api/catalog-meta'),
+    ENV,
+    'request-fallback',
+    {
+      fetch: async () => ({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        body: null,
+        text: async () => JSON.stringify(STATUS_PAYLOAD)
+      })
+    }
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).catalogVersion, 49);
+});
+
+test('classifica exceção de transporte sem revelar mensagem interna', async () => {
+  const response = await handleCatalogAcceptedPublicRoute(
+    new Request('https://staging.example/api/catalog-meta'),
+    ENV,
+    'request-transport',
+    {
+      fetch: async () => {
+        throw new TypeError('credencial e detalhe interno que não podem vazar');
+      }
+    }
+  );
+
+  assert.equal(response.status, 502);
+  const payload = await response.json();
+  assert.equal(payload.error, 'CATALOG_ACCEPTED_TRANSPORT_TYPEERROR');
+  assert.doesNotMatch(JSON.stringify(payload), /credencial|detalhe interno/i);
 });
 
 test('mantém o contrato da rota de temas armazenada no Supabase', async () => {
