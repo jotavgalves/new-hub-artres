@@ -108,8 +108,8 @@ Critério de conclusão satisfeito: checkout do staging cria e reproduz pedido V
 
 - [x] Criar identidade inequívoca para linhas do carrinho.
 - [x] Separar códigos iguais em produtos diferentes.
-- [-] Separar variantes e tamanhos da mesma arte.
-- [ ] Aplicar mínimo e incremento de cada produto.
+- [x] Separar variantes e tamanhos da mesma arte.
+- [-] Aplicar mínimo e incremento de cada produto.
 - [ ] Migrar ou restaurar carrinho antigo sem perda.
 - [ ] Conectar checkout visual à rota V2.
 - [ ] Preservar vendedora, medidas e observações.
@@ -119,7 +119,8 @@ Critério de conclusão satisfeito: checkout do staging cria e reproduz pedido V
 Evidência parcial:
 
 - PR #45 e `Site V2 Baseline` runs `30467114248` e `30467297205`, com deploy validado no commit `95302e0e02531cb1fba50ac3db73f4b9ac07c1cc`: contrato passivo de `lineId` alinhado ao `itemId` do pedido V2, distinguindo arquivo, produto, variante e tamanho; códigos visuais, quantidade, preço e observações não determinam identidade; frontend atual e produção pública permanecem inalterados.
-- PR #46 e `Site V2 Baseline` run `30472053198`: coleção passiva soma apenas linhas com a mesma `lineId`, mantém o mesmo código visual em produtos e arquivos distintos, atualiza ou remove somente a linha selecionada e rejeita duplicações reais e quantidades inválidas; frontend atual e produção pública permanecem inalterados.
+- PR #46 e `Site V2 Baseline` runs `30472053198` e `30472248722`, com deploy validado no commit `8bc1e4fe56bab63d514d5a44d11a9f9eb5d4593f`: coleção passiva soma apenas linhas com a mesma `lineId`, mantém o mesmo código visual em produtos e arquivos distintos, atualiza ou remove somente a linha selecionada e rejeita duplicações reais e quantidades inválidas; frontend atual e produção pública permanecem inalterados.
+- PR #47 e `Site V2 Baseline` run `30472757733`: camada passiva normaliza e valida variantes fechadas, interpreta `details.size` legado de sacolinhas como variante, mantém `sizeKey=default` nesse produto e separa variantes e tamanhos da mesma arte sem afetar outras linhas; frontend atual e produção pública permanecem inalterados.
 
 Critério de conclusão: fluxo visual integral, da arte ao pedido e WhatsApp, aprovado no staging.
 
