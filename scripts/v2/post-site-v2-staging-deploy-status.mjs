@@ -20,9 +20,13 @@ export function buildSiteV2StagingDeployComment(input = {}) {
     `- Design e catálogo aceito: **${status.catalogSmoke}**`,
     `- Pedido sintético, replay e bloqueios: **${status.remoteSmoke}**`,
     `- Projeção sombra no Supabase: **${status.shadowSmoke}**`,
-    `- Rollback automático: **${status.rollback}**`,
-    ''
+    `- Rollback automático: **${status.rollback}**`
   ];
+
+  if (status.catalogSmokeError) {
+    lines.push(`- Código do smoke do catálogo: \`${status.catalogSmokeError}\``);
+  }
+  lines.push('');
 
   if (success) {
     lines.push('O staging foi publicado e passou pelas validações remotas. A produção pública não foi alterada.');
@@ -69,6 +73,7 @@ function sanitizeStatus(input) {
     catalogAccept: outcome(input.catalogAccept),
     deploy: outcome(input.deploy),
     catalogSmoke: outcome(input.catalogSmoke),
+    catalogSmokeError: publicCode(input.catalogSmokeError),
     remoteSmoke: outcome(input.remoteSmoke),
     shadowSmoke: outcome(input.shadowSmoke),
     rollback: outcome(input.rollback),
@@ -79,6 +84,11 @@ function sanitizeStatus(input) {
 function outcome(value) {
   const normalized = String(value || 'unknown').trim().toLowerCase();
   return ALLOWED_OUTCOMES.has(normalized) ? normalized : 'unknown';
+}
+
+function publicCode(value) {
+  const normalized = String(value || '').trim();
+  return /^[A-Z0-9_]{3,100}$/.test(normalized) ? normalized : '';
 }
 
 function commitSha(value) {
@@ -101,6 +111,7 @@ async function main() {
     catalogAccept: process.env.CATALOG_ACCEPT_OUTCOME,
     deploy: process.env.DEPLOY_OUTCOME,
     catalogSmoke: process.env.CATALOG_SMOKE_OUTCOME,
+    catalogSmokeError: process.env.CATALOG_SMOKE_ERROR_CODE,
     remoteSmoke: process.env.REMOTE_SMOKE_OUTCOME,
     shadowSmoke: process.env.SHADOW_SMOKE_OUTCOME,
     rollback: process.env.ROLLBACK_OUTCOME,
