@@ -1,3 +1,5 @@
+import { waitForStagingCheckoutProtection } from './wait-for-staging-checkout-protection.mjs';
+
 const STAGING_URL = normalizeOrigin(process.env.STAGING_URL);
 const STAGING_API_TOKEN = String(process.env.SITE_V2_STAGING_API_TOKEN || '').trim();
 const MAX_FOLDERS = 40;
@@ -7,10 +9,10 @@ async function main() {
     throw smokeError('SITE_V2_STAGING_API_TOKEN_MISSING_OR_SHORT');
   }
 
-  const [health, metadata] = await Promise.all([
-    getJson('/health'),
-    getJson('/api/catalog-meta')
-  ]);
+  const health = await waitForStagingCheckoutProtection({
+    request: async () => requestJson('/health')
+  });
+  const metadata = await getJson('/api/catalog-meta');
 
   if (
     health?.ok !== true ||
