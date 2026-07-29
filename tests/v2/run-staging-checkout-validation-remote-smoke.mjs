@@ -132,9 +132,11 @@ async function main() {
     throw smokeError('CHECKOUT_IDEMPOTENT_CREATE_FAILED');
   }
 
-  const replay = await postSubmit(submitBody, idempotencyKey);
-  const replayFailure = checkoutReplayFailureCode(replay, created.payload?.orderNumber);
-  if (replayFailure) throw smokeError(replayFailure);
+  const replay = await waitForCheckoutReplay(
+    submitBody,
+    idempotencyKey,
+    created.payload?.orderNumber
+  );
 
   const conflict = await postSubmit({
     ...submitBody,
@@ -228,6 +230,28 @@ async function waitForCheckoutSubmit(body, idempotencyKey) {
     lastCode = publicCode(result.payload?.error, 'CHECKOUT_SUBMIT_EDGE_NOT_READY');
     if (attempt < 90) await sleep(1000);
   }
+  throw smokeError(lastCode);
+}
+
+async function waitForCheckoutReplay(body, idempotencyKey, expectedOrderNumber) {
+  let lastCode = 'CHECKOUT_REPLAY_EDGE_NOT_READY';
+
+  for (let attempt = 1; attempt <= 90; attempt += 1) {
+    const result = await postSubmit(body, idempotencyKey);
+    const failureCode = checkoutReplayFailureCode(result, expectedOrderNumber);
+    if (!failureCode) return result;
+
+    const transient =
+      result.status === 404 ||
+      result.status === 503 ||
+      result.status >= 500;
+
+    if (!transient) throw smokeError(failureCode);
+
+    lastCode = failureCode;
+    if (attempt < 90) await sleep(1000);
+  }
+
   throw smokeError(lastCode);
 }
 
