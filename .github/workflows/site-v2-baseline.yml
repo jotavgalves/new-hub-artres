@@ -85,6 +85,7 @@ jobs:
           node --check scripts/catalog-v2/post-catalog-inspection-status.mjs
           node --check staging/site-v2-worker/src/index.js
           node --check staging/site-v2-worker/src/index-shadow.js
+          node --check staging/site-v2-worker/src/ledger-inspection-routes.js
           node --check staging/site-v2-worker/src/catalog-accepted-route.js
           node --check staging/site-v2-worker/src/catalog-readonly-route.js
           node --check staging/site-v2-worker/src/public-checkout-protection.js
