@@ -88,10 +88,10 @@ Evidência: commit `318597cfbda45f94364a75a9bb11cb2567bca2c7`.
 - [x] Preservar cliente, vendedora, medidas, observações e personalizações.
 - [x] Aplicar idempotência contra duplo clique e repetição de requisição.
 - [x] Rejeitar arte inexistente, produto incorreto, variante inválida e quantidade inválida.
-- [-] Adicionar proteção de origem, limite de requisições e resposta sanitizada.
-- [ ] Executar smoke remoto sem pedido de cliente real.
+- [x] Adicionar proteção de origem, limite de requisições e resposta sanitizada.
+- [x] Executar smoke remoto sem pedido de cliente real.
 
-Evidência parcial:
+Evidência:
 
 - PR #31, `Site V2 Baseline` run `30452012797` e deploy do commit `7ee4c59e4bf76a478d0236e0d75dcc79d1401268`: rota `/api/orders/v2` restrita ao staging, desligada e incapaz de gravar pedidos.
 - PR #32, `Site V2 Baseline` run `30452445872`, migration `catalog_checkout_items_rpc` aplicada ao Supabase de staging e validação remota da versão 49: IDs duplicados são deduplicados, itens existentes são resolvidos e ausentes produzem contagem incompleta para rejeição pelo Worker.
@@ -100,13 +100,14 @@ Evidência parcial:
 - PR #37, `Site V2 Baseline` run `30457071943` e deploy validado no commit `daacfba330e39f19553fc598bf8ebf1f3f9090fb`: cliente, vendedora, medidas, observações e personalizações preservados no comando canônico, resposta sem dados privados, checkout público desligado e produção inalterada.
 - PR #38, `Site V2 Baseline` run `30460033254`, e PR #39, `Site V2 Baseline` run `30460937516`, com deploy validado no commit `bd933dcb6f47cbd1f956deefca377b0af8a43a58`: pedido sintético criado, repetição retornou `REPLAY` com o mesmo número, reutilização conflitante rejeitada com HTTP 409, projeção no Supabase concluída, checkout público desligado e produção inalterada.
 - PR #40, `Site V2 Baseline` run `30461919511`, PR #41, `Site V2 Baseline` run `30462322689`, e PR #42, `Site V2 Baseline` run `30462948776`, com deploy validado no commit `11c9cebf8442a4543bb68074a941dcb7a9ea31c5`: arte inexistente, produto incorreto, variante inválida e quantidade inválida rejeitados na prévia e na submissão; replay aguardou propagação ativa sem aceitar nova criação; pedido sintético e projeção aprovados; produção pública inalterada.
+- PR #43, `Site V2 Baseline` run `30465273749`, e PR #44, `Site V2 Baseline` run `30465995524`, com deploy validado no commit `e21b60f2740b4516b2172af8a4548f33c448e3b0`: origem obrigatória, allowlist, rate limiter, chave SHA-256, respostas sanitizadas e probe seco aprovados após três respostas estáveis; contrato, rejeições, pedido sintético e projeção também aprovados; produção pública inalterada.
 
-Critério de conclusão: checkout do staging cria e reproduz pedido V2 usando arte e produto reais do catálogo aceito, com valores calculados pelo servidor e sem alterar produção.
+Critério de conclusão satisfeito: checkout do staging cria e reproduz pedido V2 usando arte e produto reais do catálogo aceito, com valores calculados pelo servidor, proteções ativas e sem alterar produção.
 
 ### 6. Carrinho e frontend V2 no staging
 
-- [ ] Criar identidade inequívoca para linhas do carrinho.
-- [ ] Separar códigos iguais em produtos diferentes.
+- [x] Criar identidade inequívoca para linhas do carrinho.
+- [-] Separar códigos iguais em produtos diferentes.
 - [ ] Separar variantes e tamanhos da mesma arte.
 - [ ] Aplicar mínimo e incremento de cada produto.
 - [ ] Migrar ou restaurar carrinho antigo sem perda.
@@ -114,6 +115,10 @@ Critério de conclusão: checkout do staging cria e reproduz pedido V2 usando ar
 - [ ] Preservar vendedora, medidas e observações.
 - [ ] Gerar WhatsApp com itens, variantes, quantidades e medidas corretos.
 - [ ] Tratar falha de envio e permitir repetição segura.
+
+Evidência parcial:
+
+- PR #45 e `Site V2 Baseline` run `30467114248`: contrato passivo de `lineId` alinhado ao `itemId` do pedido V2, distinguindo arquivo, produto, variante e tamanho; códigos visuais, quantidade, preço e observações não determinam identidade; frontend atual e produção pública permanecem inalterados.
 
 Critério de conclusão: fluxo visual integral, da arte ao pedido e WhatsApp, aprovado no staging.
 
