@@ -1,3 +1,5 @@
+import { waitForStagingCheckoutProtection } from './wait-for-staging-checkout-protection.mjs';
+
 const STAGING_URL = normalizeOrigin(process.env.STAGING_URL);
 const STAGING_API_TOKEN = String(process.env.SITE_V2_STAGING_API_TOKEN || '').trim();
 const PROTECTION_ROUTE = '/internal/v2/checkout/protection';
@@ -7,20 +9,10 @@ async function main() {
     throw smokeError('SITE_V2_STAGING_API_TOKEN_MISSING_OR_SHORT');
   }
 
-  const health = await getJson('/health');
-  const protection = health?.publicCheckout?.protection;
-  if (
-    health?.ok !== true ||
-    health?.publicCheckout?.enabled !== false ||
-    health?.publicCheckout?.acceptsRealOrders !== false ||
-    protection?.configured !== true ||
-    protection?.requiresOrigin !== true ||
-    protection?.rateLimiterConfigured !== true ||
-    Number(protection?.allowedOriginCount) < 1 ||
-    protection?.keyStrategy !== 'route-and-idempotency-sha256'
-  ) {
-    throw smokeError('PUBLIC_CHECKOUT_PROTECTION_HEALTH_INVALID');
-  }
+  const health = await waitForStagingCheckoutProtection({
+    request: async () => requestJson('/health')
+  });
+  const protection = health.publicCheckout.protection;
 
   const privateKey = `protection-private-${crypto.randomUUID()}`;
   const privateBody = 'conteudo-privado-nao-lido';
@@ -36,7 +28,8 @@ async function main() {
     valid.payload?.dryRun !== true ||
     valid.payload?.writesPerformed !== false ||
     valid.payload?.originAllowed !== true ||
-    valid.payload?.rateLimitApplied !== true
+    valid.payload?.rateLimitApplied !== true ||
+    protection.configured !== true
   ) {
     throw smokeError('PUBLIC_CHECKOUT_PROTECTION_VALID_REQUEST_FAILED');
   }
@@ -136,6 +129,7 @@ async function main() {
   process.stdout.write(`${JSON.stringify({
     ok: true,
     protectionConfigured: true,
+    stableHealthResponses: 3,
     tokenRequired: true,
     allowedOriginAccepted: true,
     missingOriginRejected: true,
@@ -177,14 +171,6 @@ function assertError(result, status, code, failureCode) {
   ) {
     throw smokeError(failureCode);
   }
-}
-
-async function getJson(path) {
-  const result = await requestJson(path);
-  if (result.status !== 200 || !result.payload) {
-    throw smokeError('PUBLIC_CHECKOUT_PROTECTION_DEPENDENCY_FAILED');
-  }
-  return result.payload;
 }
 
 async function requestJson(pathOrUrl, options = {}) {
