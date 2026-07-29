@@ -6,14 +6,18 @@ import {
   handlePublicCheckoutRoute,
   publicCheckoutStatus
 } from '../../staging/site-v2-worker/src/public-checkout-route.js';
-import { createPublicCheckoutRateLimitKey } from '../../staging/site-v2-worker/src/public-checkout-protection.js';
+import {
+  createPublicCheckoutRateLimitKey,
+  handlePublicCheckoutProtectionProbe
+} from '../../staging/site-v2-worker/src/public-checkout-protection.js';
 
 const ROUTE = 'https://new-hub-artres-v2-staging.example/api/orders/v2';
+const PROBE_ROUTE = 'https://new-hub-artres-v2-staging.example/internal/v2/checkout/protection';
 const ORIGIN = new URL(ROUTE).origin;
 const requestId = 'checkout-foundation-test';
 
 function request(options = {}) {
-  return new Request(ROUTE, {
+  return new Request(options.url || ROUTE, {
     method: options.method || 'POST',
     headers: options.headers || {},
     body: options.body,
@@ -41,13 +45,14 @@ function stagingEnv(overrides = {}) {
 }
 
 function validHeaders(overrides = {}) {
-  return {
+  const values = {
     origin: ORIGIN,
     'sec-fetch-site': 'same-origin',
     'content-type': 'application/json',
     'idempotency-key': 'checkout-test-key-0001',
     ...overrides
   };
+  return Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined));
 }
 
 async function payload(response) {
@@ -73,7 +78,7 @@ test('status mantém checkout público desativado com proteção configurada', (
   });
 });
 
-test('rota aceita somente POST e retorna resposta sanitizada', async () => {
+test('rota pública aceita somente POST e responde de forma sanitizada', async () => {
   const response = await handlePublicCheckoutRoute(
     request({ method: 'GET' }),
     stagingEnv(),
@@ -89,7 +94,7 @@ test('rota aceita somente POST e retorna resposta sanitizada', async () => {
   });
 });
 
-test('rota não existe fora do staging', async () => {
+test('rota pública não existe fora do staging', async () => {
   const response = await handlePublicCheckoutRoute(
     request(),
     { ENVIRONMENT: 'production', STAGING_PUBLIC_CHECKOUT_ENABLED: 'true' },
@@ -100,10 +105,10 @@ test('rota não existe fora do staging', async () => {
   assert.equal((await payload(response)).error, 'PUBLIC_CHECKOUT_STAGING_ONLY');
 });
 
-test('flag desligada valida proteção e não lê o corpo', async () => {
+test('flag desligada bloqueia antes de origem rate limit e leitura do corpo', async () => {
   const calls = [];
   const req = request({
-    headers: validHeaders(),
+    headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ customer: { name: 'não deve ser lido' } })
   });
 
@@ -116,22 +121,45 @@ test('flag desligada valida proteção e não lê o corpo', async () => {
   assert.equal(response.status, 503);
   assert.equal((await payload(response)).error, 'PUBLIC_CHECKOUT_DISABLED');
   assert.equal(req.bodyUsed, false);
+  assert.equal(calls.length, 0);
+});
+
+test('probe seco aceita origem permitida e aplica rate limit sem ler corpo', async () => {
+  const calls = [];
+  const req = request({
+    url: PROBE_ROUTE,
+    headers: validHeaders(),
+    body: JSON.stringify({ private: 'não deve ser lido' })
+  });
+  const response = await handlePublicCheckoutProtectionProbe(
+    req,
+    stagingEnv({ PUBLIC_CHECKOUT_ATTEMPT_RATE_LIMITER: limiter(true, calls) }),
+    requestId
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await payload(response), {
+    ok: true,
+    dryRun: true,
+    writesPerformed: false,
+    requestId,
+    originAllowed: true,
+    rateLimitApplied: true
+  });
+  assert.equal(req.bodyUsed, false);
   assert.equal(calls.length, 1);
   assert.match(calls[0].key, /^checkout:v2:[a-f0-9]{64}$/);
   assert.equal(calls[0].key.includes('checkout-test-key-0001'), false);
 });
 
-test('origem ausente ou cruzada é rejeitada antes do rate limit', async () => {
+test('probe rejeita origem ausente ou cruzada antes do rate limit', async () => {
   for (const headers of [
     validHeaders({ origin: undefined }),
     validHeaders({ origin: 'https://origem-invalida.example', 'sec-fetch-site': 'cross-site' })
   ]) {
     const calls = [];
-    const cleanHeaders = Object.fromEntries(
-      Object.entries(headers).filter(([, value]) => value !== undefined)
-    );
-    const response = await handlePublicCheckoutRoute(
-      request({ headers: cleanHeaders }),
+    const response = await handlePublicCheckoutProtectionProbe(
+      request({ url: PROBE_ROUTE, headers }),
       stagingEnv({ PUBLIC_CHECKOUT_ATTEMPT_RATE_LIMITER: limiter(true, calls) }),
       requestId
     );
@@ -142,17 +170,17 @@ test('origem ausente ou cruzada é rejeitada antes do rate limit', async () => {
   }
 });
 
-test('exige JSON e chave de idempotência válida antes do rate limit', async () => {
-  const invalidContent = await handlePublicCheckoutRoute(
-    request({ headers: validHeaders({ 'content-type': undefined }) }),
+test('probe exige JSON e chave de idempotência antes do rate limit', async () => {
+  const invalidContent = await handlePublicCheckoutProtectionProbe(
+    request({ url: PROBE_ROUTE, headers: validHeaders({ 'content-type': undefined }) }),
     stagingEnv(),
     requestId
   );
   assert.equal(invalidContent.status, 415);
   assert.equal((await payload(invalidContent)).error, 'CONTENT_TYPE_NOT_JSON');
 
-  const invalidKey = await handlePublicCheckoutRoute(
-    request({ headers: validHeaders({ 'idempotency-key': 'curta' }) }),
+  const invalidKey = await handlePublicCheckoutProtectionProbe(
+    request({ url: PROBE_ROUTE, headers: validHeaders({ 'idempotency-key': 'curta' }) }),
     stagingEnv(),
     requestId
   );
@@ -160,17 +188,17 @@ test('exige JSON e chave de idempotência válida antes do rate limit', async ()
   assert.equal((await payload(invalidKey)).error, 'IDEMPOTENCY_KEY_INVALID');
 });
 
-test('falha fechada quando origem ou limiter não estão configurados', async () => {
-  const missingOriginConfig = await handlePublicCheckoutRoute(
-    request({ headers: validHeaders() }),
+test('probe falha fechado quando origem ou limiter não estão configurados', async () => {
+  const missingOriginConfig = await handlePublicCheckoutProtectionProbe(
+    request({ url: PROBE_ROUTE, headers: validHeaders() }),
     stagingEnv({ PUBLIC_CHECKOUT_ALLOWED_ORIGINS: '' }),
     requestId
   );
   assert.equal(missingOriginConfig.status, 503);
   assert.equal((await payload(missingOriginConfig)).error, 'PUBLIC_CHECKOUT_PROTECTION_NOT_CONFIGURED');
 
-  const missingLimiter = await handlePublicCheckoutRoute(
-    request({ headers: validHeaders() }),
+  const missingLimiter = await handlePublicCheckoutProtectionProbe(
+    request({ url: PROBE_ROUTE, headers: validHeaders() }),
     stagingEnv({ PUBLIC_CHECKOUT_ATTEMPT_RATE_LIMITER: undefined }),
     requestId
   );
@@ -178,10 +206,10 @@ test('falha fechada quando origem ou limiter não estão configurados', async ()
   assert.equal((await payload(missingLimiter)).error, 'PUBLIC_CHECKOUT_PROTECTION_NOT_CONFIGURED');
 });
 
-test('rate limit retorna 429 sem expor a chave', async () => {
+test('probe retorna 429 sem expor chave bruta', async () => {
   const rawKey = 'checkout-private-key-0001';
-  const response = await handlePublicCheckoutRoute(
-    request({ headers: validHeaders({ 'idempotency-key': rawKey }) }),
+  const response = await handlePublicCheckoutProtectionProbe(
+    request({ url: PROBE_ROUTE, headers: validHeaders({ 'idempotency-key': rawKey }) }),
     stagingEnv({ PUBLIC_CHECKOUT_ATTEMPT_RATE_LIMITER: limiter(false) }),
     requestId
   );
@@ -198,8 +226,8 @@ test('rate limit retorna 429 sem expor a chave', async () => {
 });
 
 test('indisponibilidade do limiter retorna 503 sanitizado', async () => {
-  const response = await handlePublicCheckoutRoute(
-    request({ headers: validHeaders() }),
+  const response = await handlePublicCheckoutProtectionProbe(
+    request({ url: PROBE_ROUTE, headers: validHeaders() }),
     stagingEnv({
       PUBLIC_CHECKOUT_ATTEMPT_RATE_LIMITER: {
         async limit() {
@@ -216,7 +244,7 @@ test('indisponibilidade do limiter retorna 503 sanitizado', async () => {
   assert.equal(JSON.stringify(result).includes('detalhe interno'), false);
 });
 
-test('implementação continua sem criar pedido após todas as barreiras', async () => {
+test('flag ligada ainda não cria pedido após todas as barreiras', async () => {
   const req = request({
     headers: validHeaders(),
     body: JSON.stringify({ items: [{ driveFileId: 'real-future-item' }] })
@@ -263,7 +291,9 @@ test('Worker e configuração integram origem e binding mantendo flag desligada'
   ]);
 
   assert.match(entrypoint, /const PUBLIC_CHECKOUT_ROUTE = '\/api\/orders\/v2';/);
+  assert.match(entrypoint, /const PUBLIC_CHECKOUT_PROTECTION_ROUTE = '\/internal\/v2\/checkout\/protection';/);
   assert.match(entrypoint, /handlePublicCheckoutRoute\(request, env, requestId\)/);
+  assert.match(entrypoint, /handlePublicCheckoutProtectionProbe\(request, env, requestId\)/);
   assert.match(entrypoint, /publicCheckout: checkoutStatus/);
   assert.match(wrangler, /"STAGING_PUBLIC_CHECKOUT_ENABLED": "false"/);
   assert.doesNotMatch(wrangler, /"STAGING_PUBLIC_CHECKOUT_ENABLED": "true"/);
