@@ -20,6 +20,20 @@ export function publicCheckoutProtectionStatus(env = {}) {
   });
 }
 
+export async function handlePublicCheckoutProtectionProbe(request, env, requestId, options = {}) {
+  const protection = await protectPublicCheckoutRequest(request, env, requestId, options);
+  if (!protection.ok) return protection.response;
+
+  return publicCheckoutJson({
+    ok: true,
+    dryRun: true,
+    writesPerformed: false,
+    requestId,
+    originAllowed: true,
+    rateLimitApplied: protection.rateLimitApplied === true
+  });
+}
+
 export async function protectPublicCheckoutRequest(request, env = {}, requestId = '', options = {}) {
   const allowedOrigins = options.allowedOrigins || parseAllowedOrigins(env.PUBLIC_CHECKOUT_ALLOWED_ORIGINS);
   const validation = validatePublicOrderRequest(request, {
@@ -54,7 +68,7 @@ export async function protectPublicCheckoutRequest(request, env = {}, requestId 
   }
 
   const rateLimitKey = await createPublicCheckoutRateLimitKey({
-    route: new URL(request.url).pathname,
+    route: PUBLIC_CHECKOUT_ROUTE,
     idempotencyKey: validation.request.idempotencyKey
   });
 
