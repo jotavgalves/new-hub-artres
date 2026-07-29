@@ -27,13 +27,13 @@ export async function handlePublicCheckoutRoute(request, env, requestId, options
     );
   }
 
-  const protection = await protectPublicCheckoutRequest(
-    request,
-    env,
-    requestId,
-    options
-  );
-  if (!protection.ok) return protection.response;
+  if (request.method !== 'POST') {
+    return publicCheckoutJson(
+      { ok: false, error: 'METHOD_NOT_ALLOWED', requestId },
+      405,
+      { Allow: 'POST' }
+    );
+  }
 
   const status = publicCheckoutStatus(env);
   if (!status.enabled) {
@@ -42,6 +42,14 @@ export async function handlePublicCheckoutRoute(request, env, requestId, options
       503
     );
   }
+
+  const protection = await protectPublicCheckoutRequest(
+    request,
+    env,
+    requestId,
+    options
+  );
+  if (!protection.ok) return protection.response;
 
   // Barreira deliberada. A proteção completa é validada antes da ativação,
   // porém a criação pública de pedidos permanece desligada até o smoke final.
