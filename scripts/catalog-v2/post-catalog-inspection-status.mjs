@@ -13,6 +13,7 @@ export function buildCatalogInspectionComment(input = {}) {
     '### Resultado da inspeção somente leitura',
     '',
     `- Inspeção: **${inspectionOutcome}**`,
+    `- Modo: **${report.executionMode || 'não informado'}**`,
     `- Desativação normal: **${deactivationOutcome}**`,
     `- Verificação da ponte desativada: **${verifyOutcome}**`,
     `- Rollback emergencial: **${rollbackOutcome}**`,
@@ -21,7 +22,7 @@ export function buildCatalogInspectionComment(input = {}) {
     '#### Contagens sanitizadas',
     '',
     `- Versão do catálogo: ${report.catalogVersion}`,
-    `- Requisições internas: ${report.requestCount}`,
+    `- Requisições públicas: ${report.requestCount}`,
     `- Temas: ${report.themeCount}`,
     `- Pastas percorridas: ${report.folderCount}`,
     `- Produtos virtuais: ${report.productCount}`,
@@ -30,6 +31,9 @@ export function buildCatalogInspectionComment(input = {}) {
     `- Diferenças sombra: ${report.differenceCount}`,
     `- Percurso completo: ${report.traversalComplete ? 'sim' : 'não'}`
   ];
+
+  appendSummary(lines, 'Códigos de rejeição', report.rejectionSummary);
+  appendSummary(lines, 'Categorias de diferença', report.differenceSummary);
 
   if (report.error) {
     lines.push('', `- Código de erro sanitizado: \`${report.error}\``);
@@ -85,8 +89,19 @@ export async function postCatalogInspectionStatus(options = {}) {
   return Object.freeze({ ok: true, issueNumber });
 }
 
+function appendSummary(lines, title, summary) {
+  if (!Array.isArray(summary) || !summary.length) return;
+  lines.push('', `#### ${title}`, '');
+  for (const item of summary) lines.push(`- \`${item.code}\`: ${item.count}`);
+}
+
 function sanitizeReport(input) {
   return Object.freeze({
+    executionMode: input.executionMode === 'github-actions-local-contract'
+      ? 'github-actions-local-contract'
+      : input.executionMode === 'staging-worker-bridge'
+        ? 'staging-worker-bridge'
+        : '',
     requestCount: nonNegativeInteger(input.requestCount),
     themeCount: nonNegativeInteger(input.themeCount),
     folderCount: nonNegativeInteger(input.folderCount),
@@ -96,8 +111,20 @@ function sanitizeReport(input) {
     differenceCount: nonNegativeInteger(input.differenceCount),
     catalogVersion: nonNegativeInteger(input.catalogVersion),
     traversalComplete: input.traversalComplete === true,
+    rejectionSummary: sanitizeSummary(input.rejectionSummary),
+    differenceSummary: sanitizeSummary(input.differenceSummary),
     error: publicCode(input.error)
   });
+}
+
+function sanitizeSummary(value) {
+  return (Array.isArray(value) ? value : [])
+    .map(item => ({
+      code: publicCode(item?.code),
+      count: nonNegativeInteger(item?.count)
+    }))
+    .filter(item => item.code && item.count > 0)
+    .slice(0, 20);
 }
 
 function outcome(value) {

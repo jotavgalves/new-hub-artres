@@ -70,6 +70,7 @@ jobs:
           node --check scripts/catalog-v2/prepare-catalog-readonly-inspection.mjs
           node --check scripts/catalog-v2/wait-for-staging-catalog-bridge-active.mjs
           node --check scripts/catalog-v2/run-staging-catalog-readonly-inspection.mjs
+          node --check scripts/catalog-v2/run-catalog-v2-local-readonly-inspection.mjs
           node --check scripts/catalog-v2/verify-staging-catalog-bridge-disabled.mjs
           node --check scripts/catalog-v2/post-catalog-inspection-status.mjs
           node --check staging/site-v2-worker/src/index.js
