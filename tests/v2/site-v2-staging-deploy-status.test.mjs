@@ -26,15 +26,29 @@ test('relatório de deploy confirma validações sem expor dados sensíveis', ()
   assert.doesNotMatch(body, /81999999999/);
 });
 
+test('falha inclui somente código público e sanitizado do smoke', () => {
+  const body = buildSiteV2StagingDeployComment({
+    workflowStatus: 'failure',
+    catalogSmoke: 'failure',
+    catalogSmokeError: 'STAGING_ASSET_PROBE_INDEX_FETCH_FAILED',
+    token: 'nao-pode-vazar'
+  });
+
+  assert.match(body, /Código do smoke do catálogo: `STAGING_ASSET_PROBE_INDEX_FETCH_FAILED`/);
+  assert.doesNotMatch(body, /nao-pode-vazar/);
+});
+
 test('resultado desconhecido é sanitizado e não inventa sucesso', () => {
   const body = buildSiteV2StagingDeployComment({
     workflowStatus: 'qualquer-coisa',
     deploy: '<script>alert(1)</script>',
+    catalogSmokeError: '<script>erro</script>',
     commit: 'nao-e-sha'
   });
 
   assert.match(body, /Resultado final: \*\*unknown\*\*/);
   assert.match(body, /Publicação do Worker: \*\*unknown\*\*/);
   assert.match(body, /Commit: `desconhecido`/);
+  assert.doesNotMatch(body, /Código do smoke do catálogo/);
   assert.doesNotMatch(body, /<script>/);
 });
