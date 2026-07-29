@@ -1,0 +1,124 @@
+import { readFile } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
+
+export function buildCatalogAutoAcceptComment(input = {}) {
+  const report = sanitizeReport(input.report || {});
+  const outcome = sanitizeOutcome(input.outcome);
+  const lines = [
+    '### Aceitação automática do catálogo V2',
+    '',
+    `- Resultado do workflow: **${outcome}**`,
+    `- Ação: **${report.action || 'FAILED'}**`,
+    `- Versão: **${report.catalogVersion}**`,
+    `- Aceita no staging: **${report.accepted ? 'sim' : 'não'}**`,
+    `- Catálogo alterado: **${report.changed ? 'sim' : 'não'}**`,
+    `- Percurso completo: **${report.traversalComplete ? 'sim' : 'não'}**`,
+    `- Rotas navegáveis: ${report.routeCount}`,
+    `- Temas: ${report.themeCount}`,
+    `- Pastas: ${report.folderCount}`,
+    `- Produtos virtuais: ${report.productCount}`,
+    `- Artes únicas: ${report.artworkCount}`,
+    `- Linhas rejeitadas: ${report.rejectedCount}`,
+    `- Diferenças de contrato: ${report.differenceCount}`
+  ];
+  if (report.error) lines.push('', `- Código de erro sanitizado: \`${report.error}\``);
+  lines.push(
+    '',
+    'A versão anterior permanece ativa quando a validação ou a carga falha. Nenhum ID de arquivo, URL de arte, token ou dado de cliente foi incluído.'
+  );
+  return lines.join('\n');
+}
+
+export async function postCatalogAutoAcceptStatus(options = {}) {
+  const token = String(options.token || '').trim();
+  const repository = String(options.repository || '').trim();
+  const issueNumber = Number.parseInt(options.issueNumber, 10);
+  const reportPath = String(options.reportPath || '').trim();
+  const fetchImpl = options.fetch || globalThis.fetch;
+
+  if (token.length < 20) throw statusError('GITHUB_TOKEN_MISSING_OR_SHORT');
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) throw statusError('GITHUB_REPOSITORY_INVALID');
+  if (!Number.isInteger(issueNumber) || issueNumber < 1) throw statusError('TRACKING_ISSUE_NUMBER_INVALID');
+  if (typeof fetchImpl !== 'function') throw statusError('FETCH_REQUIRED');
+
+  let report = {};
+  try { report = JSON.parse(await readFile(reportPath, 'utf8')); } catch (_) {}
+  const sanitized = sanitizeReport(report);
+  if (sanitized.action === 'UNCHANGED' && options.outcome === 'success') {
+    return Object.freeze({ ok: true, posted: false, reason: 'UNCHANGED' });
+  }
+
+  const body = buildCatalogAutoAcceptComment({ report: sanitized, outcome: options.outcome });
+  const url = new URL(`https://api.github.com/repos/${repository}/issues/${issueNumber}/comments`);
+  const response = await Reflect.apply(fetchImpl, globalThis, [url, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/vnd.github+json',
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'catalog-v2-auto-accept'
+    },
+    body: JSON.stringify({ body })
+  }]);
+  if (!response.ok) throw statusError(`GITHUB_COMMENT_HTTP_${response.status}`);
+  return Object.freeze({ ok: true, posted: true, issueNumber });
+}
+
+function sanitizeReport(input) {
+  return Object.freeze({
+    action: ['ACCEPTED', 'REPLAY', 'UNCHANGED'].includes(input.action) ? input.action : '',
+    catalogVersion: nonNegativeInteger(input.catalogVersion),
+    accepted: input.accepted === true,
+    changed: input.changed === true,
+    traversalComplete: input.traversalComplete === true,
+    routeCount: nonNegativeInteger(input.routeCount),
+    themeCount: nonNegativeInteger(input.themeCount),
+    folderCount: nonNegativeInteger(input.folderCount),
+    productCount: nonNegativeInteger(input.productCount),
+    artworkCount: nonNegativeInteger(input.artworkCount),
+    rejectedCount: nonNegativeInteger(input.rejectedCount),
+    differenceCount: nonNegativeInteger(input.differenceCount),
+    error: publicCode(input.error)
+  });
+}
+
+function sanitizeOutcome(value) {
+  const text = String(value || 'unknown').trim().toLowerCase();
+  return ['success', 'failure', 'cancelled', 'skipped'].includes(text) ? text : 'unknown';
+}
+
+function publicCode(value) {
+  const text = String(value || '').trim();
+  return /^[A-Z0-9_]{3,100}$/.test(text) ? text : '';
+}
+
+function nonNegativeInteger(value) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+}
+
+function statusError(code) {
+  const error = new Error(code);
+  error.code = code;
+  return error;
+}
+
+async function main() {
+  const result = await postCatalogAutoAcceptStatus({
+    token: process.env.GITHUB_TOKEN,
+    repository: process.env.GITHUB_REPOSITORY,
+    issueNumber: process.env.TRACKING_ISSUE_NUMBER,
+    reportPath: process.env.CATALOG_REPORT_FILE,
+    outcome: process.env.PUBLISH_OUTCOME
+  });
+  process.stdout.write(`${JSON.stringify(result)}\n`);
+}
+
+const executedPath = process.argv[1] ? pathToFileURL(process.argv[1]).href : '';
+if (executedPath === import.meta.url) {
+  main().catch(error => {
+    console.error(String(error?.code || 'CATALOG_AUTO_ACCEPT_STATUS_FAILED'));
+    process.exitCode = 1;
+  });
+}
