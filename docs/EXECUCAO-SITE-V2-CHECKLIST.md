@@ -48,7 +48,13 @@ Até essa conclusão, fica proibido abrir outra frente, adicionar módulo passiv
 
 Uma falha encontrada durante o baseline ou deploy só pode gerar correção diretamente ligada ao código terminal comprovado. Melhorias adjacentes devem ser registradas como trabalho futuro, sem entrar no PR #52.
 
-Próximo item único: corrigir as duas asserções antigas restantes, executar o baseline completo e concluir o PR #52.
+Progresso desta entrega:
+
+- [x] Duas asserções antigas restantes corrigidas.
+- [x] `Site V2 Baseline` run `30481083905` aprovado integralmente.
+- [-] Incorporar o PR #52 e validar o deploy final do staging.
+
+Próximo item único: incorporar o PR #52 e validar criação, `REPLAY`, WhatsApp e projeção no staging.
 
 ## Progresso consolidado
 
@@ -148,6 +154,7 @@ Evidência parcial:
 - PR #47 e `Site V2 Baseline` runs `30472757733` e `30472926559`, com deploy validado no commit `b4e4c557971b491c5f3d9909f8c94f205fa3ce23`: camada passiva normaliza e valida variantes fechadas, interpreta `details.size` legado de sacolinhas como variante, mantém `sizeKey=default` nesse produto e separa variantes e tamanhos da mesma arte sem afetar outras linhas; frontend atual e produção pública permanecem inalterados.
 - PR #48 e `Site V2 Baseline` runs `30473507326` e `30473693881`, com deploy validado no commit `deb8b8e2edebc7e016b0200980cf5e0b70f6b0da`: motor passivo consome exclusivamente snapshots autoritativos, aplica mínimo, passo, quantidade inicial e escopo por item ou total do produto; o 50x50 real de staging inicia em 6 e avança de 2 em 2, quantidades 4 e 7 são rejeitadas, regras ausentes falham fechadas e o `PRODUCT_CONFIG` legado não é usado.
 - PR #49 e `Site V2 Baseline` run `30474279950`: plano passivo migra JSON do localStorage, arrays antigos e links Base64; cruza linhas com o catálogo, preserva vendedor, medidas, observações e quantidades, mantém backup bruto e interpretado, encaminha ambiguidades para revisão e não executa qualquer escrita automática.
+- PR #52, `Site V2 Baseline` run `30481083905`: as duas asserções antigas restantes foram alinhadas aos contratos atuais; testes, sintaxe, transformação isolada dos assets, bundle Cloudflare, Worker local e painel passaram integralmente. Merge e deploy remoto ainda pendentes.
 
 Critério de conclusão: fluxo visual integral, da arte ao pedido e WhatsApp, aprovado no staging.
 
