@@ -86,6 +86,7 @@ jobs:
           node --check staging/site-v2-worker/src/accepted-catalog-checkout-resolver.js
           node --check staging/site-v2-worker/src/accepted-checkout-item-validator.js
           node --check staging/site-v2-worker/src/accepted-checkout-pricing.js
+          node --check staging/site-v2-worker/src/accepted-checkout-canonical-draft.js
           node --check staging/site-v2-worker/src/checkout-validation-preview-route.js
           node --check staging/site-v2-worker/src/supabase-shadow-projector.js
           node --check staging/site-v2-worker/src/order-ledger-do.js
