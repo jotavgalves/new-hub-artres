@@ -11,6 +11,9 @@ import {
 import { handleAcceptedCheckoutSubmit } from './accepted-checkout-submit-route.js';
 import { handleCheckoutValidationPreview } from './checkout-validation-preview-route.js';
 import {
+  handlePublicCheckoutProtectionProbe
+} from './public-checkout-protection.js';
+import {
   handlePublicCheckoutRoute,
   publicCheckoutStatus
 } from './public-checkout-route.js';
@@ -27,6 +30,7 @@ import {
 export { OrderLedger };
 
 const CATALOG_READONLY_ROUTE = '/internal/v2/catalog/preview';
+const CHECKOUT_PROTECTION_ROUTE = '/internal/v2/checkout/protection';
 const CHECKOUT_SUBMIT_ROUTE = '/internal/v2/checkout/submit';
 const CHECKOUT_VALIDATION_ROUTE = '/internal/v2/checkout/validate';
 const STATIC_ASSETS_PROBE_ROUTE = '/internal/v2/assets/probe';
@@ -63,6 +67,16 @@ export async function fetchStagingShadowWorker(request, env, ctx) {
   if (url.pathname === PUBLIC_CHECKOUT_ROUTE) {
     const requestId = safeRequestId(request.headers) || crypto.randomUUID();
     return handlePublicCheckoutRoute(request, env, requestId);
+  }
+
+  if (url.pathname === CHECKOUT_PROTECTION_ROUTE) {
+    const requestId = safeRequestId(request.headers) || crypto.randomUUID();
+    const authorized = await constantTimeEqualSecrets(
+      request.headers.get('x-staging-token'),
+      env.STAGING_API_TOKEN
+    );
+    if (!authorized) return json({ ok: false, error: 'STAGING_TOKEN_INVALID', requestId }, 401);
+    return handlePublicCheckoutProtectionProbe(request, env, requestId);
   }
 
   if (url.pathname === CHECKOUT_SUBMIT_ROUTE) {
