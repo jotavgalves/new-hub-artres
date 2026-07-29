@@ -68,6 +68,7 @@ jobs:
           node --check src/v2/persistence/supabase-order-projection.mjs
           node --check scripts/v2/prepare-site-v2-staging-deploy.mjs
           node --check scripts/catalog-v2/prepare-catalog-readonly-inspection.mjs
+          node --check scripts/catalog-v2/wait-for-staging-catalog-bridge-active.mjs
           node --check scripts/catalog-v2/run-staging-catalog-readonly-inspection.mjs
           node --check scripts/catalog-v2/verify-staging-catalog-bridge-disabled.mjs
           node --check scripts/catalog-v2/post-catalog-inspection-status.mjs
