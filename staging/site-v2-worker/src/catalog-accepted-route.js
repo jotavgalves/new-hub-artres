@@ -1,3 +1,5 @@
+import { SupabaseRpcClient } from '../../../src/v2/persistence/supabase-rpc-client.mjs';
+
 const ALLOWED_BROWSE_MODES = new Set(['themes', 'products', 'items']);
 const ALLOWED_SEARCH_MODES = new Set(['search', 'globalSearch', 'folderSearch']);
 const DEFAULT_TIMEOUT_MS = 5000;
@@ -88,73 +90,48 @@ async function catalogRpc(name, body, env, options) {
     8 * 1024 * 1024,
     DEFAULT_MAX_RESPONSE_BYTES
   );
-  const fetchImpl = options.fetch || globalThis.fetch;
-  if (typeof fetchImpl !== 'function') throw routeError('CATALOG_ACCEPTED_FETCH_REQUIRED');
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const rpcUrl = new URL(`/rest/v1/rpc/${name}`, baseUrl);
-    const response = await Reflect.apply(fetchImpl, globalThis, [rpcUrl, {
-      method: 'POST',
-      redirect: 'error',
-      signal: controller.signal,
-      headers: {
-        apikey: key,
-        Authorization: `Bearer ${key}`,
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-store'
-      },
-      body: JSON.stringify(body || {})
-    }]);
-    const text = await readLimitedText(response, maxResponseBytes);
-    if (!response.ok) {
-      let message = '';
-      try { message = String(JSON.parse(text)?.message || ''); } catch (_) {}
-      throw routeError(/^[A-Z0-9_]{3,100}$/.test(message) ? message : `CATALOG_ACCEPTED_RPC_${response.status}`);
-    }
-    try {
-      const payload = text ? JSON.parse(text) : {};
-      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-        throw new Error('NOT_OBJECT');
-      }
-      return payload;
-    } catch (_) {
-      throw routeError('CATALOG_ACCEPTED_RPC_JSON_INVALID');
-    }
+    const client = new SupabaseRpcClient({
+      url: baseUrl,
+      serviceKey: key,
+      fetch: options.fetch || globalThis.fetch,
+      schema: 'public',
+      timeoutMs,
+      maxResponseBytes
+    });
+    return await client.call(name, body || {});
   } catch (error) {
-    if (error?.name === 'AbortError') throw routeError('CATALOG_ACCEPTED_TIMEOUT');
-    throw error;
-  } finally {
-    clearTimeout(timer);
+    throw mapRpcError(error);
   }
 }
 
-async function readLimitedText(response, maxBytes) {
-  const declared = Number.parseInt(response.headers.get('content-length') || '', 10);
-  if (Number.isFinite(declared) && declared > maxBytes) throw routeError('CATALOG_ACCEPTED_RESPONSE_TOO_LARGE');
-  if (!response.body) return '';
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  const chunks = [];
-  let total = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > maxBytes) {
-        await reader.cancel('CATALOG_ACCEPTED_RESPONSE_TOO_LARGE').catch(() => {});
-        throw routeError('CATALOG_ACCEPTED_RESPONSE_TOO_LARGE');
-      }
-      chunks.push(decoder.decode(value, { stream: true }));
-    }
-    chunks.push(decoder.decode());
-    return chunks.join('');
-  } finally {
-    reader.releaseLock();
+function mapRpcError(error) {
+  const code = String(error?.code || '');
+  if (code === 'SUPABASE_RPC_TIMEOUT') return routeError('CATALOG_ACCEPTED_TIMEOUT');
+  if (code === 'SUPABASE_RPC_RESPONSE_TOO_LARGE') {
+    return routeError('CATALOG_ACCEPTED_RESPONSE_TOO_LARGE');
   }
+  if (code === 'SUPABASE_RPC_REQUEST_FAILED') {
+    const remoteMessage = String(error?.remoteMessage || '').trim();
+    if (/^[A-Z0-9_]{3,100}$/.test(remoteMessage)) return routeError(remoteMessage);
+    const status = Number(error?.status || 0);
+    if (Number.isInteger(status) && status >= 100 && status <= 599) {
+      return routeError(`CATALOG_ACCEPTED_RPC_${status}`);
+    }
+    return routeError('CATALOG_ACCEPTED_RPC_FAILED');
+  }
+  if (
+    code === 'SUPABASE_URL_INVALID' ||
+    code === 'SUPABASE_SECRET_KEY_INVALID' ||
+    code === 'SUPABASE_FETCH_REQUIRED' ||
+    code === 'SUPABASE_SCHEMA_INVALID' ||
+    code === 'SUPABASE_RPC_FUNCTION_INVALID' ||
+    code === 'SUPABASE_RPC_BODY_INVALID'
+  ) {
+    return routeError('CATALOG_ACCEPTED_RPC_CLIENT_INVALID');
+  }
+  return routeError('CATALOG_ACCEPTED_FAILED');
 }
 
 function emptySearchPayload(mode) {
