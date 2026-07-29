@@ -159,7 +159,17 @@ jobs:
 
       - name: Validar catálogo real aceito e design servido
         id: catalog-smoke
-        run: node tests/v2/run-staging-accepted-catalog-remote-smoke.mjs
+        shell: bash
+        run: |
+          set +e
+          output="$(node tests/v2/run-staging-accepted-catalog-remote-smoke.mjs 2>&1)"
+          status=$?
+          printf '%s\n' "$output"
+          code="$(printf '%s\n' "$output" | grep -E '^[A-Z0-9_]{3,100}$' | tail -n 1 || true)"
+          if [[ "$code" =~ ^[A-Z0-9_]{3,100}$ ]]; then
+            echo "error_code=$code" >> "$GITHUB_OUTPUT"
+          fi
+          exit "$status"
 
       - name: Validar pedido, replay, painel e bloqueios
         id: remote-smoke
@@ -205,6 +215,7 @@ jobs:
           CATALOG_ACCEPT_OUTCOME: ${{ steps.catalog-accept.outcome }}
           DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
           CATALOG_SMOKE_OUTCOME: ${{ steps.catalog-smoke.outcome }}
+          CATALOG_SMOKE_ERROR_CODE: ${{ steps.catalog-smoke.outputs.error_code }}
           REMOTE_SMOKE_OUTCOME: ${{ steps.remote-smoke.outcome }}
           SHADOW_SMOKE_OUTCOME: ${{ steps.shadow-smoke.outcome }}
           ROLLBACK_OUTCOME: ${{ steps.rollback.outcome }}
