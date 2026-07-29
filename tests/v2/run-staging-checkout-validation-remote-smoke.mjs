@@ -43,21 +43,39 @@ async function main() {
     variantKey: 'default',
     sizeKey,
     quantity: 6,
+    unitPrice: 0.01,
+    lineSubtotal: 0.06,
     details: {}
   };
 
-  const valid = await postValidation({ items: [baseItem] });
+  const valid = await postValidation({
+    subtotal: 0.01,
+    total: 0.01,
+    clientTotals: { total: 0.01 },
+    items: [baseItem]
+  });
   if (
     valid.status !== 200 ||
     valid.payload?.ok !== true ||
     valid.payload?.dryRun !== true ||
     valid.payload?.writesPerformed !== false ||
+    valid.payload?.authoritativePricing !== true ||
     Number(valid.payload?.catalogVersion) !== Number(metadata.catalogVersion) ||
     Number(valid.payload?.itemCount) !== 1 ||
     !Array.isArray(valid.payload?.productKeys) ||
-    valid.payload.productKeys.length !== 1
+    valid.payload.productKeys.length !== 1 ||
+    valid.payload?.pricing?.currency !== 'BRL' ||
+    Number(valid.payload?.pricing?.quantity) !== 6 ||
+    Number(valid.payload?.pricing?.subtotal) !== 58.5 ||
+    Number(valid.payload?.pricing?.discountPercent) !== 0 ||
+    Number(valid.payload?.pricing?.discountAmount) !== 0 ||
+    Number(valid.payload?.pricing?.total) !== 58.5 ||
+    valid.payload?.pricing?.clientValuesIgnored !== true ||
+    !Array.isArray(valid.payload?.warnings) ||
+    !valid.payload.warnings.includes('CLIENT_ITEM_PRICE_IGNORED') ||
+    !valid.payload.warnings.includes('CLIENT_ORDER_TOTALS_IGNORED')
   ) {
-    throw smokeError('CHECKOUT_VALIDATION_VALID_ITEM_FAILED');
+    throw smokeError('CHECKOUT_VALIDATION_SERVER_PRICING_FAILED');
   }
 
   await expectValidationError(
@@ -71,6 +89,14 @@ async function main() {
   await expectValidationError(
     { ...baseItem, sizeKey: sizeKey === '150x150' ? '50x50' : '150x150' },
     'ARTWORK_SIZE_MISMATCH'
+  );
+  await expectPricingError(
+    { ...baseItem, quantity: 4 },
+    'ORDER_QUANTITY_RULES_INVALID'
+  );
+  await expectPricingError(
+    { ...baseItem, quantity: 7 },
+    'ORDER_QUANTITY_RULES_INVALID'
   );
 
   const publicCheckout = await requestJson('/api/orders/v2', {
@@ -97,6 +123,11 @@ async function main() {
     ok: true,
     catalogVersion: Number(metadata.catalogVersion),
     validItemAccepted: true,
+    authoritativePriceApplied: true,
+    clientPriceIgnored: true,
+    clientTotalIgnored: true,
+    minimumRejected: true,
+    invalidStepRejected: true,
     productMismatchRejected: true,
     invalidVariantRejected: true,
     sizeMismatchRejected: true,
@@ -115,6 +146,18 @@ async function expectValidationError(item, expectedCode) {
     Number(result.payload?.itemIndex) !== 0
   ) {
     throw smokeError(`CHECKOUT_VALIDATION_${expectedCode}_NOT_REJECTED`);
+  }
+}
+
+async function expectPricingError(item, expectedCode) {
+  const result = await postValidation({ items: [item] });
+  if (
+    result.status !== 422 ||
+    result.payload?.ok !== false ||
+    result.payload?.error !== expectedCode ||
+    result.payload?.itemIndex !== undefined
+  ) {
+    throw smokeError(`CHECKOUT_PRICING_${expectedCode}_NOT_REJECTED`);
   }
 }
 
