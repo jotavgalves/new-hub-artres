@@ -8,6 +8,7 @@ test('relatório de deploy confirma validações sem expor dados sensíveis', ()
     catalogAccept: 'success',
     deploy: 'success',
     catalogSmoke: 'success',
+    checkoutSmoke: 'success',
     remoteSmoke: 'success',
     shadowSmoke: 'success',
     rollback: 'skipped',
@@ -20,16 +21,33 @@ test('relatório de deploy confirma validações sem expor dados sensíveis', ()
   assert.match(body, /Resultado final: \*\*sucesso\*\*/);
   assert.match(body, /Commit: `fd6fad95b87c`/);
   assert.match(body, /Design e catálogo aceito: \*\*success\*\*/);
+  assert.match(body, /Contrato do checkout com catálogo real: \*\*success\*\*/);
   assert.match(body, /produção pública não foi alterada/i);
   assert.doesNotMatch(body, /segredo-que-nao-pode-aparecer/);
   assert.doesNotMatch(body, /Cliente Particular/);
   assert.doesNotMatch(body, /81999999999/);
 });
 
+test('checkout desconhecido impede declaração de sucesso', () => {
+  const body = buildSiteV2StagingDeployComment({
+    workflowStatus: 'success',
+    catalogAccept: 'success',
+    deploy: 'success',
+    catalogSmoke: 'success',
+    remoteSmoke: 'success',
+    shadowSmoke: 'success'
+  });
+
+  assert.match(body, /Resultado final: \*\*success\*\*/);
+  assert.match(body, /Contrato do checkout com catálogo real: \*\*unknown\*\*/);
+  assert.doesNotMatch(body, /Resultado final: \*\*sucesso\*\*/);
+});
+
 test('falha inclui somente código público e sanitizado do smoke', () => {
   const body = buildSiteV2StagingDeployComment({
     workflowStatus: 'failure',
     catalogSmoke: 'failure',
+    checkoutSmoke: 'skipped',
     catalogSmokeError: 'STAGING_ASSET_PROBE_INDEX_FETCH_FAILED',
     token: 'nao-pode-vazar'
   });
@@ -42,12 +60,14 @@ test('resultado desconhecido é sanitizado e não inventa sucesso', () => {
   const body = buildSiteV2StagingDeployComment({
     workflowStatus: 'qualquer-coisa',
     deploy: '<script>alert(1)</script>',
+    checkoutSmoke: '<script>checkout</script>',
     catalogSmokeError: '<script>erro</script>',
     commit: 'nao-e-sha'
   });
 
   assert.match(body, /Resultado final: \*\*unknown\*\*/);
   assert.match(body, /Publicação do Worker: \*\*unknown\*\*/);
+  assert.match(body, /Contrato do checkout com catálogo real: \*\*unknown\*\*/);
   assert.match(body, /Commit: `desconhecido`/);
   assert.doesNotMatch(body, /Código do smoke do catálogo/);
   assert.doesNotMatch(body, /<script>/);
