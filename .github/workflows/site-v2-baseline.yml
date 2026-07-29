@@ -74,6 +74,7 @@ jobs:
           node --check scripts/catalog-v2/run-staging-catalog-readonly-inspection.mjs
           node --check scripts/catalog-v2/run-catalog-v2-local-readonly-inspection.mjs
           node --check scripts/catalog-v2/publish-accepted-catalog-v2.mjs
+          node --check scripts/catalog-v2/post-catalog-auto-accept-status.mjs
           node --check scripts/catalog-v2/verify-staging-catalog-bridge-disabled.mjs
           node --check scripts/catalog-v2/post-catalog-inspection-status.mjs
           node --check staging/site-v2-worker/src/index.js
@@ -83,6 +84,7 @@ jobs:
           node --check staging/site-v2-worker/src/supabase-shadow-projector.js
           node --check staging/site-v2-worker/src/order-ledger-do.js
           node --check staging/site-v2-worker/src/admin-readonly-page.js
+          node --check tests/v2/run-staging-accepted-catalog-remote-smoke.mjs
           node --check tests/v2/run-staging-supabase-shadow-remote-smoke.mjs
 
       - name: Preparar cópia isolada do design atual
