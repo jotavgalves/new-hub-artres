@@ -82,6 +82,7 @@ jobs:
           node --check staging/site-v2-worker/src/index-shadow.js
           node --check staging/site-v2-worker/src/catalog-accepted-route.js
           node --check staging/site-v2-worker/src/catalog-readonly-route.js
+          node --check staging/site-v2-worker/src/public-checkout-protection.js
           node --check staging/site-v2-worker/src/public-checkout-route.js
           node --check staging/site-v2-worker/src/accepted-catalog-checkout-resolver.js
           node --check staging/site-v2-worker/src/accepted-checkout-item-validator.js
@@ -95,6 +96,7 @@ jobs:
           node --check tests/v2/wait-for-staging-checkout-pricing.mjs
           node --check tests/v2/run-staging-checkout-validation-remote-smoke.mjs
           node --check tests/v2/run-staging-checkout-invalid-rejections-remote-smoke.mjs
+          node --check tests/v2/run-staging-checkout-protection-remote-smoke.mjs
           node --check tests/v2/run-staging-supabase-shadow-remote-smoke.mjs
 
       - name: Preparar cópia isolada do design atual

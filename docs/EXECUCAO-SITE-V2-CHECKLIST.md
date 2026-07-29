@@ -87,8 +87,8 @@ Evidência: commit `318597cfbda45f94364a75a9bb11cb2567bca2c7`.
 - [x] Recalcular quantidade, preço, desconto e total no servidor.
 - [x] Preservar cliente, vendedora, medidas, observações e personalizações.
 - [x] Aplicar idempotência contra duplo clique e repetição de requisição.
-- [-] Rejeitar arte inexistente, produto incorreto, variante inválida e quantidade inválida.
-- [ ] Adicionar proteção de origem, limite de requisições e resposta sanitizada.
+- [x] Rejeitar arte inexistente, produto incorreto, variante inválida e quantidade inválida.
+- [-] Adicionar proteção de origem, limite de requisições e resposta sanitizada.
 - [ ] Executar smoke remoto sem pedido de cliente real.
 
 Evidência parcial:
@@ -99,6 +99,7 @@ Evidência parcial:
 - PR #35, `Site V2 Baseline` run `30455143822`, e PR #36, `Site V2 Baseline` run `30455666318`, com deploy validado no commit `46d0f05219b298b5b1c310d128754caafdc27e2a`: preço de R$ 0,01 e total adulterado ignorados, seis unidades recalculadas para R$ 58,50, quantidades 4 e 7 rejeitadas, checkout público desligado e produção inalterada.
 - PR #37, `Site V2 Baseline` run `30457071943` e deploy validado no commit `daacfba330e39f19553fc598bf8ebf1f3f9090fb`: cliente, vendedora, medidas, observações e personalizações preservados no comando canônico, resposta sem dados privados, checkout público desligado e produção inalterada.
 - PR #38, `Site V2 Baseline` run `30460033254`, e PR #39, `Site V2 Baseline` run `30460937516`, com deploy validado no commit `bd933dcb6f47cbd1f956deefca377b0af8a43a58`: pedido sintético criado, repetição retornou `REPLAY` com o mesmo número, reutilização conflitante rejeitada com HTTP 409, projeção no Supabase concluída, checkout público desligado e produção inalterada.
+- PR #40, `Site V2 Baseline` run `30461919511`, PR #41, `Site V2 Baseline` run `30462322689`, e PR #42, `Site V2 Baseline` run `30462948776`, com deploy validado no commit `11c9cebf8442a4543bb68074a941dcb7a9ea31c5`: arte inexistente, produto incorreto, variante inválida e quantidade inválida rejeitados na prévia e na submissão; replay aguardou propagação ativa sem aceitar nova criação; pedido sintético e projeção aprovados; produção pública inalterada.
 
 Critério de conclusão: checkout do staging cria e reproduz pedido V2 usando arte e produto reais do catálogo aceito, com valores calculados pelo servidor e sem alterar produção.
 

@@ -26,12 +26,29 @@ test('configuração é exclusivamente de staging, habilita escrita sintética e
   assert.equal(config.vars.ENVIRONMENT, 'staging');
   assert.equal(config.vars.STAGING_WRITE_ENABLED, 'true');
   assert.equal(config.vars.STAGING_LOW_LEVEL_LEDGER_ENABLED, 'false');
+  assert.equal(config.vars.STAGING_PUBLIC_CHECKOUT_ENABLED, 'false');
+  assert.equal(
+    config.vars.PUBLIC_CHECKOUT_ALLOWED_ORIGINS,
+    'https://new-hub-artres-v2-staging.jvgacontato.workers.dev'
+  );
   assert.equal(config.vars.SUPABASE_SHADOW_ENABLED, 'true');
   assert.equal(config.vars.SUPABASE_V2_URL, 'https://kueklnkznwpbobqwugns.supabase.co');
   assert.equal(config.vars.SUPABASE_SHADOW_TIMEOUT_MS, '3500');
   assert.equal(config.routes, undefined);
   assert.equal(config.env, undefined);
   assert.equal(config.workers_dev, true);
+});
+
+test('rate limit existe somente como binding isolado do checkout de staging', () => {
+  assert.deepEqual(config.ratelimits, [
+    {
+      name: 'PUBLIC_CHECKOUT_ATTEMPT_RATE_LIMITER',
+      namespace_id: '2026072901',
+      simple: { limit: 8, period: 60 }
+    }
+  ]);
+  assert.match(config.ratelimits[0].namespace_id, /^[0-9]{1,10}$/);
+  assert.equal(config.ratelimits[0].name.includes('PRODUCTION'), false);
 });
 
 test('entrypoint sombra usa o Worker consolidado e preserva o Durable Object', () => {
@@ -59,11 +76,10 @@ test('Durable Object usa SQLite e migration explícita', () => {
   ]);
 });
 
-test('configuração não contém valores ou IDs de recursos de produção', () => {
+test('configuração não contém segredos ou IDs de recursos de produção', () => {
   const forbidden = [
     'ADMIN_SECRET_KEY',
     'SERVICE_ROLE',
-    'namespace_id',
     'database_id',
     'account_id',
     'zone_name',
