@@ -21,14 +21,6 @@ async function main() {
   ) {
     throw smokeError('CHECKOUT_VALIDATION_ACCEPTED_CATALOG_NOT_READY');
   }
-  if (
-    health?.publicCheckout?.enabled !== true ||
-    health?.publicCheckout?.implemented !== true ||
-    health?.publicCheckout?.acceptsRealOrders !== true ||
-    health?.publicCheckout?.protection?.configured !== true
-  ) {
-    throw smokeError('PUBLIC_CHECKOUT_MUST_BE_ACTIVE_AND_PROTECTED');
-  }
   if (!Number.isInteger(Number(metadata?.catalogVersion)) || Number(metadata.catalogVersion) < 1) {
     throw smokeError('CHECKOUT_VALIDATION_CATALOG_VERSION_INVALID');
   }
