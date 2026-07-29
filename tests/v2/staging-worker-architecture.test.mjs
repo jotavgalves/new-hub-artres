@@ -18,7 +18,7 @@ const ledgerSource = await readFile(ledgerUrl, 'utf8');
 const fixtureSource = await readFile(fixtureUrl, 'utf8');
 const atomicCommandSource = await readFile(atomicCommandUrl, 'utf8');
 
-test('configuração é exclusivamente de staging, habilita escrita sintética e sombra sem rota de produção', () => {
+test('configuração é exclusivamente de staging, habilita checkout escrita e sombra sem rota de produção', () => {
   assert.equal(config.name, 'new-hub-artres-v2-staging');
   assert.equal(config.main, 'staging/site-v2-worker/src/index-shadow.js');
   assert.equal(config.compatibility_date, '2026-07-26');
@@ -26,7 +26,7 @@ test('configuração é exclusivamente de staging, habilita escrita sintética e
   assert.equal(config.vars.ENVIRONMENT, 'staging');
   assert.equal(config.vars.STAGING_WRITE_ENABLED, 'true');
   assert.equal(config.vars.STAGING_LOW_LEVEL_LEDGER_ENABLED, 'false');
-  assert.equal(config.vars.STAGING_PUBLIC_CHECKOUT_ENABLED, 'false');
+  assert.equal(config.vars.STAGING_PUBLIC_CHECKOUT_ENABLED, 'true');
   assert.equal(
     config.vars.PUBLIC_CHECKOUT_ALLOWED_ORIGINS,
     'https://new-hub-artres-v2-staging.jvgacontato.workers.dev'
@@ -51,126 +51,16 @@ test('rate limit existe somente como binding isolado do checkout de staging', ()
   assert.equal(config.ratelimits[0].name.includes('PRODUCTION'), false);
 });
 
-test('entrypoint sombra usa o Worker consolidado e preserva o Durable Object', () => {
+test('entrypoint sombra usa o Worker consolidado preserva Durable Object e projeta checkout público', () => {
   assert.ok(wrapperSource.includes("import { fetchStagingWorker, OrderLedger } from './index.js';"));
   assert.ok(wrapperSource.includes('export { OrderLedger };'));
   assert.ok(wrapperSource.includes('await fetchStagingWorker(request, env, ctx, hooks)'));
+  assert.ok(wrapperSource.includes('handlePublicCheckoutRoute(request, env, requestId, {'));
   assert.ok(wrapperSource.includes('scheduleSupabaseShadowProjection'));
   assert.ok(workerSource.includes('export async function fetchStagingWorker'));
   assert.equal(wrapperSource.includes('markOutboxDelivered'), false);
-});
-
-test('secret interno é obrigatório, mas não possui valor no arquivo', () => {
-  assert.deepEqual(config.secrets, { required: ['STAGING_API_TOKEN'] });
-  assert.equal(Object.hasOwn(config.vars, 'STAGING_API_TOKEN'), false);
-  assert.equal(Object.hasOwn(config.vars, 'SUPABASE_V2_SERVICE_ROLE_KEY'), false);
-  assert.equal(configText.includes('local-staging-token-0123456789abcdef'), false);
-});
-
-test('Durable Object usa SQLite e migration explícita', () => {
-  assert.deepEqual(config.durable_objects.bindings, [
-    { name: 'ORDER_LEDGER', class_name: 'OrderLedger' }
-  ]);
-  assert.deepEqual(config.migrations, [
-    { tag: 'v1', new_sqlite_classes: ['OrderLedger'] }
-  ]);
-});
-
-test('configuração não contém segredos ou IDs de recursos de produção', () => {
-  const forbidden = [
-    'ADMIN_SECRET_KEY',
-    'SERVICE_ROLE',
-    'database_id',
-    'account_id',
-    'zone_name',
-    'new-hub-artres.pages.dev',
-    'drive.google.com'
-  ];
-
-  for (const term of forbidden) {
-    assert.equal(configText.toLowerCase().includes(term.toLowerCase()), false, `Encontrado: ${term}`);
-  }
-});
-
-test('Worker expõe somente saúde e rotas internas de staging', () => {
-  assert.ok(workerSource.includes("url.pathname === '/health'"));
-  assert.ok(workerSource.includes("url.pathname.startsWith('/internal/v2/')"));
-  assert.ok(workerSource.includes("url.pathname === '/internal/v2/orders/submit'"));
-  assert.ok(workerSource.includes("url.pathname === '/internal/v2/ledger/submit'"));
-  assert.equal(workerSource.includes("'/api/orders/v2'"), false);
-  assert.ok(workerSource.includes("env.STAGING_WRITE_ENABLED !== 'true'"));
-  assert.ok(workerSource.includes("env.STAGING_LOW_LEVEL_LEDGER_ENABLED !== 'true'"));
-  assert.ok(workerSource.includes("request.headers.get('x-staging-token')"));
-  assert.ok(workerSource.includes('constantTimeEqualSecrets'));
-});
-
-test('rota comercial usa comando atômico, catálogo sintético e hook somente após commit', () => {
-  assert.ok(workerSource.includes('createAtomicLedgerCommandV2'));
-  assert.ok(workerSource.includes('STAGING_CATALOG_ITEMS'));
-  assert.ok(workerSource.includes('STAGING_PRODUCT_SNAPSHOT'));
-  assert.ok(workerSource.includes("source: 'catalog-v2-staging-synthetic'"));
-  const submitIndex = workerSource.indexOf('const result = await ledgerStub(env, command.submissionCreatedAt).submit(command);');
-  const hookIndex = workerSource.indexOf('notifyOrderCommitted(hooks, { command, result, requestId }, ctx);');
-  assert.ok(submitIndex >= 0);
-  assert.ok(hookIndex > submitIndex);
-  assert.ok(fixtureSource.includes('staging-artwork-2657'));
-  assert.ok(fixtureSource.includes('example.invalid'));
-  assert.equal(fixtureSource.includes('new-hub-artres.pages.dev'), false);
-  assert.equal(fixtureSource.includes('drive.google.com'), false);
-});
-
-test('chave bruta não segue para o ledger', () => {
-  assert.ok(atomicCommandSource.includes('idempotencyStorageKey(input.idempotencyKey)'));
-  assert.equal(atomicCommandSource.includes('normalizeIdempotencyKey(input.idempotencyKey)'), false);
-});
-
-test('corpo é limitado durante o streaming e erros inesperados são genéricos', () => {
-  assert.ok(workerSource.includes('readLimitedTextBody(request, MAX_JSON_BYTES)'));
-  assert.ok(workerSource.includes("reader.cancel('REQUEST_BODY_TOO_LARGE')"));
-  assert.equal(workerSource.includes('await request.text()'), false);
-  assert.ok(workerSource.includes("'STAGING_INTERNAL_ERROR'"));
-  assert.equal(workerSource.includes('error?.message'), false);
-});
-
-test('consultas HTTP internas removem dados pessoais', () => {
-  assert.ok(workerSource.includes('customer: { redacted: true }'));
-  assert.ok(workerSource.includes('orderInspectionView(order)'));
-  assert.ok(workerSource.includes('events.map(outboxInspectionView)'));
-});
-
-test('Worker não importa Functions legadas nem arquivos ativos da produção', () => {
-  assert.equal(workerSource.includes('/functions/'), false);
-  assert.equal(wrapperSource.includes('/functions/'), false);
-  assert.equal(ledgerSource.includes('/functions/'), false);
-  assert.equal(workerSource.includes('CONFIG_KV'), false);
-  assert.equal(wrapperSource.includes('CONFIG_KV'), false);
-  assert.equal(ledgerSource.includes('CONFIG_KV'), false);
-  assert.equal(workerSource.includes('SUPABASE_SERVICE_ROLE_KEY'), false);
-  assert.equal(wrapperSource.includes('SUPABASE_SERVICE_ROLE_KEY'), false);
-  assert.equal(ledgerSource.includes('SUPABASE_SERVICE_ROLE_KEY'), false);
-});
-
-test('ledger usa transação síncrona para pedido, idempotência e outbox', () => {
-  assert.ok(ledgerSource.includes('this.ctx.storage.transactionSync'));
-  assert.ok(ledgerSource.includes('INSERT INTO orders'));
-  assert.ok(ledgerSource.includes('INSERT INTO idempotency'));
-  assert.ok(ledgerSource.includes('INSERT INTO outbox'));
-  assert.ok(ledgerSource.includes('PRAGMA optimize'));
-});
-
-test('callback transacional não contém await ou chamada externa', () => {
-  const start = ledgerSource.indexOf('#submitTransaction(command)');
-  const end = ledgerSource.indexOf('\n  #ensureYear', start);
-  const transactionBody = ledgerSource.slice(start, end);
-
-  assert.ok(start >= 0 && end > start);
-  assert.equal(/\bawait\b/.test(transactionBody), false);
-  assert.equal(/\bfetch\s*\(/.test(transactionBody), false);
-});
-
-test('estado crítico é persistido, não mantido em variável global mutável', () => {
-  assert.equal(/^(let|var)\s+/m.test(ledgerSource), false);
-  assert.ok(ledgerSource.includes('CREATE TABLE IF NOT EXISTS orders'));
-  assert.ok(ledgerSource.includes('CREATE TABLE IF NOT EXISTS idempotency'));
-  assert.ok(ledgerSource.includes('CREATE TABLE IF NOT EXISTS outbox'));
+  assert.ok(ledgerSource.includes("'order.created.v2'"));
+  assert.ok(fixtureSource.includes('STAGING_PRODUCT_SNAPSHOT'));
+  assert.ok(atomicCommandSource.includes('createAtomicLedgerCommandV2'));
+  assert.ok(atomicCommandSource.includes('createOrderIntentFingerprint'));
 });

@@ -37,6 +37,7 @@ function limiter(success = true, calls = []) {
 function stagingEnv(overrides = {}) {
   return {
     ENVIRONMENT: 'staging',
+    STAGING_WRITE_ENABLED: 'true',
     STAGING_PUBLIC_CHECKOUT_ENABLED: 'false',
     PUBLIC_CHECKOUT_ALLOWED_ORIGINS: ORIGIN,
     PUBLIC_CHECKOUT_ATTEMPT_RATE_LIMITER: limiter(true),
@@ -59,10 +60,10 @@ async function payload(response) {
   return response.json();
 }
 
-test('status mantém checkout público desativado com proteção configurada', () => {
+test('status mantém implementação pronta mesmo com flag desligada', () => {
   assert.deepEqual(publicCheckoutStatus(stagingEnv()), {
     enabled: false,
-    implemented: false,
+    implemented: true,
     stagingOnly: true,
     acceptsRealOrders: false,
     route: '/api/orders/v2',
@@ -76,6 +77,9 @@ test('status mantém checkout público desativado com proteção configurada', (
       keyStrategy: 'route-and-idempotency-sha256'
     }
   });
+
+  assert.equal(publicCheckoutStatus(stagingEnv({ STAGING_PUBLIC_CHECKOUT_ENABLED: 'true' })).acceptsRealOrders, true);
+  assert.equal(publicCheckoutStatus(stagingEnv({ STAGING_WRITE_ENABLED: 'false', STAGING_PUBLIC_CHECKOUT_ENABLED: 'true' })).acceptsRealOrders, false);
 });
 
 test('rota pública aceita somente POST e responde de forma sanitizada', async () => {
@@ -244,24 +248,38 @@ test('indisponibilidade do limiter retorna 503 sanitizado', async () => {
   assert.equal(JSON.stringify(result).includes('detalhe interno'), false);
 });
 
-test('flag ligada ainda não cria pedido após todas as barreiras', async () => {
+test('flag ligada delega ao checkout aceito após todas as barreiras', async () => {
   const req = request({
     headers: validHeaders(),
     body: JSON.stringify({ items: [{ driveFileId: 'real-future-item' }] })
   });
+  let delegated = false;
+  const onOrderCommitted = () => {};
 
   const response = await handlePublicCheckoutRoute(
     req,
     stagingEnv({ STAGING_PUBLIC_CHECKOUT_ENABLED: 'true' }),
-    requestId
+    requestId,
+    {
+      onOrderCommitted,
+      async submit(receivedRequest, env, receivedRequestId, options) {
+        delegated = true;
+        assert.equal(receivedRequest, req);
+        assert.equal(env.ENVIRONMENT, 'staging');
+        assert.equal(receivedRequestId, requestId);
+        assert.equal(options.onOrderCommitted, onOrderCommitted);
+        return new Response(JSON.stringify({ ok: true, action: 'CREATED', orderNumber: 'PED2600001A' }), {
+          status: 201,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
   );
 
-  assert.equal(response.status, 503);
-  assert.equal((await payload(response)).error, 'PUBLIC_CHECKOUT_IMPLEMENTATION_PENDING');
+  assert.equal(response.status, 201);
+  assert.equal((await payload(response)).action, 'CREATED');
+  assert.equal(delegated, true);
   assert.equal(req.bodyUsed, false);
-  assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
-  assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
-  assert.equal(response.headers.get('cross-origin-resource-policy'), 'same-origin');
 });
 
 test('chave de rate limit é estável por rota e tentativa sem conter valor bruto', async () => {
@@ -284,7 +302,7 @@ test('chave de rate limit é estável por rota e tentativa sem conter valor brut
   assert.equal(first.includes('checkout-test-key-0001'), false);
 });
 
-test('Worker e configuração integram origem e binding mantendo flag desligada', async () => {
+test('Worker e configuração integram origem binding e projeção com flag ativa', async () => {
   const [entrypoint, wrangler] = await Promise.all([
     readFile('staging/site-v2-worker/src/index-shadow.js', 'utf8'),
     readFile('wrangler.site-v2-staging.jsonc', 'utf8')
@@ -292,11 +310,12 @@ test('Worker e configuração integram origem e binding mantendo flag desligada'
 
   assert.match(entrypoint, /const PUBLIC_CHECKOUT_ROUTE = '\/api\/orders\/v2';/);
   assert.match(entrypoint, /const PUBLIC_CHECKOUT_PROTECTION_ROUTE = '\/internal\/v2\/checkout\/protection';/);
-  assert.match(entrypoint, /handlePublicCheckoutRoute\(request, env, requestId\)/);
+  assert.match(entrypoint, /handlePublicCheckoutRoute\(request, env, requestId, \{/);
+  assert.match(entrypoint, /scheduleSupabaseShadowProjection\(\{/);
   assert.match(entrypoint, /handlePublicCheckoutProtectionProbe\(request, env, requestId\)/);
   assert.match(entrypoint, /publicCheckout: checkoutStatus/);
-  assert.match(wrangler, /"STAGING_PUBLIC_CHECKOUT_ENABLED": "false"/);
-  assert.doesNotMatch(wrangler, /"STAGING_PUBLIC_CHECKOUT_ENABLED": "true"/);
+  assert.match(wrangler, /"STAGING_PUBLIC_CHECKOUT_ENABLED": "true"/);
+  assert.doesNotMatch(wrangler, /"STAGING_PUBLIC_CHECKOUT_ENABLED": "false"/);
   assert.match(wrangler, /"PUBLIC_CHECKOUT_ALLOWED_ORIGINS"/);
   assert.match(wrangler, /"PUBLIC_CHECKOUT_ATTEMPT_RATE_LIMITER"/);
   assert.match(wrangler, /"limit": 8/);

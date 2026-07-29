@@ -22,10 +22,12 @@ async function main() {
     throw smokeError('CHECKOUT_VALIDATION_ACCEPTED_CATALOG_NOT_READY');
   }
   if (
-    health?.publicCheckout?.enabled !== false ||
-    health?.publicCheckout?.acceptsRealOrders !== false
+    health?.publicCheckout?.enabled !== true ||
+    health?.publicCheckout?.implemented !== true ||
+    health?.publicCheckout?.acceptsRealOrders !== true ||
+    health?.publicCheckout?.protection?.configured !== true
   ) {
-    throw smokeError('PUBLIC_CHECKOUT_MUST_REMAIN_DISABLED');
+    throw smokeError('PUBLIC_CHECKOUT_MUST_BE_ACTIVE_AND_PROTECTED');
   }
   if (!Number.isInteger(Number(metadata?.catalogVersion)) || Number(metadata.catalogVersion) < 1) {
     throw smokeError('CHECKOUT_VALIDATION_CATALOG_VERSION_INVALID');
@@ -150,21 +152,6 @@ async function main() {
     throw smokeError('CHECKOUT_IDEMPOTENCY_CONFLICT_NOT_REJECTED');
   }
 
-  const publicCheckout = await requestJson('/api/orders/v2', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'idempotency-key': 'remote-checkout-disabled-validation-0001'
-    },
-    body: JSON.stringify({ items: [baseItem] })
-  });
-  if (
-    publicCheckout.status !== 503 ||
-    publicCheckout.payload?.error !== 'PUBLIC_CHECKOUT_DISABLED'
-  ) {
-    throw smokeError('PUBLIC_CHECKOUT_DISABLED_BARRIER_FAILED');
-  }
-
   for (const responsePayload of [valid.payload, created.payload, replay.payload, conflict.payload]) {
     const serialized = JSON.stringify(responsePayload);
     for (const privateValue of [
@@ -202,9 +189,9 @@ async function main() {
     productMismatchRejected: true,
     invalidVariantRejected: true,
     sizeMismatchRejected: true,
-    publicCheckoutDisabled: true,
+    publicCheckoutEnabled: true,
+    publicCheckoutProtected: true,
     syntheticStagingOrderCreated: true,
-    realOrderCreated: false,
     productionChanged: false
   })}\n`);
 }

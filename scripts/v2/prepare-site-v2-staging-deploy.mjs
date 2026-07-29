@@ -3,6 +3,8 @@ import { pathToFileURL } from 'node:url';
 
 const ACTIVE_WRITE_FLAG = '"STAGING_WRITE_ENABLED": "true"';
 const SAFE_WRITE_FLAG = '"STAGING_WRITE_ENABLED": "false"';
+const PUBLIC_CHECKOUT_ACTIVE_FLAG = '"STAGING_PUBLIC_CHECKOUT_ENABLED": "true"';
+const PUBLIC_CHECKOUT_SAFE_FLAG = '"STAGING_PUBLIC_CHECKOUT_ENABLED": "false"';
 const SHADOW_ACTIVE_FLAG = '"SUPABASE_SHADOW_ENABLED": "true"';
 const SHADOW_SAFE_FLAG = '"SUPABASE_SHADOW_ENABLED": "false"';
 const LOW_LEVEL_SAFE_FLAG = '"STAGING_LOW_LEVEL_LEDGER_ENABLED": "false"';
@@ -21,6 +23,9 @@ export async function prepareStagingDeployFiles(options = {}) {
   const source = await readFile(sourcePath, 'utf8');
   if (countOccurrences(source, ACTIVE_WRITE_FLAG) !== 1) {
     throw deployConfigError('ACTIVE_WRITE_FLAG_INVALID');
+  }
+  if (countOccurrences(source, PUBLIC_CHECKOUT_ACTIVE_FLAG) !== 1) {
+    throw deployConfigError('PUBLIC_CHECKOUT_ACTIVE_FLAG_INVALID');
   }
   if (!source.includes(LOW_LEVEL_SAFE_FLAG)) {
     throw deployConfigError('LOW_LEVEL_LEDGER_MUST_REMAIN_DISABLED');
@@ -42,7 +47,9 @@ export async function prepareStagingDeployFiles(options = {}) {
   const secrets = { STAGING_API_TOKEN: stagingApiToken };
   if (supabaseServiceRoleKey) secrets.SUPABASE_V2_SERVICE_ROLE_KEY = supabaseServiceRoleKey;
 
-  let rollbackSource = source.replace(ACTIVE_WRITE_FLAG, SAFE_WRITE_FLAG);
+  let rollbackSource = source
+    .replace(ACTIVE_WRITE_FLAG, SAFE_WRITE_FLAG)
+    .replace(PUBLIC_CHECKOUT_ACTIVE_FLAG, PUBLIC_CHECKOUT_SAFE_FLAG);
   if (rollbackSource.includes(SHADOW_ACTIVE_FLAG)) {
     rollbackSource = rollbackSource.replace(SHADOW_ACTIVE_FLAG, SHADOW_SAFE_FLAG);
   }
@@ -52,9 +59,11 @@ export async function prepareStagingDeployFiles(options = {}) {
 
   return Object.freeze({
     ok: true,
+    publicCheckoutEnabled: true,
     shadowEnabled,
     shadowCredentialIncluded: Boolean(supabaseServiceRoleKey),
     rollbackWritesEnabled: false,
+    rollbackPublicCheckoutEnabled: false,
     rollbackShadowEnabled: false
   });
 }

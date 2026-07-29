@@ -20,6 +20,7 @@ on:
       - 'tests/v2/run-staging-checkout-validation-remote-smoke.mjs'
       - 'tests/v2/run-staging-checkout-invalid-rejections-remote-smoke.mjs'
       - 'tests/v2/run-staging-checkout-protection-remote-smoke.mjs'
+      - 'tests/v2/run-staging-public-checkout-remote-smoke.mjs'
       - '.github/workflows/deploy-site-v2-staging.yml'
       - '.github/workflows/catalog-v2-auto-accept.yml'
   workflow_dispatch:
@@ -158,8 +159,8 @@ jobs:
           --strict
           --config wrangler.site-v2-staging.jsonc
           --secrets-file "$STAGING_SECRETS_FILE"
-          --message "Staging V2 com design atual, catálogo aceito e projeção sombra"
-          --tag "staging-v2-accepted-catalog"
+          --message "Staging V2 com checkout visual, catálogo aceito e projeção sombra"
+          --tag "staging-v2-visual-checkout"
 
       - name: Validar catálogo real aceito e design servido
         id: catalog-smoke
@@ -175,7 +176,7 @@ jobs:
           fi
           exit "$status"
 
-      - name: Validar contrato rejeições e proteção do checkout real
+      - name: Validar contrato rejeições proteção e checkout visual público
         id: checkout-contract-smoke
         shell: bash
         run: |
@@ -194,6 +195,12 @@ jobs:
             protection_output="$(node tests/v2/run-staging-checkout-protection-remote-smoke.mjs 2>&1)"
             status=$?
             output="${output}"$'\n'"${protection_output}"
+          fi
+
+          if [ "$status" -eq 0 ]; then
+            visual_output="$(node tests/v2/run-staging-public-checkout-remote-smoke.mjs 2>&1)"
+            status=$?
+            output="${output}"$'\n'"${visual_output}"
           fi
 
           printf '%s\n' "$output"
@@ -229,7 +236,7 @@ jobs:
         id: shadow-smoke
         run: node tests/v2/run-staging-supabase-shadow-remote-smoke.mjs
 
-      - name: Reverter automaticamente escrita e sombra em caso de falha
+      - name: Reverter automaticamente checkout escrita e sombra em caso de falha
         id: rollback
         if: failure() && steps.deploy.outcome == 'success'
         run: >-
@@ -237,8 +244,8 @@ jobs:
           --strict
           --config "$ROLLBACK_CONFIG_FILE"
           --secrets-file "$STAGING_SECRETS_FILE"
-          --message "Rollback automático: escrita e sombra do staging desativadas"
-          --tag "staging-writes-disabled-automatic-rollback"
+          --message "Rollback automático: checkout, escrita e sombra do staging desativados"
+          --tag "staging-checkout-writes-shadow-disabled-rollback"
 
       - name: Remover arquivos temporários
         if: always()
@@ -248,16 +255,16 @@ jobs:
         if: success()
         run: |
           echo "Worker: new-hub-artres-v2-staging"
-          echo "Site: design público atual copiado sem transformação"
+          echo "Site: design público atual com bridge de checkout injetado somente na cópia de staging"
           echo "Catálogo: versão aceita no Supabase de staging, somente leitura"
           echo "Painel: /admin"
           echo "Rotas de domínio de produção: nenhuma"
-          echo "Escrita comercial: habilitada somente para pedidos sintéticos"
-          echo "Checkout público V2: desativado"
-          echo "Validação interna de produto, variante, tamanho e rejeições: aprovada"
-          echo "Proteção de origem e rate limit do checkout: aprovada em modo seco"
+          echo "Checkout público V2: ativo somente no staging"
+          echo "Validação de produto, variante, tamanho e rejeições: aprovada"
+          echo "Proteção de origem e rate limit do checkout: aprovada"
+          echo "Idempotência visual CREATED e REPLAY: aprovada"
           echo "Rota técnica do ledger: desabilitada"
-          echo "Projeção Supabase sombra: habilitada e validada por pedido sintético"
+          echo "Projeção Supabase sombra: habilitada e validada"
           echo "Produção pública: não alterada"
 
       - name: Registrar resultado sanitizado na issue

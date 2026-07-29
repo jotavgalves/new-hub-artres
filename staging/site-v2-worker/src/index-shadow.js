@@ -72,7 +72,17 @@ export async function fetchStagingShadowWorker(request, env, ctx) {
 
   if (url.pathname === PUBLIC_CHECKOUT_ROUTE) {
     const requestId = safeRequestId(request.headers) || crypto.randomUUID();
-    return handlePublicCheckoutRoute(request, env, requestId);
+    return handlePublicCheckoutRoute(request, env, requestId, {
+      onOrderCommitted({ command, result }) {
+        return scheduleSupabaseShadowProjection({
+          ctx,
+          env,
+          command,
+          result,
+          logger: console
+        });
+      }
+    });
   }
 
   if (url.pathname === ADMIN_ORDERS_ROUTE || url.pathname === LEDGER_OUTBOX_ROUTE) {
