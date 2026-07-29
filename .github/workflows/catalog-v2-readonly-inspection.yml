@@ -39,7 +39,7 @@ jobs:
       ROLLBACK_CONFIG_FILE: wrangler.catalog-readonly-emergency-rollback.runtime.jsonc
       STAGING_SECRETS_FILE: /tmp/catalog-readonly-staging-secrets.json
       CATALOG_REPORT_FILE: /tmp/catalog-v2-readonly-inspection-report.json
-      CATALOG_INSPECTION_MAX_REQUESTS: '800'
+      CATALOG_INSPECTION_MAX_REQUESTS: '1600'
       CATALOG_INSPECTION_MAX_FOLDERS: '800'
       CATALOG_INSPECTION_MAX_ARTWORKS: '100000'
       TRACKING_ISSUE_NUMBER: '16'
