@@ -5,6 +5,7 @@ import { validateLedgerSubmissionCommand } from '../../../src/v2/persistence/ord
 
 const DATABASE_SCHEMA_VERSION = 1;
 const MAX_OUTBOX_BATCH = 200;
+const MAX_ORDER_BATCH = 200;
 
 export class OrderLedger extends DurableObject {
   constructor(ctx, env) {
@@ -40,8 +41,21 @@ export class OrderLedger extends DurableObject {
     return row ? parseJson(row.payload_json, 'ORDER_PAYLOAD_INVALID') : null;
   }
 
+  async listRecentOrders(limit = 50) {
+    const capped = boundedLimit(limit, 50, MAX_ORDER_BATCH);
+    const rows = this.sql.exec(
+      `SELECT payload_json
+         FROM orders
+        ORDER BY created_at DESC, order_number DESC
+        LIMIT ?`,
+      capped
+    ).toArray();
+
+    return rows.map(row => parseJson(row.payload_json, 'ORDER_PAYLOAD_INVALID'));
+  }
+
   async listPendingOutbox(limit = 50) {
-    const capped = Math.min(Math.max(positiveInteger(limit) || 50, 1), MAX_OUTBOX_BATCH);
+    const capped = boundedLimit(limit, 50, MAX_OUTBOX_BATCH);
     const rows = this.sql.exec(
       `SELECT id, event_type, aggregate_id, payload_json, status, created_at, delivered_at
          FROM outbox
@@ -51,15 +65,23 @@ export class OrderLedger extends DurableObject {
       capped
     ).toArray();
 
-    return rows.map(row => ({
-      id: Number(row.id),
-      eventType: row.event_type,
-      aggregateId: row.aggregate_id,
-      payload: parseJson(row.payload_json, 'OUTBOX_PAYLOAD_INVALID'),
-      status: row.status,
-      createdAt: row.created_at,
-      deliveredAt: row.delivered_at || ''
-    }));
+    return rows.map(outboxRow);
+  }
+
+  async getOutboxEventByAggregateId(aggregateId) {
+    const normalized = normalizeOrderNumber(aggregateId);
+    if (!normalized) return null;
+
+    const row = this.sql.exec(
+      `SELECT id, event_type, aggregate_id, payload_json, status, created_at, delivered_at
+         FROM outbox
+        WHERE aggregate_id = ?
+        ORDER BY id DESC
+        LIMIT 1`,
+      normalized
+    ).toArray()[0];
+
+    return row ? outboxRow(row) : null;
   }
 
   async markOutboxDelivered(ids = [], deliveredAt = new Date().toISOString()) {
@@ -266,6 +288,7 @@ export class OrderLedger extends DurableObject {
 
       CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_outbox_pending ON outbox(status, id);
+      CREATE INDEX IF NOT EXISTS idx_outbox_aggregate ON outbox(aggregate_id, id DESC);
       CREATE INDEX IF NOT EXISTS idx_idempotency_order ON idempotency(order_number);
     `);
 
@@ -277,6 +300,18 @@ export class OrderLedger extends DurableObject {
     );
     this.sql.exec('PRAGMA optimize');
   }
+}
+
+function outboxRow(row) {
+  return {
+    id: Number(row.id),
+    eventType: row.event_type,
+    aggregateId: row.aggregate_id,
+    payload: parseJson(row.payload_json, 'OUTBOX_PAYLOAD_INVALID'),
+    status: row.status,
+    createdAt: row.created_at,
+    deliveredAt: row.delivered_at || ''
+  };
 }
 
 function parseJson(value, code) {
@@ -297,6 +332,11 @@ function validIsoDate(value) {
   if (!text) return '';
   const date = new Date(text);
   return Number.isFinite(date.getTime()) ? date.toISOString() : '';
+}
+
+function boundedLimit(value, fallback, maximum) {
+  const parsed = positiveInteger(value) || fallback;
+  return Math.min(Math.max(parsed, 1), maximum);
 }
 
 function positiveInteger(value) {

@@ -227,7 +227,7 @@ assert(orderResult.payload?.order?.items?.[0]?.driveFileId === 'staging-artwork-
 
 const outboxResult = await fetchJson(
   'OUTBOX_INSPECTION',
-  `${base}/internal/v2/ledger/outbox?createdAt=${encodeURIComponent(submissionCreatedAt)}`,
+  `${base}/internal/v2/ledger/outbox?createdAt=${encodeURIComponent(submissionCreatedAt)}&number=${encodeURIComponent(first.orderNumber)}`,
   { headers: { Accept: 'application/json', 'X-Staging-Token': token } }
 );
 assert(outboxResult.response.status === 200, statusError('OUTBOX', outboxResult), outboxResult.payload);
