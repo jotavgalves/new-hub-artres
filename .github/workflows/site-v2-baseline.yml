@@ -69,6 +69,7 @@ jobs:
           node --check src/v2/persistence/supabase-order-projection.mjs
           node --check scripts/v2/prepare-site-v2-staging-deploy.mjs
           node --check scripts/v2/prepare-site-v2-static-assets.mjs
+          node --check scripts/v2/post-site-v2-staging-deploy-status.mjs
           node --check scripts/catalog-v2/prepare-catalog-readonly-inspection.mjs
           node --check scripts/catalog-v2/wait-for-staging-catalog-bridge-active.mjs
           node --check scripts/catalog-v2/run-staging-catalog-readonly-inspection.mjs
@@ -81,10 +82,15 @@ jobs:
           node --check staging/site-v2-worker/src/index-shadow.js
           node --check staging/site-v2-worker/src/catalog-accepted-route.js
           node --check staging/site-v2-worker/src/catalog-readonly-route.js
+          node --check staging/site-v2-worker/src/public-checkout-route.js
+          node --check staging/site-v2-worker/src/accepted-catalog-checkout-resolver.js
+          node --check staging/site-v2-worker/src/accepted-checkout-item-validator.js
+          node --check staging/site-v2-worker/src/checkout-validation-preview-route.js
           node --check staging/site-v2-worker/src/supabase-shadow-projector.js
           node --check staging/site-v2-worker/src/order-ledger-do.js
           node --check staging/site-v2-worker/src/admin-readonly-page.js
           node --check tests/v2/run-staging-accepted-catalog-remote-smoke.mjs
+          node --check tests/v2/run-staging-checkout-validation-remote-smoke.mjs
           node --check tests/v2/run-staging-supabase-shadow-remote-smoke.mjs
 
       - name: Preparar cópia isolada do design atual
