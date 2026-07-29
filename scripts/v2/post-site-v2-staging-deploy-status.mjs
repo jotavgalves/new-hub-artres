@@ -31,6 +31,9 @@ export function buildSiteV2StagingDeployComment(input = {}) {
   if (status.checkoutSmokeError) {
     lines.push(`- Código do smoke do checkout: \`${status.checkoutSmokeError}\``);
   }
+  if (status.remoteSmokeError) {
+    lines.push(`- Código do smoke sintético: \`${status.remoteSmokeError}\``);
+  }
   lines.push('');
 
   if (success) {
@@ -82,6 +85,7 @@ function sanitizeStatus(input) {
     checkoutSmoke: outcome(input.checkoutSmoke),
     checkoutSmokeError: publicCode(input.checkoutSmokeError),
     remoteSmoke: outcome(input.remoteSmoke),
+    remoteSmokeError: publicCode(input.remoteSmokeError),
     shadowSmoke: outcome(input.shadowSmoke),
     rollback: outcome(input.rollback),
     commit: commitSha(input.commit)
@@ -122,6 +126,7 @@ async function main() {
     checkoutSmoke: process.env.CHECKOUT_SMOKE_OUTCOME,
     checkoutSmokeError: process.env.CHECKOUT_SMOKE_ERROR_CODE,
     remoteSmoke: process.env.REMOTE_SMOKE_OUTCOME,
+    remoteSmokeError: process.env.REMOTE_SMOKE_ERROR_CODE,
     shadowSmoke: process.env.SHADOW_SMOKE_OUTCOME,
     rollback: process.env.ROLLBACK_OUTCOME,
     commit: process.env.COMMIT_SHA
