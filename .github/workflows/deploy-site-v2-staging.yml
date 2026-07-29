@@ -1,21 +1,24 @@
-name: Publicar Site V2 Staging Sintético
+name: Publicar Site V2 Staging
 
 on:
   push:
     branches:
       - main
     paths:
+      - 'index.html'
+      - 'assets/**'
       - 'src/v2/**'
       - 'scripts/v2/**'
       - 'staging/site-v2-worker/**'
       - 'wrangler.site-v2-staging.jsonc'
       - 'tests/v2/run-staging-synthetic-remote-smoke.mjs'
       - 'tests/v2/run-staging-supabase-shadow-remote-smoke.mjs'
+      - 'tests/v2/run-staging-accepted-catalog-remote-smoke.mjs'
       - '.github/workflows/deploy-site-v2-staging.yml'
   workflow_dispatch:
     inputs:
       confirmacao:
-        description: 'Digite PUBLICAR STAGING SINTETICO para confirmar'
+        description: 'Digite PUBLICAR STAGING V2 para confirmar'
         required: true
         type: string
 
@@ -44,7 +47,7 @@ jobs:
             exit 0
           fi
 
-          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$CONFIRMACAO" = "PUBLICAR STAGING SINTETICO" ]; then
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$CONFIRMACAO" = "PUBLICAR STAGING V2" ]; then
             echo "Deploy manual de contingência autorizado."
             exit 0
           fi
@@ -53,7 +56,7 @@ jobs:
           exit 1
 
   deploy-staging:
-    name: Publicar e validar staging sintético
+    name: Publicar e validar staging V2
     needs: authorize-deploy
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -105,6 +108,9 @@ jobs:
           umask 077
           node scripts/v2/prepare-site-v2-staging-deploy.mjs
 
+      - name: Preparar cópia isolada do design público atual
+        run: node scripts/v2/prepare-site-v2-static-assets.mjs
+
       - name: Executar testes isolados
         run: node --test tests/v2/*.test.mjs
 
@@ -126,15 +132,19 @@ jobs:
           --secrets-file "$STAGING_SECRETS_FILE"
           --outdir /tmp/site-v2-staging-rollback-dry-run
 
-      - name: Publicar Worker com escrita exclusivamente sintética
+      - name: Publicar Worker, design atual e catálogo aceito
         id: deploy
         run: >-
           npx --yes wrangler@4.114.0 deploy
           --strict
           --config wrangler.site-v2-staging.jsonc
           --secrets-file "$STAGING_SECRETS_FILE"
-          --message "Staging V2 sintético com projeção sombra Supabase"
-          --tag "staging-synthetic-supabase-shadow-enabled"
+          --message "Staging V2 com design atual, catálogo aceito e projeção sombra"
+          --tag "staging-v2-accepted-catalog"
+
+      - name: Validar catálogo real aceito e design servido
+        id: catalog-smoke
+        run: node tests/v2/run-staging-accepted-catalog-remote-smoke.mjs
 
       - name: Validar pedido, replay, painel e bloqueios
         id: remote-smoke
@@ -144,7 +154,7 @@ jobs:
         id: shadow-smoke
         run: node tests/v2/run-staging-supabase-shadow-remote-smoke.mjs
 
-      - name: Reverter automaticamente para escrita e sombra desativadas em caso de falha
+      - name: Reverter automaticamente escrita e sombra em caso de falha
         if: failure() && steps.deploy.outcome == 'success'
         run: >-
           npx --yes wrangler@4.114.0 deploy
@@ -156,16 +166,17 @@ jobs:
 
       - name: Remover arquivos temporários
         if: always()
-        run: rm -f "$STAGING_SECRETS_FILE" "$ROLLBACK_CONFIG_FILE"
+        run: rm -f "$STAGING_SECRETS_FILE" "$ROLLBACK_CONFIG_FILE" && rm -rf staging/site-v2-public
 
       - name: Registrar garantia de isolamento
         if: success()
         run: |
           echo "Worker: new-hub-artres-v2-staging"
+          echo "Site: design público atual copiado sem transformação"
+          echo "Catálogo: versão aceita no Supabase de staging, somente leitura"
           echo "Painel: /admin"
           echo "Rotas de domínio de produção: nenhuma"
-          echo "Escrita comercial: habilitada somente para catálogo sintético"
+          echo "Escrita comercial: habilitada somente para pedidos sintéticos"
           echo "Rota técnica do ledger: desabilitada"
           echo "Projeção Supabase sombra: habilitada e validada por pedido sintético"
-          echo "Catálogo: synthetic-staging-only, versão 9001"
           echo "Produção pública: não alterada"
