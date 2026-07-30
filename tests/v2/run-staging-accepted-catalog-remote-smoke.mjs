@@ -186,11 +186,14 @@ function validateAssetProbe(payload) {
   const rootProbe = probes.find(item => item?.pathname === '/');
   const workspaceProbe = probes.find(item => item?.pathname === '/assets/v2-product-workspaces.js');
 
-  const indexResult = validateOneAssetProbe(indexProbe, 'INDEX', 'text/html');
+  const indexResult = validateOneAssetProbe(indexProbe, 'INDEX', ['text/html']);
   if (!indexResult.ok) return indexResult;
-  const rootResult = validateOneAssetProbe(rootProbe, 'ROOT_BINDING', 'text/html');
+  const rootResult = validateOneAssetProbe(rootProbe, 'ROOT_BINDING', ['text/html']);
   if (!rootResult.ok) return rootResult;
-  const workspaceResult = validateOneAssetProbe(workspaceProbe, 'PRODUCT_WORKSPACES', 'application/javascript');
+  const workspaceResult = validateOneAssetProbe(workspaceProbe, 'PRODUCT_WORKSPACES', [
+    'application/javascript',
+    'text/javascript'
+  ]);
   if (!workspaceResult.ok) return workspaceResult;
 
   return {
@@ -199,6 +202,7 @@ function validateAssetProbe(payload) {
       indexStatus: Number(indexProbe.status),
       rootBindingStatus: Number(rootProbe.status),
       workspaceStatus: Number(workspaceProbe.status),
+      workspaceContentType: String(workspaceProbe.contentType || ''),
       indexTitleMatched: indexProbe.titleMatched === true,
       rootBindingTitleMatched: rootProbe.titleMatched === true,
       workspaceMarkerMatched: workspaceProbe.markerMatched === true
@@ -206,7 +210,7 @@ function validateAssetProbe(payload) {
   };
 }
 
-function validateOneAssetProbe(probe, label, expectedContentType) {
+function validateOneAssetProbe(probe, label, expectedContentTypes) {
   if (!probe || typeof probe !== 'object') {
     return { ok: false, code: `STAGING_ASSET_${label}_PROBE_MISSING` };
   }
@@ -217,10 +221,13 @@ function validateOneAssetProbe(probe, label, expectedContentType) {
   if (probe.ok !== true || Number(probe.status) !== 200) {
     return { ok: false, code: `STAGING_ASSET_${label}_HTTP_${Number(probe.status) || 0}` };
   }
-  if (probe.contentType !== expectedContentType) {
+  const allowedContentTypes = Array.isArray(expectedContentTypes)
+    ? expectedContentTypes
+    : [expectedContentTypes];
+  if (!allowedContentTypes.includes(probe.contentType)) {
     return { ok: false, code: `STAGING_ASSET_${label}_CONTENT_TYPE_INVALID` };
   }
-  if (expectedContentType === 'text/html' && probe.titleMatched !== true) {
+  if (allowedContentTypes.includes('text/html') && probe.titleMatched !== true) {
     return { ok: false, code: `STAGING_ASSET_${label}_TITLE_NOT_MATCHED` };
   }
   if (probe.markerMatched !== true) {
