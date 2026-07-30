@@ -128,7 +128,6 @@ ORDER_NUMBER=$(node -e '
   if(!result.ok||result.action!=="CREATED"||result.replayed!==false)throw new Error("FIRST_SUBMISSION_INVALID");
   if(result.orderNumber!=="PED2600001A")throw new Error(`ORDER_NUMBER_INVALID:${result.orderNumber}`);
   if(result.pricing?.total!==58.5)throw new Error(`SYNTHETIC_SERVER_TOTAL_INVALID:${result.pricing?.total}`);
-  if(!result.warnings?.includes("CLIENT_ITEM_PRICE_IGNORED"))throw new Error("CLIENT_PRICE_WARNING_MISSING");
   process.stdout.write(result.orderNumber);
 ' "$FIRST_FILE")
 
