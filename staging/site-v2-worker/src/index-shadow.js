@@ -1,6 +1,11 @@
 import { constantTimeEqualSecrets } from '../../../src/v2/http/request-guard.mjs';
 import { fetchStagingWorker, OrderLedger } from './index.js';
 import {
+  ADMIN_COMMERCIAL_CSS,
+  ADMIN_COMMERCIAL_HTML,
+  ADMIN_COMMERCIAL_JS
+} from './admin-commercial-page.js';
+import {
   catalogAcceptedStatus,
   handleCatalogAcceptedPublicRoute
 } from './catalog-accepted-route.js';
@@ -40,6 +45,7 @@ export { OrderLedger };
 const ADMIN_ORDERS_ROUTE = '/internal/v2/admin/orders';
 const ADMIN_COMMERCIAL_CONFIG_ROUTE = '/internal/v2/admin/commercial-config';
 const PUBLIC_COMMERCIAL_CONFIG_ROUTE = '/api/commercial-config';
+const ADMIN_COMMERCIAL_PAGE = '/admin/commercial';
 const CATALOG_READONLY_ROUTE = '/internal/v2/catalog/preview';
 const LEDGER_OUTBOX_ROUTE = '/internal/v2/ledger/outbox';
 const PUBLIC_CHECKOUT_PROTECTION_ROUTE = '/internal/v2/checkout/protection';
@@ -57,6 +63,19 @@ export default {
 
 export async function fetchStagingShadowWorker(request, env, ctx) {
   const url = new URL(request.url);
+
+  if (url.pathname === ADMIN_COMMERCIAL_PAGE || url.pathname === `${ADMIN_COMMERCIAL_PAGE}/`) {
+    if (request.method !== 'GET') return methodNotAllowed(['GET'], safeRequestId(request.headers) || crypto.randomUUID());
+    return adminAsset(ADMIN_COMMERCIAL_HTML, 'text/html; charset=utf-8', true);
+  }
+  if (url.pathname === `${ADMIN_COMMERCIAL_PAGE}/app.css`) {
+    if (request.method !== 'GET') return methodNotAllowed(['GET'], safeRequestId(request.headers) || crypto.randomUUID());
+    return adminAsset(ADMIN_COMMERCIAL_CSS, 'text/css; charset=utf-8');
+  }
+  if (url.pathname === `${ADMIN_COMMERCIAL_PAGE}/app.js`) {
+    if (request.method !== 'GET') return methodNotAllowed(['GET'], safeRequestId(request.headers) || crypto.randomUUID());
+    return adminAsset(ADMIN_COMMERCIAL_JS, 'text/javascript; charset=utf-8');
+  }
 
   if (isStaticAssetRoute(url.pathname)) {
     const requestId = safeRequestId(request.headers) || crypto.randomUUID();
@@ -199,7 +218,8 @@ export async function fetchStagingShadowWorker(request, env, ctx) {
       commercialConfig: {
         enabled: true,
         publicRoute: PUBLIC_COMMERCIAL_CONFIG_ROUTE,
-        adminRoute: ADMIN_COMMERCIAL_CONFIG_ROUTE
+        adminRoute: ADMIN_COMMERCIAL_CONFIG_ROUTE,
+        adminPage: ADMIN_COMMERCIAL_PAGE
       }
     });
   }
@@ -224,6 +244,24 @@ async function augmentHealthResponse(response, statusFields) {
   } catch (_) {
     return response;
   }
+}
+
+function adminAsset(body, contentType, isHtml = false) {
+  return new Response(body, {
+    status: 200,
+    headers: {
+      'Content-Type': contentType,
+      'Cache-Control': 'no-store, max-age=0',
+      'Content-Security-Policy': isHtml
+        ? "default-src 'none'; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+        : "default-src 'none'; frame-ancestors 'none'",
+      'Cross-Origin-Resource-Policy': 'same-origin',
+      'X-Content-Type-Options': 'nosniff',
+      'Referrer-Policy': 'no-referrer',
+      'X-Frame-Options': 'DENY',
+      'X-Robots-Tag': 'noindex, nofollow, noarchive'
+    }
+  });
 }
 
 function methodNotAllowed(methods, requestId) {
