@@ -13,8 +13,14 @@ async function main() {
   const metadata = stable.metadata;
 
   const themes = await catalogRequest('themes');
+  const bolinhasThemes = await catalogRequest('themes', { product: '50x50' });
+  const painelThemes = await catalogRequest('themes', { product: 'painel-150' });
   const queue = uniqueFolders(themes);
+  const bolinhasThemeCount = uniqueFolders(bolinhasThemes).length;
+  const painelThemeCount = uniqueFolders(painelThemes).length;
   if (!queue.length) throw smokeError('STAGING_ACCEPTED_CATALOG_THEMES_EMPTY');
+  if (!bolinhasThemeCount) throw smokeError('STAGING_BOLINHAS_CATALOG_EMPTY');
+  if (!painelThemeCount) throw smokeError('STAGING_PAINEL_150_CATALOG_EMPTY');
 
   let productCount = 0;
   let itemCount = 0;
@@ -53,10 +59,13 @@ async function main() {
     stableResponses: stable.consecutive,
     catalogVersion: Number(metadata.catalogVersion),
     themeCount: uniqueFolders(themes).length,
+    bolinhasThemeCount,
+    painelThemeCount,
     visitedFolderCount: visited.size,
     productCount,
     reachableItemCount: itemCount,
     currentDesignServed: true,
+    productWorkspacesServed: true,
     assetProbe: stable.assetProbeSummary,
     productionChanged: false
   })}\n`);
@@ -116,6 +125,15 @@ async function waitForAcceptedCatalogDeployment() {
         await waitBeforeRetry(attempt, lastCode);
         continue;
       }
+      if (
+        !home.text.includes('./assets/v2-product-workspaces.js') ||
+        !home.text.includes('SiteV2ProductWorkspaces.start({')
+      ) {
+        lastCode = 'STAGING_PRODUCT_WORKSPACES_HTML_NOT_READY';
+        consecutive = 0;
+        await waitBeforeRetry(attempt, lastCode);
+        continue;
+      }
 
       const metadataResult = await fetchJsonResult(new URL('/api/catalog-meta', STAGING_URL));
       if (!metadataResult.ok) {
@@ -166,24 +184,29 @@ function validateAssetProbe(payload) {
   const probes = Array.isArray(payload.probes) ? payload.probes : [];
   const indexProbe = probes.find(item => item?.pathname === '/index.html');
   const rootProbe = probes.find(item => item?.pathname === '/');
+  const workspaceProbe = probes.find(item => item?.pathname === '/assets/v2-product-workspaces.js');
 
-  const indexResult = validateOneAssetProbe(indexProbe, 'INDEX');
+  const indexResult = validateOneAssetProbe(indexProbe, 'INDEX', 'text/html');
   if (!indexResult.ok) return indexResult;
-  const rootResult = validateOneAssetProbe(rootProbe, 'ROOT_BINDING');
+  const rootResult = validateOneAssetProbe(rootProbe, 'ROOT_BINDING', 'text/html');
   if (!rootResult.ok) return rootResult;
+  const workspaceResult = validateOneAssetProbe(workspaceProbe, 'PRODUCT_WORKSPACES', 'application/javascript');
+  if (!workspaceResult.ok) return workspaceResult;
 
   return {
     ok: true,
     summary: Object.freeze({
       indexStatus: Number(indexProbe.status),
       rootBindingStatus: Number(rootProbe.status),
+      workspaceStatus: Number(workspaceProbe.status),
       indexTitleMatched: indexProbe.titleMatched === true,
-      rootBindingTitleMatched: rootProbe.titleMatched === true
+      rootBindingTitleMatched: rootProbe.titleMatched === true,
+      workspaceMarkerMatched: workspaceProbe.markerMatched === true
     })
   };
 }
 
-function validateOneAssetProbe(probe, label) {
+function validateOneAssetProbe(probe, label, expectedContentType) {
   if (!probe || typeof probe !== 'object') {
     return { ok: false, code: `STAGING_ASSET_${label}_PROBE_MISSING` };
   }
@@ -194,11 +217,14 @@ function validateOneAssetProbe(probe, label) {
   if (probe.ok !== true || Number(probe.status) !== 200) {
     return { ok: false, code: `STAGING_ASSET_${label}_HTTP_${Number(probe.status) || 0}` };
   }
-  if (probe.contentType !== 'text/html') {
+  if (probe.contentType !== expectedContentType) {
     return { ok: false, code: `STAGING_ASSET_${label}_CONTENT_TYPE_INVALID` };
   }
-  if (probe.titleMatched !== true) {
+  if (expectedContentType === 'text/html' && probe.titleMatched !== true) {
     return { ok: false, code: `STAGING_ASSET_${label}_TITLE_NOT_MATCHED` };
+  }
+  if (probe.markerMatched !== true) {
+    return { ok: false, code: `STAGING_ASSET_${label}_MARKER_NOT_MATCHED` };
   }
   return { ok: true };
 }

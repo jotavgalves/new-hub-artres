@@ -4,6 +4,7 @@ import test from 'node:test';
 import { probeStaticAssets } from '../../staging/site-v2-worker/src/static-assets-router.js';
 
 const TITLE = '<title>Escolha suas Artes | Armazém Festa e Eventos</title>';
+const WORKSPACES = 'site-v2-product-workspaces-v1';
 const CONTEXT = 'site-v2-visual-checkout-context-v1';
 const WHATSAPP = 'site-v2-visual-checkout-whatsapp-v1';
 const BRIDGE = 'site-v2-visual-checkout-bridge-v1';
@@ -12,6 +13,7 @@ function environment(overrides = {}) {
   const bodies = {
     '/index.html': `<!doctype html><html><head>${TITLE}</head><body></body></html>`,
     '/': `<!doctype html><html><head>${TITLE}</head><body></body></html>`,
+    '/assets/v2-product-workspaces.js': `const marker='${WORKSPACES}';`,
     '/assets/v2-checkout-context.js': `const marker='${CONTEXT}';`,
     '/assets/v2-checkout-whatsapp.js': `const marker='${WHATSAPP}';`,
     '/assets/v2-checkout-bridge.js': `const marker='${BRIDGE}';`,
@@ -35,7 +37,7 @@ function environment(overrides = {}) {
   };
 }
 
-test('aprova somente quando index, raiz, contexto, WhatsApp e bridge estão íntegros', async () => {
+test('aprova somente quando index, raiz, espaços de produto e checkout estão íntegros', async () => {
   const response = await probeStaticAssets(
     new Request('https://staging.example/internal/v2/assets/probe'),
     environment(),
@@ -46,15 +48,31 @@ test('aprova somente quando index, raiz, contexto, WhatsApp e bridge estão ínt
   assert.equal(response.status, 200);
   assert.equal(payload.ok, true);
   assert.equal(payload.bindingConfigured, true);
-  assert.equal(payload.probes.length, 5);
+  assert.equal(payload.probes.length, 6);
   assert.deepEqual(payload.probes.map(probe => probe.pathname), [
     '/index.html',
     '/',
+    '/assets/v2-product-workspaces.js',
     '/assets/v2-checkout-context.js',
     '/assets/v2-checkout-whatsapp.js',
     '/assets/v2-checkout-bridge.js'
   ]);
   assert.equal(payload.probes.every(probe => probe.markerMatched === true), true);
+});
+
+test('falha fechado quando o seletor de produtos publicado não contém o marcador esperado', async () => {
+  const response = await probeStaticAssets(
+    new Request('https://staging.example/internal/v2/assets/probe'),
+    environment({ '/assets/v2-product-workspaces.js': 'arquivo incorreto' }),
+    'probe-workspaces-invalid'
+  );
+  const payload = await response.json();
+  const probe = payload.probes.find(item => item.pathname === '/assets/v2-product-workspaces.js');
+
+  assert.equal(response.status, 200);
+  assert.equal(payload.ok, false);
+  assert.equal(probe.ok, true);
+  assert.equal(probe.markerMatched, false);
 });
 
 test('falha fechado quando o contexto visual publicado não contém o marcador esperado', async () => {

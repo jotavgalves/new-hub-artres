@@ -10,6 +10,7 @@ import {
 const BASE_URL = 'https://staging.example.test';
 const REQUEST_ID = 'static-routing-test';
 const DESIGN_HTML = '<!doctype html><title>Escolha suas Artes | Armazém Festa e Eventos</title>';
+const WORKSPACES_SCRIPT = "const marker='site-v2-product-workspaces-v1';";
 const CONTEXT_SCRIPT = "const marker='site-v2-visual-checkout-context-v1';";
 const WHATSAPP_SCRIPT = "const marker='site-v2-visual-checkout-whatsapp-v1';";
 const BRIDGE_SCRIPT = "const marker='site-v2-visual-checkout-bridge-v1';";
@@ -118,27 +119,21 @@ test('falha de forma sanitizada quando o binding ASSETS lança erro', async () =
   assert.doesNotMatch(logs[0], /conteúdo interno/i);
 });
 
-test('probe consulta index, raiz, contexto, WhatsApp e bridge sem retornar o conteúdo', async () => {
+test('probe consulta index, raiz, produtos e checkout sem retornar o conteúdo', async () => {
   const calls = [];
+  const scripts = {
+    '/assets/v2-product-workspaces.js': WORKSPACES_SCRIPT,
+    '/assets/v2-checkout-context.js': CONTEXT_SCRIPT,
+    '/assets/v2-checkout-whatsapp.js': WHATSAPP_SCRIPT,
+    '/assets/v2-checkout-bridge.js': BRIDGE_SCRIPT
+  };
   const assets = {
     async fetch(received) {
       assert.equal(this, assets);
       const pathname = new URL(received.url).pathname;
       calls.push(pathname);
-      if (pathname === '/assets/v2-checkout-context.js') {
-        return new Response(CONTEXT_SCRIPT, {
-          status: 200,
-          headers: { 'content-type': 'application/javascript; charset=utf-8' }
-        });
-      }
-      if (pathname === '/assets/v2-checkout-whatsapp.js') {
-        return new Response(WHATSAPP_SCRIPT, {
-          status: 200,
-          headers: { 'content-type': 'application/javascript; charset=utf-8' }
-        });
-      }
-      if (pathname === '/assets/v2-checkout-bridge.js') {
-        return new Response(BRIDGE_SCRIPT, {
+      if (Object.hasOwn(scripts, pathname)) {
+        return new Response(scripts[pathname], {
           status: 200,
           headers: { 'content-type': 'application/javascript; charset=utf-8' }
         });
@@ -158,11 +153,12 @@ test('probe consulta index, raiz, contexto, WhatsApp e bridge sem retornar o con
   assert.deepEqual(calls, [
     '/index.html',
     '/',
+    '/assets/v2-product-workspaces.js',
     '/assets/v2-checkout-context.js',
     '/assets/v2-checkout-whatsapp.js',
     '/assets/v2-checkout-bridge.js'
   ]);
-  assert.equal(payload.probes.length, 5);
+  assert.equal(payload.probes.length, 6);
   assert.deepEqual(payload.probes.map(item => item.pathname), calls);
   for (const probe of payload.probes) {
     assert.equal(probe.responseReceived, true);
@@ -175,9 +171,9 @@ test('probe consulta index, raiz, contexto, WhatsApp e bridge sem retornar o con
   assert.equal(payload.probes[1].contentType, 'text/html');
   assert.equal(payload.probes[0].titleMatched, true);
   assert.equal(payload.probes[1].titleMatched, true);
-  assert.equal(payload.probes[2].contentType, 'application/javascript');
-  assert.equal(payload.probes[3].contentType, 'application/javascript');
-  assert.equal(payload.probes[4].contentType, 'application/javascript');
+  for (const probe of payload.probes.slice(2)) {
+    assert.equal(probe.contentType, 'application/javascript');
+  }
   assert.doesNotMatch(JSON.stringify(payload), /<!doctype|const marker|Escolha suas Artes/i);
 });
 
