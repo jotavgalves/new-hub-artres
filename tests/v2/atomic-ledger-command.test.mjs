@@ -56,8 +56,9 @@ test('comando atômico ignora preço e total enviados pelo navegador', async () 
   assert.equal(item.lineSubtotal, 58.5);
   assert.equal(value.preparedOrder.pricing.subtotal, 58.5);
   assert.equal(value.preparedOrder.pricing.total, 58.5);
-  assert.ok(value.quoteWarnings.includes('CLIENT_ITEM_PRICE_IGNORED:staging-artwork-2657'));
+  assert.ok(value.quoteWarnings.includes('CLIENT_ITEM_PRICE_IGNORED'));
   assert.ok(value.quoteWarnings.includes('CLIENT_ORDER_TOTALS_IGNORED'));
+  assert.equal(JSON.stringify(value.quoteWarnings).includes('staging-artwork-2657'), false);
   assert.match(value.fingerprint, /^[a-f0-9]{64}$/);
   assert.match(value.idempotencyKey, /^idempotency:v2:[a-f0-9]{64}$/);
   assert.equal(value.idempotencyKey.includes('idem_atomic_0123456789'), false);
