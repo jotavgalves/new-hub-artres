@@ -1,6 +1,30 @@
 const STATIC_METHODS = new Set(['GET', 'HEAD']);
 const PROBE_MAX_BYTES = 512 * 1024;
 const EXPECTED_TITLE = /<title>Escolha suas Artes \| Armazém Festa e Eventos<\/title>/i;
+const CONTEXT_MARKER = /site-v2-visual-checkout-context-v1/;
+const BRIDGE_MARKER = /site-v2-visual-checkout-bridge-v1/;
+const PROBE_SPECS = Object.freeze([
+  Object.freeze({
+    pathname: '/index.html',
+    accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+    marker: EXPECTED_TITLE
+  }),
+  Object.freeze({
+    pathname: '/',
+    accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+    marker: EXPECTED_TITLE
+  }),
+  Object.freeze({
+    pathname: '/assets/v2-checkout-context.js',
+    accept: 'application/javascript,text/javascript;q=0.9,*/*;q=0.8',
+    marker: CONTEXT_MARKER
+  }),
+  Object.freeze({
+    pathname: '/assets/v2-checkout-bridge.js',
+    accept: 'application/javascript,text/javascript;q=0.9,*/*;q=0.8',
+    marker: BRIDGE_MARKER
+  })
+]);
 
 export function isStaticAssetRoute(pathname) {
   const path = String(pathname || '');
@@ -49,25 +73,33 @@ export async function probeStaticAssets(request, env, requestId, options = {}) {
   }
 
   const probes = [];
-  for (const pathname of ['/index.html', '/']) {
-    probes.push(await probeAssetPath(request, env, pathname, {
+  for (const spec of PROBE_SPECS) {
+    probes.push(await probeAssetPath(request, env, spec, {
       logger: options.logger || console,
       maxBytes: boundedPositiveInteger(options.maxBytes, PROBE_MAX_BYTES, PROBE_MAX_BYTES)
     }));
   }
 
+  const requiredAssetsValid = probes.every(probe =>
+    probe.responseReceived === true &&
+    probe.ok === true &&
+    Number(probe.status) === 200 &&
+    probe.markerMatched === true
+  );
+
   return json({
-    ok: true,
+    ok: requiredAssetsValid,
     requestId,
     bindingConfigured: true,
     probes
   });
 }
 
-async function probeAssetPath(originalRequest, env, pathname, options) {
+async function probeAssetPath(originalRequest, env, spec, options) {
+  const pathname = spec.pathname;
   const target = new URL(pathname, originalRequest.url);
   const headers = new Headers({
-    Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+    Accept: spec.accept,
     'Cache-Control': 'no-store'
   });
   const probeRequest = new Request(target, { method: 'GET', headers });
@@ -75,6 +107,7 @@ async function probeAssetPath(originalRequest, env, pathname, options) {
   try {
     const response = await Reflect.apply(env.ASSETS.fetch, env.ASSETS, [probeRequest]);
     const body = await readLimitedText(response, options.maxBytes);
+    const markerMatched = spec.marker.test(body);
     return Object.freeze({
       pathname,
       responseReceived: true,
@@ -83,6 +116,7 @@ async function probeAssetPath(originalRequest, env, pathname, options) {
       contentType: safeContentType(response.headers.get('content-type')),
       bodyBytes: new TextEncoder().encode(body).byteLength,
       titleMatched: EXPECTED_TITLE.test(body),
+      markerMatched,
       error: ''
     });
   } catch (error) {
@@ -95,6 +129,7 @@ async function probeAssetPath(originalRequest, env, pathname, options) {
       contentType: '',
       bodyBytes: 0,
       titleMatched: false,
+      markerMatched: false,
       error: publicProbeCode(error)
     });
   }
