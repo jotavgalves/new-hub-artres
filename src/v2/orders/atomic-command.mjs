@@ -81,8 +81,15 @@ export async function createAtomicLedgerCommandV2(input = {}) {
 
   return deepFreeze({
     ...validation.command,
-    quoteWarnings: [...quote.warnings]
+    quoteWarnings: sanitizeQuoteWarnings(quote.warnings)
   });
+}
+
+export function sanitizeQuoteWarnings(values = []) {
+  return [...new Set((Array.isArray(values) ? values : [])
+    .map(value => String(value || '').split(':')[0])
+    .filter(code => /^[A-Z0-9_]{3,100}$/.test(code))
+  )];
 }
 
 function sanitizeSeller(value = {}) {
