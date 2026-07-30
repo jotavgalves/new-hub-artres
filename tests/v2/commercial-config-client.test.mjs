@@ -64,6 +64,9 @@ test('asset altera funções comerciais sem guardar preços no navegador', async
   assert.match(source, /setRule50/);
   assert.match(source, /setRenderCart/);
   assert.match(source, /fetchCommercialConfig/);
+  assert.match(source, /let hooksWrapped = false/);
+  assert.match(source, /if \(!hooksWrapped\) \{/);
+  assert.match(source, /hooksWrapped = true/);
   assert.doesNotMatch(source, /localStorage|sessionStorage|indexedDB/);
   assert.doesNotMatch(source, /unitPrice\s*:\s*9\.75|unitPrice\s*:\s*59\.90/);
 });
