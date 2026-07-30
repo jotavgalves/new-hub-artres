@@ -2,6 +2,7 @@ const STATIC_METHODS = new Set(['GET', 'HEAD']);
 const PROBE_MAX_BYTES = 512 * 1024;
 const EXPECTED_TITLE = /<title>Escolha suas Artes \| Armazém Festa e Eventos<\/title>/i;
 const CONTEXT_MARKER = /site-v2-visual-checkout-context-v1/;
+const WHATSAPP_MARKER = /site-v2-visual-checkout-whatsapp-v1/;
 const BRIDGE_MARKER = /site-v2-visual-checkout-bridge-v1/;
 const PROBE_SPECS = Object.freeze([
   Object.freeze({
@@ -18,6 +19,11 @@ const PROBE_SPECS = Object.freeze([
     pathname: '/assets/v2-checkout-context.js',
     accept: 'application/javascript,text/javascript;q=0.9,*/*;q=0.8',
     marker: CONTEXT_MARKER
+  }),
+  Object.freeze({
+    pathname: '/assets/v2-checkout-whatsapp.js',
+    accept: 'application/javascript,text/javascript;q=0.9,*/*;q=0.8',
+    marker: WHATSAPP_MARKER
   }),
   Object.freeze({
     pathname: '/assets/v2-checkout-bridge.js',
