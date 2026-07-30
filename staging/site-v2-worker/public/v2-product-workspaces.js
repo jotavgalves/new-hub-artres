@@ -33,14 +33,13 @@
     '50x50': 'bolinhas',
     painel: 'painel-150',
     'painel-150': 'painel-150',
-    'painel150': 'painel-150',
+    painel150: 'painel-150',
     'painel-150cm': 'painel-150'
   });
 
   let started = false;
   let activeWorkspaceId = '';
   let hooks = null;
-  let originalApi = null;
   let observer = null;
 
   function start(input = {}) {
@@ -54,7 +53,7 @@
     documentRef.documentElement.dataset.v2ProductWorkspaces = MARKER;
     installStyles(documentRef);
     installWorkspaceNavigation(documentRef);
-    wrapCatalogApi();
+    installRuntimeGuards();
     observeSharedCart(documentRef);
 
     const initial = resolveInitialWorkspace({
@@ -90,19 +89,7 @@
     if (changed) clearCatalogPlaceOnly();
     hooks?.clearNavigation?.();
 
-    if (options.reload !== false && typeof hooks?.loadThemes === 'function') {
-      const content = documentRef?.getElementById?.('content');
-      content?.classList?.add?.('v2-workspace-switching');
-      const result = Promise.resolve(hooks.loadThemes());
-      result.finally(() => {
-        content?.classList?.remove?.('v2-workspace-switching');
-        refreshSharedCart(documentRef);
-        if (options.focusCatalog !== false) {
-          documentRef?.getElementById?.('viewTitle')?.focus?.({ preventScroll: true });
-          documentRef?.querySelector?.('.catalog')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
-        }
-      });
-    }
+    if (options.reload !== false) reloadActiveCatalog(documentRef, options);
 
     if (changed && options.announce !== false) {
       hooks?.notify?.(`Agora você está vendo ${workspace.title}. O carrinho foi mantido.`);
@@ -140,6 +127,10 @@
     return resolveWorkspace(queryValue) || resolveWorkspace(input.sessionValue);
   }
 
+  function workspaceForProduct(value) {
+    return resolveWorkspace(value);
+  }
+
   function getState() {
     const active = resolveWorkspace(activeWorkspaceId);
     return Object.freeze({
@@ -153,28 +144,99 @@
   }
 
   function validateHooks(input) {
-    if (typeof input.getApi !== 'function') throw workspaceError('WORKSPACE_GET_API_REQUIRED');
-    if (typeof input.setApi !== 'function') throw workspaceError('WORKSPACE_SET_API_REQUIRED');
-    if (typeof input.loadThemes !== 'function') throw workspaceError('WORKSPACE_LOAD_THEMES_REQUIRED');
+    for (const name of ['getApi', 'setApi', 'loadThemes']) {
+      if (typeof input[name] !== 'function') throw workspaceError(`WORKSPACE_${name.replace(/[A-Z]/g, m => `_${m}`).toUpperCase()}_REQUIRED`);
+    }
     return Object.freeze({
       getApi: input.getApi,
       setApi: input.setApi,
       loadThemes: input.loadThemes,
-      renderCart: typeof input.renderCart === 'function' ? input.renderCart : null,
-      getCartQuantity: typeof input.getCartQuantity === 'function' ? input.getCartQuantity : null,
-      clearNavigation: typeof input.clearNavigation === 'function' ? input.clearNavigation : null,
-      notify: typeof input.notify === 'function' ? input.notify : null
+      getShowProducts: optionalFunction(input.getShowProducts),
+      setShowProducts: optionalFunction(input.setShowProducts),
+      filterProducts: optionalFunction(input.filterProducts),
+      getFilteredItems: optionalFunction(input.getFilteredItems),
+      setFilteredItems: optionalFunction(input.setFilteredItems),
+      getLocateItem: optionalFunction(input.getLocateItem),
+      setLocateItem: optionalFunction(input.setLocateItem),
+      getCartItemProduct: optionalFunction(input.getCartItemProduct),
+      getCartQuantity: optionalFunction(input.getCartQuantity),
+      clearNavigation: optionalFunction(input.clearNavigation),
+      notify: optionalFunction(input.notify)
     });
   }
 
+  function installRuntimeGuards() {
+    wrapCatalogApi();
+    wrapProductRenderer();
+    wrapItemFilter();
+    wrapCartLocator();
+  }
+
   function wrapCatalogApi() {
-    originalApi = hooks.getApi();
-    if (typeof originalApi !== 'function') throw workspaceError('WORKSPACE_API_INVALID');
+    const original = hooks.getApi();
+    if (typeof original !== 'function') throw workspaceError('WORKSPACE_API_INVALID');
     hooks.setApi(function scopedWorkspaceApi(params, options) {
       const workspace = resolveWorkspace(activeWorkspaceId);
       if (!workspace) return Promise.reject(workspaceError('WORKSPACE_SELECTION_REQUIRED'));
-      return originalApi(scopeCatalogParams(params, workspace), options);
+      return original(scopeCatalogParams(params, workspace), options);
     });
+  }
+
+  function wrapProductRenderer() {
+    if (!hooks.getShowProducts || !hooks.setShowProducts || !hooks.filterProducts) return;
+    const original = hooks.getShowProducts();
+    if (typeof original !== 'function') throw workspaceError('WORKSPACE_SHOW_PRODUCTS_INVALID');
+    hooks.setShowProducts(function scopedShowProducts(...args) {
+      const workspace = requireActiveWorkspace();
+      hooks.filterProducts(workspace.productKey);
+      return original(...args);
+    });
+  }
+
+  function wrapItemFilter() {
+    if (!hooks.getFilteredItems || !hooks.setFilteredItems) return;
+    const original = hooks.getFilteredItems();
+    if (typeof original !== 'function') throw workspaceError('WORKSPACE_FILTERED_ITEMS_INVALID');
+    hooks.setFilteredItems(function scopedFilteredItems(...args) {
+      const list = original(...args);
+      const workspace = requireActiveWorkspace();
+      return (Array.isArray(list) ? list : []).filter(item => productMatches(item, workspace.productKey));
+    });
+  }
+
+  function wrapCartLocator() {
+    if (!hooks.getLocateItem || !hooks.setLocateItem || !hooks.getCartItemProduct) return;
+    const original = hooks.getLocateItem();
+    if (typeof original !== 'function') throw workspaceError('WORKSPACE_LOCATE_ITEM_INVALID');
+    hooks.setLocateItem(async function scopedLocateItem(id, ...args) {
+      const target = workspaceForProduct(hooks.getCartItemProduct(id));
+      if (target && target.id !== activeWorkspaceId) {
+        activate(target.id, { reload: false, announce: false, focusCatalog: false });
+      }
+      return original(id, ...args);
+    });
+  }
+
+  function reloadActiveCatalog(documentRef, options) {
+    const content = documentRef?.getElementById?.('content');
+    content?.classList?.add?.('v2-workspace-switching');
+    let result;
+    try {
+      result = Promise.resolve(hooks.loadThemes());
+    } catch (error) {
+      result = Promise.reject(error);
+    }
+    result.finally(() => {
+      content?.classList?.remove?.('v2-workspace-switching');
+      refreshSharedCart(documentRef);
+      if (options.focusCatalog !== false) {
+        const title = documentRef?.getElementById?.('viewTitle');
+        title?.setAttribute?.('tabindex', '-1');
+        title?.focus?.({ preventScroll: true });
+        documentRef?.querySelector?.('.catalog')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+      }
+    });
+    return result;
   }
 
   function installWorkspaceNavigation(documentRef) {
@@ -216,7 +278,11 @@
     `;
     documentRef.body.appendChild(overlay);
     bindWorkspaceButtons(overlay);
-    root?.requestAnimationFrame?.(() => overlay.classList.add('show'));
+    if (typeof root?.requestAnimationFrame === 'function') {
+      root.requestAnimationFrame(() => overlay.classList.add('show'));
+    } else {
+      overlay.classList.add('show');
+    }
     overlay.querySelector('[data-v2-workspace]')?.focus?.();
   }
 
@@ -224,14 +290,15 @@
     const overlay = documentRef.getElementById('v2WorkspaceChooser');
     if (!overlay) return;
     overlay.classList.remove('show');
-    root?.setTimeout?.(() => overlay.remove(), 180);
+    if (typeof root?.setTimeout === 'function') root.setTimeout(() => overlay.remove(), 180);
+    else overlay.remove();
   }
 
   function workspaceButtons(kind) {
     return Object.values(WORKSPACES).map(workspace => {
       const card = kind === 'card';
       return `
-        <button type="button" class="v2-workspace-${kind}" data-v2-workspace="${escapeHtml(workspace.id)}" role="${card ? 'button' : 'tab'}" aria-selected="false">
+        <button type="button" class="v2-workspace-${kind}" data-v2-workspace="${escapeHtml(workspace.id)}" ${card ? '' : 'role="tab"'} aria-selected="false">
           <span class="v2-workspace-icon" aria-hidden="true">${escapeHtml(workspace.icon)}</span>
           <span><b>${escapeHtml(workspace.label)}</b>${card ? `<small>${escapeHtml(workspace.description)}</small>` : ''}</span>
         </button>
@@ -282,6 +349,18 @@
     observer.observe(target, { childList: true, characterData: true, subtree: true });
   }
 
+  function productMatches(item, productKey) {
+    const key = clean(item?.productKey || item?.product).toLowerCase();
+    const workspace = resolveWorkspace(key);
+    return workspace?.productKey === productKey;
+  }
+
+  function requireActiveWorkspace() {
+    const workspace = resolveWorkspace(activeWorkspaceId);
+    if (!workspace) throw workspaceError('WORKSPACE_SELECTION_REQUIRED');
+    return workspace;
+  }
+
   function currentCartQuantity() {
     try {
       return Math.max(0, Number(hooks?.getCartQuantity?.() || 0));
@@ -320,7 +399,9 @@
 
   function dispatchWorkspaceChange(workspace, changed) {
     try {
-      root?.dispatchEvent?.(new CustomEvent('site-v2:workspace-change', {
+      const EventConstructor = root?.CustomEvent;
+      if (typeof EventConstructor !== 'function') return;
+      root.dispatchEvent(new EventConstructor('site-v2:workspace-change', {
         detail: Object.freeze({
           workspaceId: workspace.id,
           productKey: workspace.productKey,
@@ -348,6 +429,10 @@
       @media(prefers-reduced-motion:reduce){.v2-workspace-chooser,.v2-workspace-card,#content.v2-workspace-switching{transition:none!important;scroll-behavior:auto!important}}
     `;
     documentRef.head.appendChild(style);
+  }
+
+  function optionalFunction(value) {
+    return typeof value === 'function' ? value : null;
   }
 
   function clean(value) {
@@ -386,6 +471,8 @@
     getState,
     resolveWorkspace,
     resolveInitialWorkspace,
-    scopeCatalogParams
+    workspaceForProduct,
+    scopeCatalogParams,
+    productMatches
   });
 });
