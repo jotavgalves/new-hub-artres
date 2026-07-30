@@ -24,7 +24,7 @@ export async function handleCheckoutValidationPreview(request, env, requestId, o
     const prepareDraft = options.prepareDraft || prepareAcceptedCheckoutCanonicalDraft;
     const resolved = await resolveItems(driveFileIds, env, options);
     const validated = validateItems(requestItems, resolved.items);
-    const priced = priceDraft({ body, resolved, validated, env });
+    const priced = await priceDraft({ body, resolved, validated, env });
     const canonical = await prepareDraft({
       body,
       resolved,
@@ -42,6 +42,7 @@ export async function handleCheckoutValidationPreview(request, env, requestId, o
       canonicalDraftReady: canonical.ok === true,
       requestId,
       catalogVersion: Number(resolved.catalogVersion),
+      configVersion: Number(priced.summary?.configVersion),
       itemCount: Number(validated.itemCount),
       productKeys: validated.productKeys,
       variantKeys: validated.variantKeys,
