@@ -2,12 +2,9 @@ import {
   priceOrderIntentV2,
   validatePricingQuoteV2
 } from '../../../src/v2/orders/pricing.mjs';
-import {
-  STAGING_CONFIG_VERSION,
-  STAGING_PRODUCT_SNAPSHOT
-} from './staging-catalog-fixture.js';
+import { loadActiveCommercialConfig } from './commercial-config-route.js';
 
-export function priceAcceptedCheckoutDraft(input = {}) {
+export async function priceAcceptedCheckoutDraft(input = {}) {
   const body = record(input.body);
   const requestItems = Array.isArray(body.items) ? body.items : [];
   const validatedItems = Array.isArray(input.validated?.items) ? input.validated.items : [];
@@ -31,14 +28,21 @@ export function priceAcceptedCheckoutDraft(input = {}) {
     };
   });
 
-  const productSnapshot = acceptedPricingSnapshot(catalogVersion);
+  const loadConfig = typeof input.loadCommercialConfig === 'function'
+    ? input.loadCommercialConfig
+    : loadActiveCommercialConfig;
+  const commercial = await loadConfig(input.env, { catalogVersion });
+  const productSnapshot = commercial?.productSnapshot;
+  const configVersion = positiveInteger(commercial?.config?.version || productSnapshot?.metadata?.configVersion);
+  if (!productSnapshot || !configVersion) throw pricingError('CHECKOUT_COMMERCIAL_CONFIG_INVALID');
+
   const quote = priceOrderIntentV2({
     items: sourceItems,
     catalogItems,
     productSnapshot,
     catalogVersion,
-    configVersion: STAGING_CONFIG_VERSION,
-    serverDiscountPercent: serverDiscountPercent(input.env),
+    configVersion,
+    serverDiscountPercent: productSnapshot.commercialState?.effectiveDiscountPercent || 0,
     clientTotals: body.clientTotals,
     totals: body.totals,
     subtotal: body.subtotal,
@@ -56,7 +60,9 @@ export function priceAcceptedCheckoutDraft(input = {}) {
   return deepFreeze({
     ok: true,
     authoritative: true,
-    source: 'staging-accepted-catalog-server-pricing',
+    source: 'admin-commercial-config-server-pricing',
+    productSnapshot,
+    config: commercial.config,
     quote,
     summary: {
       currency: quote.currency,
@@ -74,25 +80,6 @@ export function priceAcceptedCheckoutDraft(input = {}) {
     },
     warnings: quote.warnings.map(publicWarning)
   });
-}
-
-function acceptedPricingSnapshot(catalogVersion) {
-  return deepFreeze({
-    ...STAGING_PRODUCT_SNAPSHOT,
-    metadata: {
-      ...STAGING_PRODUCT_SNAPSHOT.metadata,
-      mode: 'staging-accepted-catalog-pricing',
-      catalogVersion,
-      configVersion: STAGING_CONFIG_VERSION,
-      loadedByProduction: false
-    }
-  });
-}
-
-function serverDiscountPercent(env = {}) {
-  const parsed = Number(String(env.STAGING_CHECKOUT_DISCOUNT_PERCENT ?? 0).replace(',', '.'));
-  if (!Number.isFinite(parsed)) return 0;
-  return Math.min(Math.max(parsed, 0), 100);
 }
 
 function publicWarning(value) {
