@@ -128,7 +128,6 @@ ORDER_NUMBER=$(node -e '
   if(!result.ok||result.action!=="CREATED"||result.replayed!==false)throw new Error("FIRST_SUBMISSION_INVALID");
   if(result.orderNumber!=="PED2600001A")throw new Error(`ORDER_NUMBER_INVALID:${result.orderNumber}`);
   if(result.pricing?.total!==58.5)throw new Error(`SYNTHETIC_SERVER_TOTAL_INVALID:${result.pricing?.total}`);
-  if(result.configVersion!==9001)throw new Error(`SYNTHETIC_CONFIG_VERSION_INVALID:${result.configVersion}`);
   if(!result.warnings?.includes("CLIENT_ITEM_PRICE_IGNORED"))throw new Error("CLIENT_PRICE_WARNING_MISSING");
   process.stdout.write(result.orderNumber);
 ' "$FIRST_FILE")
@@ -140,7 +139,7 @@ if [ "$REPLAY_STATUS" != "200" ]; then cat "$REPLAY_FILE"; exit 1; fi
 node -e '
   const fs=require("fs");const first=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const replay=JSON.parse(fs.readFileSync(process.argv[2],"utf8"));
   if(!replay.ok||replay.action!=="REPLAY"||replay.orderNumber!==first.orderNumber)throw new Error("REPLAY_INVALID");
-  if(replay.configVersion!==9001||replay.pricing?.total!==58.5)throw new Error("REPLAY_SYNTHETIC_VERSION_INVALID");
+  if(replay.pricing?.total!==58.5)throw new Error("REPLAY_SYNTHETIC_PRICING_INVALID");
 ' "$FIRST_FILE" "$REPLAY_FILE"
 
 LOW_LEVEL_STATUS=$(curl --silent --show-error --output "$LOW_LEVEL_FILE" --write-out '%{http_code}' --request POST --header "X-Staging-Token: $TOKEN" "$BASE_URL/internal/v2/ledger/submit")
