@@ -38,6 +38,24 @@ async function main() {
     totals: { subtotal: 0.01, total: 0.01 }
   };
 
+  const missingOrigin = await postOrderWithOrigin(
+    body,
+    `${idempotencyKey}-no-origin`.slice(0, 128),
+    'public-checkout-missing-origin',
+    ''
+  );
+  assert(missingOrigin.status === 403, `PUBLIC_CHECKOUT_MISSING_ORIGIN_HTTP_${missingOrigin.status}`);
+  assert(missingOrigin.payload?.error === 'PUBLIC_CHECKOUT_ORIGIN_NOT_ALLOWED', 'PUBLIC_CHECKOUT_MISSING_ORIGIN_NOT_BLOCKED');
+
+  const externalOrigin = await postOrderWithOrigin(
+    body,
+    `${idempotencyKey}-external-origin`.slice(0, 128),
+    'public-checkout-external-origin',
+    'https://example.invalid'
+  );
+  assert(externalOrigin.status === 403, `PUBLIC_CHECKOUT_EXTERNAL_ORIGIN_HTTP_${externalOrigin.status}`);
+  assert(externalOrigin.payload?.error === 'PUBLIC_CHECKOUT_ORIGIN_NOT_ALLOWED', 'PUBLIC_CHECKOUT_EXTERNAL_ORIGIN_NOT_BLOCKED');
+
   const created = await postOrder(body, idempotencyKey, 'public-checkout-created');
   assert(created.status === 201, `PUBLIC_CHECKOUT_CREATED_HTTP_${created.status}`);
   assert(created.payload?.ok === true, 'PUBLIC_CHECKOUT_CREATED_PAYLOAD_INVALID');
@@ -84,6 +102,7 @@ async function main() {
     orderNumber: created.payload.orderNumber,
     action: created.payload.action,
     replayAction: replay.payload.action,
+    originProtection: true,
     commercialConfigVersion: commercial.version,
     productKey: PRODUCT_KEY,
     quantity,
@@ -176,17 +195,23 @@ function expectedPricing(unitPrice, quantity, discountPercent) {
 }
 
 async function postOrder(body, idempotencyKey, label) {
+  return postOrderWithOrigin(body, idempotencyKey, label, STAGING_URL);
+}
+
+async function postOrderWithOrigin(body, idempotencyKey, label, origin) {
+  const headers = {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-store',
+    'Idempotency-Key': idempotencyKey,
+    'X-Request-Id': `${label}-${RUN_ID}-${RUN_ATTEMPT}`
+  };
+  if (origin) headers.Origin = origin;
+
   const response = await fetch(new URL('/api/orders/v2', STAGING_URL), {
     method: 'POST',
     redirect: 'error',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-      'Cache-Control': 'no-store',
-      Origin: STAGING_URL,
-      'Idempotency-Key': idempotencyKey,
-      'X-Request-Id': `${label}-${RUN_ID}-${RUN_ATTEMPT}`
-    },
+    headers,
     body: JSON.stringify(body)
   });
   return { status: response.status, payload: await responseJson(response, label) };
