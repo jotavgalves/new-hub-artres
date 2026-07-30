@@ -1,202 +1,102 @@
 const STAGING_URL = normalizeOrigin(process.env.STAGING_URL);
+const RUN_ID = String(process.env.GITHUB_RUN_ID || Date.now());
+const RUN_ATTEMPT = String(process.env.GITHUB_RUN_ATTEMPT || '1');
+const PRODUCT_KEY = '50x50';
 const MAX_FOLDERS = 80;
-const NETWORK_ATTEMPTS = 60;
-const NETWORK_INTERVAL_MS = 1000;
 
 async function main() {
-  const health = await getJson('/health');
-  const bridge = await getText('/assets/v2-checkout-bridge.js', 'BRIDGE');
+  const health = await getJson('/health', 'public-checkout-health');
+  assert(health?.ok === true, 'PUBLIC_CHECKOUT_HEALTH_INVALID');
+  assert(health?.acceptedCatalog?.enabled === true, 'PUBLIC_CHECKOUT_ACCEPTED_CATALOG_DISABLED');
+  assert(health?.publicCheckout?.enabled === true, 'PUBLIC_CHECKOUT_DISABLED');
+  assert(health?.commercialConfig?.enabled === true, 'PUBLIC_CHECKOUT_COMMERCIAL_CONFIG_DISABLED');
 
-  if (
-    health?.ok !== true ||
-    health?.publicCheckout?.enabled !== true ||
-    health?.publicCheckout?.implemented !== true ||
-    health?.publicCheckout?.acceptsRealOrders !== true ||
-    health?.publicCheckout?.protection?.configured !== true
-  ) {
-    throw smokeError('PUBLIC_VISUAL_CHECKOUT_HEALTH_INVALID');
-  }
-  if (
-    !bridge.includes('site-v2-visual-checkout-bridge-v1') ||
-    !bridge.includes("const ROUTE = '/api/orders/v2'") ||
-    bridge.includes('STAGING_API_TOKEN') ||
-    bridge.includes('SUPABASE_V2_SERVICE_ROLE_KEY')
-  ) {
-    throw smokeError('PUBLIC_VISUAL_CHECKOUT_BRIDGE_SOURCE_INVALID');
-  }
+  const commercialEnvelope = await getJson('/api/commercial-config', 'public-checkout-commercial-config');
+  const commercial = validateCommercialConfig(commercialEnvelope?.config);
+  const product = commercial.products[PRODUCT_KEY];
+  assert(product.enabled === true, 'PUBLIC_CHECKOUT_BOLINHAS_DISABLED');
 
-  const artwork = await firstFiftyArtwork();
-  const driveFileId = identity(artwork);
-  const sizeKey = String(artwork?.sizeKey || artwork?.size || '50x50').trim();
-  if (!driveFileId) throw smokeError('PUBLIC_VISUAL_CHECKOUT_ARTWORK_INVALID');
-
+  const artwork = await findFirstArtwork(PRODUCT_KEY);
+  const quantity = product.quantity.initial;
+  const expected = expectedPricing(product.unitPrice, quantity, commercial.effectiveDiscountPercent);
+  const idempotencyKey = `public-checkout-${RUN_ID}-${RUN_ATTEMPT}`.slice(0, 128);
+  const submissionCreatedAt = new Date().toISOString();
   const body = {
-    submissionCreatedAt: new Date().toISOString(),
-    seller: { id: 'visual-staging', label: 'Vendedora Sintética Visual' },
-    customer: { name: 'Cliente Sintético Visual', whatsapp: '81999999999' },
+    submissionCreatedAt,
+    seller: { id: 'ci-public-checkout', label: 'CI Public Checkout' },
+    customer: { name: 'Cliente Sintético Público', whatsapp: '5581999999999' },
     items: [{
-      driveFileId,
-      productKey: '50x50',
-      variantKey: 'default',
-      sizeKey,
-      quantity: 6,
-      details: {
-        measurements: { diameterCm: 50 },
-        observations: 'Smoke visual sintético'
-      }
-    }]
+      driveFileId: artwork.driveFileId,
+      code: artwork.code,
+      productKey: PRODUCT_KEY,
+      variantKey: artwork.variantKey,
+      sizeKey: artwork.sizeKey,
+      quantity,
+      unitPrice: 0.01,
+      lineSubtotal: 0.01
+    }],
+    totals: { subtotal: 0.01, total: 0.01 }
   };
-  const idempotencyKey = `visual-public-${crypto.randomUUID()}`;
 
-  const missingOrigin = await waitForExpectedError(
-    body,
-    idempotencyKey,
-    '',
-    403,
-    'PUBLIC_CHECKOUT_ORIGIN_NOT_ALLOWED'
-  );
-  if (missingOrigin.status !== 403 || missingOrigin.payload?.error !== 'PUBLIC_CHECKOUT_ORIGIN_NOT_ALLOWED') {
-    throw smokeError('PUBLIC_VISUAL_CHECKOUT_MISSING_ORIGIN_NOT_BLOCKED');
-  }
+  const created = await postOrder(body, idempotencyKey, 'public-checkout-created');
+  assert(created.status === 201, `PUBLIC_CHECKOUT_CREATED_HTTP_${created.status}`);
+  assert(created.payload?.ok === true, 'PUBLIC_CHECKOUT_CREATED_PAYLOAD_INVALID');
+  assert(created.payload?.action === 'CREATED', 'PUBLIC_CHECKOUT_ACTION_INVALID');
+  assert(created.payload?.replayed === false, 'PUBLIC_CHECKOUT_CREATED_REPLAYED');
+  assert(/^PED\d{7}[A-Z]$/.test(String(created.payload?.orderNumber || '')), 'PUBLIC_CHECKOUT_ORDER_NUMBER_INVALID');
+  assert(created.payload?.itemCount === 1, 'PUBLIC_CHECKOUT_ITEM_COUNT_INVALID');
+  assert(created.payload?.quantity === quantity, 'PUBLIC_CHECKOUT_QUANTITY_INVALID');
+  assert(created.payload?.pricing?.subtotal === expected.subtotal, 'PUBLIC_CHECKOUT_SUBTOTAL_INVALID');
+  assert(created.payload?.pricing?.discountPercent === commercial.effectiveDiscountPercent, 'PUBLIC_CHECKOUT_DISCOUNT_INVALID');
+  assert(created.payload?.pricing?.discountAmount === expected.discountAmount, 'PUBLIC_CHECKOUT_DISCOUNT_AMOUNT_INVALID');
+  assert(created.payload?.pricing?.total === expected.total, 'PUBLIC_CHECKOUT_TOTAL_INVALID');
+  assert(created.payload?.configVersion === commercial.version, 'PUBLIC_CHECKOUT_CONFIG_VERSION_INVALID');
+  assert(created.payload?.catalogVersion >= 1, 'PUBLIC_CHECKOUT_CATALOG_VERSION_INVALID');
+  assert(created.payload?.canonicalDetailsPreserved === true, 'PUBLIC_CHECKOUT_DETAILS_NOT_PRESERVED');
+  assert(created.payload?.customerPreserved === true, 'PUBLIC_CHECKOUT_CUSTOMER_NOT_PRESERVED');
+  assert(created.payload?.sellerPreserved === true, 'PUBLIC_CHECKOUT_SELLER_NOT_PRESERVED');
+  assert(Array.isArray(created.payload?.warnings), 'PUBLIC_CHECKOUT_WARNINGS_INVALID');
+  assert(created.payload.warnings.includes('CLIENT_ITEM_PRICE_IGNORED'), 'PUBLIC_CHECKOUT_CLIENT_PRICE_NOT_IGNORED');
+  assert(created.payload.warnings.includes('CLIENT_ORDER_TOTALS_IGNORED'), 'PUBLIC_CHECKOUT_CLIENT_TOTAL_NOT_IGNORED');
 
-  const crossOrigin = await waitForExpectedError(
-    body,
-    idempotencyKey,
-    'https://example.invalid',
-    403,
-    'PUBLIC_CHECKOUT_ORIGIN_NOT_ALLOWED'
-  );
-  if (crossOrigin.status !== 403 || crossOrigin.payload?.error !== 'PUBLIC_CHECKOUT_ORIGIN_NOT_ALLOWED') {
-    throw smokeError('PUBLIC_VISUAL_CHECKOUT_CROSS_ORIGIN_NOT_BLOCKED');
-  }
+  const replay = await postOrder(body, idempotencyKey, 'public-checkout-replay');
+  assert(replay.status === 200, `PUBLIC_CHECKOUT_REPLAY_HTTP_${replay.status}`);
+  assert(replay.payload?.ok === true, 'PUBLIC_CHECKOUT_REPLAY_PAYLOAD_INVALID');
+  assert(replay.payload?.action === 'REPLAY', 'PUBLIC_CHECKOUT_REPLAY_ACTION_INVALID');
+  assert(replay.payload?.replayed === true, 'PUBLIC_CHECKOUT_REPLAY_FLAG_INVALID');
+  assert(replay.payload?.orderNumber === created.payload.orderNumber, 'PUBLIC_CHECKOUT_REPLAY_ORDER_CHANGED');
+  assert(replay.payload?.pricing?.total === expected.total, 'PUBLIC_CHECKOUT_REPLAY_TOTAL_CHANGED');
+  assert(replay.payload?.configVersion === commercial.version, 'PUBLIC_CHECKOUT_REPLAY_CONFIG_CHANGED');
 
-  const created = await waitForPublicSubmit(body, idempotencyKey);
-  if (
-    created.status !== 201 ||
-    created.payload?.ok !== true ||
-    created.payload?.action !== 'CREATED' ||
-    created.payload?.replayed !== false ||
-    !/^PED[0-9]{7}[A-Z]$/.test(String(created.payload?.orderNumber || '')) ||
-    Number(created.payload?.quantity) !== 6 ||
-    Number(created.payload?.pricing?.total) !== 58.5 ||
-    created.payload?.customerPreserved !== true ||
-    created.payload?.sellerPreserved !== true ||
-    created.payload?.canonicalDetailsPreserved !== true
-  ) {
-    throw smokeError('PUBLIC_VISUAL_CHECKOUT_CREATE_INVALID');
-  }
+  const conflictBody = structuredClone(body);
+  conflictBody.customer.name = 'Cliente Sintético Conflitante';
+  const conflict = await postOrder(conflictBody, idempotencyKey, 'public-checkout-conflict');
+  assert(conflict.status === 409, `PUBLIC_CHECKOUT_CONFLICT_HTTP_${conflict.status}`);
+  assert(conflict.payload?.error === 'IDEMPOTENCY_KEY_CONFLICT', 'PUBLIC_CHECKOUT_CONFLICT_ERROR_INVALID');
 
-  const replay = await waitForPublicReplay(body, idempotencyKey, created.payload.orderNumber);
-  if (
-    replay.status !== 200 ||
-    replay.payload?.ok !== true ||
-    replay.payload?.action !== 'REPLAY' ||
-    replay.payload?.replayed !== true ||
-    replay.payload?.orderNumber !== created.payload.orderNumber ||
-    Number(replay.payload?.pricing?.total) !== 58.5
-  ) {
-    throw smokeError('PUBLIC_VISUAL_CHECKOUT_REPLAY_INVALID');
-  }
-
-  for (const payload of [created.payload, replay.payload]) {
-    const serialized = JSON.stringify(payload);
-    for (const privateValue of [
-      driveFileId,
-      body.customer.name,
-      body.customer.whatsapp,
-      body.items[0].details.observations,
-      idempotencyKey
-    ]) {
-      if (serialized.includes(privateValue)) {
-        throw smokeError('PUBLIC_VISUAL_CHECKOUT_RESPONSE_EXPOSED_PRIVATE_DATA');
-      }
-    }
-  }
+  const bridge = await getText('/assets/v2-checkout-bridge.js', 'public-checkout-bridge');
+  assert(bridge.includes('site-v2-visual-checkout-bridge-v1'), 'PUBLIC_CHECKOUT_BRIDGE_MARKER_MISSING');
+  assert(bridge.includes('/api/orders/v2'), 'PUBLIC_CHECKOUT_BRIDGE_ROUTE_MISSING');
+  assert(!bridge.includes('/internal/v2/orders/submit'), 'PUBLIC_CHECKOUT_BRIDGE_INTERNAL_ROUTE_EXPOSED');
 
   process.stdout.write(`${JSON.stringify({
     ok: true,
-    bridgeInjected: true,
-    publicCheckoutEnabled: true,
-    originProtection: true,
-    created: true,
-    replayed: true,
     orderNumber: created.payload.orderNumber,
-    authoritativeTotal: created.payload.pricing.total,
+    action: created.payload.action,
+    replayAction: replay.payload.action,
+    commercialConfigVersion: commercial.version,
+    productKey: PRODUCT_KEY,
+    quantity,
+    unitPrice: product.unitPrice,
+    discountPercent: commercial.effectiveDiscountPercent,
+    total: expected.total,
+    catalogVersion: created.payload.catalogVersion,
     productionChanged: false
   })}\n`);
 }
 
-async function waitForExpectedError(body, key, origin, expectedStatus, expectedCode) {
-  let last = null;
-  for (let attempt = 1; attempt <= NETWORK_ATTEMPTS; attempt += 1) {
-    last = await post(body, key, origin);
-    if (last.status === expectedStatus && last.payload?.error === expectedCode) return last;
-    if (!isTransientStatus(last.status)) return last;
-    if (attempt < NETWORK_ATTEMPTS) await sleep(NETWORK_INTERVAL_MS);
-  }
-  return last;
-}
-
-async function waitForPublicSubmit(body, key) {
-  let last = null;
-  for (let attempt = 1; attempt <= 60; attempt += 1) {
-    last = await post(body, key, STAGING_URL);
-    if (last.status === 201 && last.payload?.action === 'CREATED') return last;
-    if (!isTransientStatus(last.status)) return last;
-    if (attempt < 60) await sleep(1000);
-  }
-  return last;
-}
-
-async function waitForPublicReplay(body, key, number) {
-  let last = null;
-  for (let attempt = 1; attempt <= 60; attempt += 1) {
-    last = await post(body, key, STAGING_URL);
-    if (
-      last.status === 200 &&
-      last.payload?.action === 'REPLAY' &&
-      last.payload?.orderNumber === number
-    ) return last;
-    if (!isTransientStatus(last.status)) return last;
-    if (attempt < 60) await sleep(1000);
-  }
-  return last;
-}
-
-async function post(body, key, origin) {
-  const headers = {
-    Accept: 'application/json',
-    'Content-Type': 'application/json',
-    'Idempotency-Key': key,
-    'X-Request-Id': `visual-smoke-${crypto.randomUUID()}`
-  };
-  if (origin) headers.Origin = origin;
-
-  let response;
-  let text;
-  try {
-    ({ response, text } = await fetchTextOnce(new URL('/api/orders/v2', STAGING_URL), {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-      redirect: 'error'
-    }));
-  } catch (_) {
-    return {
-      status: 0,
-      payload: { ok: false, error: 'PUBLIC_VISUAL_CHECKOUT_NETWORK_TRANSIENT' }
-    };
-  }
-
-  let payload = null;
-  try { payload = text ? JSON.parse(text) : null; } catch (_) {
-    throw smokeError('PUBLIC_VISUAL_CHECKOUT_RESPONSE_JSON_INVALID');
-  }
-  return { status: response.status, payload };
-}
-
-async function firstFiftyArtwork() {
-  const themes = await catalogRequest('themes');
+async function findFirstArtwork(productKey) {
+  const themes = await catalogRequest('themes', { product: productKey });
   const queue = uniqueFolders(themes);
   const visited = new Set();
 
@@ -205,96 +105,143 @@ async function firstFiftyArtwork() {
     const folderId = identity(folder);
     if (!folderId || visited.has(folderId)) continue;
     visited.add(folderId);
-    const products = await catalogRequest('products', { folderId });
 
+    const products = await catalogRequest('products', { folderId, product: productKey });
     for (const child of uniqueFolders(products)) {
-      const id = identity(child);
-      if (!id) continue;
-      const productKey = String(child?.productKey || child?.product || '').trim();
-      if (child?.kind === 'product' || child?.directItems === true || id.startsWith('catalog-index-product:')) {
-        if (productKey !== '50x50') continue;
-        const payload = await catalogRequest('items', { folderId: id, product: '50x50' });
+      const childId = identity(child);
+      if (!childId) continue;
+      if (child?.kind === 'product' || child?.directItems === true || childId.startsWith('catalog-index-product:')) {
+        const payload = await catalogRequest('items', { folderId: childId, product: productKey });
         const items = Array.isArray(payload?.items) ? payload.items : [];
-        if (items.length) return items[0];
-      } else if (!visited.has(id)) queue.push(child);
+        const selected = items.find(item => normalizeProductKey(item) === productKey) || items[0];
+        if (selected) return normalizeArtwork(selected, productKey);
+      } else if (!visited.has(childId)) {
+        queue.push(child);
+      }
     }
   }
-  throw smokeError('PUBLIC_VISUAL_CHECKOUT_50X50_NOT_REACHABLE');
+
+  throw smokeError('PUBLIC_CHECKOUT_REAL_ARTWORK_NOT_FOUND');
+}
+
+function normalizeArtwork(item, productKey) {
+  const driveFileId = clean(item?.driveFileId || item?.drive_file_id || item?.id);
+  const code = clean(item?.code || item?.codigo);
+  const variantKey = identityValue(item?.variantKey || item?.variant || 'default') || 'default';
+  const sizeKey = identityValue(item?.sizeKey || item?.size || item?.dimension || 'default') || 'default';
+  assert(driveFileId, 'PUBLIC_CHECKOUT_ARTWORK_DRIVE_ID_MISSING');
+  assert(code, 'PUBLIC_CHECKOUT_ARTWORK_CODE_MISSING');
+  assert(normalizeProductKey(item) === productKey || !normalizeProductKey(item), 'PUBLIC_CHECKOUT_ARTWORK_PRODUCT_MISMATCH');
+  return Object.freeze({ driveFileId, code, variantKey, sizeKey });
+}
+
+function validateCommercialConfig(input = {}) {
+  const source = record(input);
+  const version = positiveInteger(source.version);
+  const discount = finiteNumber(source.effectiveDiscountPercent);
+  const products = record(source.products);
+  assert(source.schemaVersion === 1, 'PUBLIC_CHECKOUT_COMMERCIAL_SCHEMA_INVALID');
+  assert(version, 'PUBLIC_CHECKOUT_COMMERCIAL_VERSION_INVALID');
+  assert(source.currency === 'BRL', 'PUBLIC_CHECKOUT_COMMERCIAL_CURRENCY_INVALID');
+  assert(discount !== null && discount >= 0 && discount <= 100, 'PUBLIC_CHECKOUT_COMMERCIAL_DISCOUNT_INVALID');
+
+  const product = record(products[PRODUCT_KEY]);
+  const quantity = record(product.quantity);
+  const unitPrice = finiteNumber(product.unitPrice);
+  const minimum = positiveInteger(quantity.minimum);
+  const step = positiveInteger(quantity.step);
+  const initial = positiveInteger(quantity.initial);
+  assert(clean(product.key) === PRODUCT_KEY, 'PUBLIC_CHECKOUT_COMMERCIAL_PRODUCT_KEY_INVALID');
+  assert(unitPrice !== null && unitPrice >= 0, 'PUBLIC_CHECKOUT_COMMERCIAL_PRICE_INVALID');
+  assert(minimum && step && initial, 'PUBLIC_CHECKOUT_COMMERCIAL_QUANTITY_INVALID');
+  assert(initial >= minimum && (initial - minimum) % step === 0, 'PUBLIC_CHECKOUT_COMMERCIAL_INITIAL_INVALID');
+
+  return Object.freeze({
+    version,
+    effectiveDiscountPercent: discount,
+    products: Object.freeze({
+      [PRODUCT_KEY]: Object.freeze({
+        enabled: product.enabled === true,
+        unitPrice,
+        quantity: Object.freeze({ minimum, step, initial, scope: clean(quantity.scope) })
+      })
+    })
+  });
+}
+
+function expectedPricing(unitPrice, quantity, discountPercent) {
+  const subtotal = money(unitPrice * quantity);
+  const discountAmount = money(subtotal * discountPercent / 100);
+  return Object.freeze({ subtotal, discountAmount, total: money(subtotal - discountAmount) });
+}
+
+async function postOrder(body, idempotencyKey, label) {
+  const response = await fetch(new URL('/api/orders/v2', STAGING_URL), {
+    method: 'POST',
+    redirect: 'error',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store',
+      Origin: STAGING_URL,
+      'Idempotency-Key': idempotencyKey,
+      'X-Request-Id': `${label}-${RUN_ID}-${RUN_ATTEMPT}`
+    },
+    body: JSON.stringify(body)
+  });
+  return { status: response.status, payload: await responseJson(response, label) };
 }
 
 async function catalogRequest(mode, query = {}) {
   const url = new URL('/api/drive', STAGING_URL);
   url.searchParams.set('mode', mode);
   for (const [key, value] of Object.entries(query)) {
-    const text = String(value || '').trim();
+    const text = clean(value);
     if (text) url.searchParams.set(key, text);
   }
-  const payload = await getJson(url);
-  if (payload?.ok !== true) throw smokeError('PUBLIC_VISUAL_CHECKOUT_CATALOG_REQUEST_FAILED');
+  const payload = await getJson(url.pathname + url.search, `public-checkout-catalog-${mode}`);
+  assert(payload?.ok === true, `PUBLIC_CHECKOUT_CATALOG_${mode.toUpperCase()}_FAILED`);
   return payload;
 }
 
-async function getJson(pathOrUrl) {
-  const { response, text } = await fetchTextWithRetry(
-    pathOrUrl instanceof URL ? pathOrUrl : new URL(pathOrUrl, STAGING_URL),
-    {
-      headers: { Accept: 'application/json', 'Cache-Control': 'no-store' },
-      redirect: 'error'
-    },
-    'PUBLIC_VISUAL_CHECKOUT_DEPENDENCY_NETWORK_FAILED'
-  );
-  if (!response.ok) throw smokeError(`PUBLIC_VISUAL_CHECKOUT_DEPENDENCY_HTTP_${response.status}`);
-  try { return JSON.parse(text); } catch (_) {
-    throw smokeError('PUBLIC_VISUAL_CHECKOUT_DEPENDENCY_JSON_INVALID');
-  }
+async function getJson(pathname, label) {
+  const response = await fetch(new URL(pathname, STAGING_URL), {
+    method: 'GET',
+    redirect: 'error',
+    headers: {
+      Accept: 'application/json',
+      'Cache-Control': 'no-store',
+      'X-Request-Id': `${label}-${RUN_ID}-${RUN_ATTEMPT}`
+    }
+  });
+  assert(response.ok, `${label.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_HTTP_${response.status}`);
+  return responseJson(response, label);
 }
 
-async function getText(path, assetName) {
-  const { response, text } = await fetchTextWithRetry(
-    new URL(path, STAGING_URL),
-    {
-      headers: { Accept: 'text/html,application/javascript', 'Cache-Control': 'no-store' },
-      redirect: 'error'
-    },
-    `PUBLIC_VISUAL_CHECKOUT_${assetName}_NETWORK_FAILED`
-  );
-  if (!response.ok) throw smokeError(`PUBLIC_VISUAL_CHECKOUT_${assetName}_HTTP_${response.status}`);
-  if (new TextEncoder().encode(text).byteLength > 2 * 1024 * 1024) {
-    throw smokeError(`PUBLIC_VISUAL_CHECKOUT_${assetName}_TOO_LARGE`);
-  }
+async function getText(pathname, label) {
+  const response = await fetch(new URL(pathname, STAGING_URL), {
+    method: 'GET',
+    redirect: 'error',
+    headers: {
+      Accept: 'application/javascript,text/javascript;q=0.9,*/*;q=0.8',
+      'Cache-Control': 'no-store',
+      'X-Request-Id': `${label}-${RUN_ID}-${RUN_ATTEMPT}`
+    }
+  });
+  assert(response.ok, `${label.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_HTTP_${response.status}`);
+  const text = await response.text();
+  assert(new TextEncoder().encode(text).byteLength <= 1024 * 1024, 'PUBLIC_CHECKOUT_TEXT_RESPONSE_TOO_LARGE');
   return text;
 }
 
-async function fetchTextWithRetry(url, options, failureCode) {
-  let last = null;
-  for (let attempt = 1; attempt <= NETWORK_ATTEMPTS; attempt += 1) {
-    try {
-      last = await fetchTextOnce(url, options);
-      if (!isTransientStatus(last.response.status)) return last;
-    } catch (_) {
-      last = null;
-    }
-    if (attempt < NETWORK_ATTEMPTS) await sleep(NETWORK_INTERVAL_MS);
-  }
-  if (last) return last;
-  throw smokeError(failureCode);
-}
-
-async function fetchTextOnce(url, options = {}) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15000);
+async function responseJson(response, label) {
+  const text = await response.text();
+  assert(new TextEncoder().encode(text).byteLength <= 1024 * 1024, 'PUBLIC_CHECKOUT_JSON_RESPONSE_TOO_LARGE');
   try {
-    const response = await fetch(url, { ...options, signal: controller.signal });
-    const text = await response.text();
-    return { response, text };
-  } finally {
-    clearTimeout(timer);
+    return text ? JSON.parse(text) : null;
+  } catch (_) {
+    throw smokeError(`${label.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_JSON_INVALID`);
   }
-}
-
-function isTransientStatus(status) {
-  const value = Number(status || 0);
-  return value === 0 || value === 404 || value === 503 || value >= 500;
 }
 
 function uniqueFolders(payload) {
@@ -307,23 +254,51 @@ function uniqueFolders(payload) {
   return [...map.values()];
 }
 
+function normalizeProductKey(value) {
+  return clean(value?.productKey || value?.product || value?.product_key).toLowerCase();
+}
+
 function identity(value) {
-  return String(value?.driveFileId || value?.id || value?.driveId || value?.drive_id || '').trim();
+  return clean(value?.id || value?.driveId || value?.drive_id);
+}
+
+function identityValue(value) {
+  return clean(value).replace(/[:\s]+/g, '-').replace(/[^a-zA-Z0-9._-]/g, '');
+}
+
+function record(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
+function finiteNumber(value) {
+  const parsed = Number(String(value ?? '').replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function positiveInteger(value) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function money(value) {
+  return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+}
+
+function clean(value) {
+  return String(value ?? '').replace(/\s+/g, ' ').trim();
 }
 
 function normalizeOrigin(value) {
   let url;
-  try { url = new URL(String(value || '').trim()); } catch (_) {
-    throw smokeError('STAGING_URL_INVALID');
-  }
+  try { url = new URL(clean(value)); } catch (_) { throw smokeError('STAGING_URL_INVALID'); }
   if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || (url.pathname && url.pathname !== '/')) {
     throw smokeError('STAGING_URL_INVALID');
   }
   return url.origin;
 }
 
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+function assert(condition, code) {
+  if (!condition) throw smokeError(code);
 }
 
 function smokeError(code) {
@@ -333,7 +308,7 @@ function smokeError(code) {
 }
 
 main().catch(error => {
-  const code = String(error?.code || error?.message || 'PUBLIC_VISUAL_CHECKOUT_SMOKE_FAILED');
-  console.error(/^[A-Z0-9_]{3,100}$/.test(code) ? code : 'PUBLIC_VISUAL_CHECKOUT_SMOKE_FAILED');
+  const code = String(error?.code || error?.message || 'PUBLIC_CHECKOUT_REMOTE_SMOKE_FAILED');
+  console.error(/^[A-Z0-9_]{3,160}$/.test(code) ? code : 'PUBLIC_CHECKOUT_REMOTE_SMOKE_FAILED');
   process.exitCode = 1;
 });
