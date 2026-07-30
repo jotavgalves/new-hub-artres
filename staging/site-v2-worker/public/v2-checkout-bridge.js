@@ -295,40 +295,52 @@
     return messages[code] || 'Não foi possível registrar o pedido agora. Revise os dados e tente novamente.';
   }
 
-  function clean(value) {
-    return String(value ?? '').replace(/\s+/g, ' ').trim();
-  }
-
-  function digits(value) {
-    return String(value ?? '').replace(/\D/g, '');
-  }
-
-  function positiveInteger(value) {
-    const parsed = Number(value);
-    return Number.isInteger(parsed) && parsed > 0 ? parsed : 0;
-  }
-
   function readDraft() {
     try {
-      const value = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || '{}');
-      return value && typeof value === 'object' ? value : {};
+      return JSON.parse(sessionStorage.getItem(DRAFT_KEY) || '{}') || {};
     } catch (_) {
       return {};
     }
   }
 
   function writeDraft(value) {
-    sessionStorage.setItem(DRAFT_KEY, JSON.stringify(value));
+    try {
+      sessionStorage.setItem(DRAFT_KEY, JSON.stringify(value));
+    } catch (_) {}
   }
 
   function closeDialog() {
-    if (!activeDialog) return;
-    activeDialog.remove();
+    if (activeDialog) activeDialog.remove();
     activeDialog = null;
   }
 
   function notify(message) {
-    if (typeof toast === 'function') toast(message);
-    else console.info(message);
+    if (typeof toast === 'function') {
+      toast(message);
+      return;
+    }
+    let status = document.getElementById('v2CheckoutStatus');
+    if (!status) {
+      status = document.createElement('div');
+      status.id = 'v2CheckoutStatus';
+      status.setAttribute('role', 'status');
+      status.style.cssText = 'position:fixed;z-index:100001;left:16px;right:16px;bottom:16px;padding:14px;border-radius:14px;background:#222124;color:#fff;text-align:center;font:700 13px Arial';
+      document.body.append(status);
+    }
+    status.textContent = message;
+    setTimeout(() => status.remove(), 5000);
+  }
+
+  function positiveInteger(value) {
+    const parsed = Number(value);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  }
+
+  function digits(value) {
+    return String(value ?? '').replace(/\D/g, '');
+  }
+
+  function clean(value) {
+    return String(value ?? '').replace(/\s+/g, ' ').trim();
   }
 })();
