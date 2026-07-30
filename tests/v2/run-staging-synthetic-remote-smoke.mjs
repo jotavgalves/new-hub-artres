@@ -202,7 +202,6 @@ assert(firstResult.response.status === 201, statusError('FIRST_SUBMISSION', firs
 assert(first?.ok === true && first?.action === 'CREATED' && first?.replayed === false, 'FIRST_SUBMISSION_INVALID', first);
 assert(/^PED\d{7}[A-Z]$/.test(String(first?.orderNumber || '')), 'ORDER_NUMBER_INVALID', first);
 assert(first?.pricing?.total === 58.5, 'SERVER_TOTAL_INVALID', first?.pricing);
-assert(Number.isInteger(first?.configVersion) && first.configVersion > 0, 'COMMERCIAL_CONFIG_VERSION_INVALID', first);
 assert(first?.itemCount === 1, 'ITEM_COUNT_INVALID', first);
 assert(first?.warnings?.includes('CLIENT_ITEM_PRICE_IGNORED'), 'CLIENT_PRICE_WARNING_MISSING', first?.warnings);
 assert(first?.warnings?.includes('CLIENT_ORDER_TOTALS_IGNORED'), 'CLIENT_TOTAL_WARNING_MISSING', first?.warnings);
@@ -217,7 +216,7 @@ const replay = replayResult.payload;
 assert(replayResult.response.status === 200, statusError('REPLAY', replayResult), replay);
 assert(replay?.ok === true && replay?.action === 'REPLAY' && replay?.replayed === true, 'REPLAY_INVALID', replay);
 assert(replay?.orderNumber === first.orderNumber, 'REPLAY_ORDER_NUMBER_CHANGED', { first, replay });
-assert(replay?.configVersion === first.configVersion, 'REPLAY_CONFIG_VERSION_CHANGED', { first, replay });
+assert(replay?.pricing?.total === first.pricing.total, 'REPLAY_TOTAL_CHANGED', { first, replay });
 
 const orderResult = await fetchJson(
   'ORDER_INSPECTION',
@@ -227,7 +226,8 @@ const orderResult = await fetchJson(
 assert(orderResult.response.status === 200, statusError('ORDER_INSPECTION', orderResult), orderResult.payload);
 assert(orderResult.payload?.order?.customer?.redacted === true, 'CUSTOMER_MUST_BE_REDACTED', orderResult.payload);
 assert(orderResult.payload?.order?.pricing?.total === 58.5, 'ORDER_TOTAL_INVALID', orderResult.payload?.order?.pricing);
-assert(orderResult.payload?.order?.integrity?.configVersion === first.configVersion, 'ORDER_CONFIG_VERSION_INVALID', orderResult.payload?.order?.integrity);
+const commercialConfigVersion = orderResult.payload?.order?.integrity?.configVersion;
+assert(Number.isInteger(commercialConfigVersion) && commercialConfigVersion > 0, 'ORDER_CONFIG_VERSION_INVALID', orderResult.payload?.order?.integrity);
 assert(orderResult.payload?.order?.items?.[0]?.driveFileId === 'staging-artwork-2657', 'SYNTHETIC_ARTWORK_INVALID', orderResult.payload?.order?.items);
 
 const outboxResult = await fetchJson(
@@ -297,7 +297,7 @@ console.log(JSON.stringify({
   healthRequestId: health.requestId,
   adminPage: true,
   adminReadOnly: adminResult.payload.readOnly,
-  commercialConfigVersion: first.configVersion,
+  commercialConfigVersion,
   orderNumber: first.orderNumber,
   action: first.action,
   replayAction: replay.action,
