@@ -10,6 +10,8 @@ import {
 const BASE_URL = 'https://staging.example.test';
 const REQUEST_ID = 'static-routing-test';
 const DESIGN_HTML = '<!doctype html><title>Escolha suas Artes | Armazém Festa e Eventos</title>';
+const CONTEXT_SCRIPT = "const marker='site-v2-visual-checkout-context-v1';";
+const BRIDGE_SCRIPT = "const marker='site-v2-visual-checkout-bridge-v1';";
 
 function request(pathname, init = {}) {
   const headers = new Headers(init.headers || {});
@@ -115,12 +117,25 @@ test('falha de forma sanitizada quando o binding ASSETS lança erro', async () =
   assert.doesNotMatch(logs[0], /conteúdo interno/i);
 });
 
-test('probe consulta index explícito e raiz sem retornar o HTML', async () => {
+test('probe consulta index, raiz, contexto e bridge sem retornar o conteúdo', async () => {
   const calls = [];
   const assets = {
     async fetch(received) {
       assert.equal(this, assets);
-      calls.push(new URL(received.url).pathname);
+      const pathname = new URL(received.url).pathname;
+      calls.push(pathname);
+      if (pathname === '/assets/v2-checkout-context.js') {
+        return new Response(CONTEXT_SCRIPT, {
+          status: 200,
+          headers: { 'content-type': 'application/javascript; charset=utf-8' }
+        });
+      }
+      if (pathname === '/assets/v2-checkout-bridge.js') {
+        return new Response(BRIDGE_SCRIPT, {
+          status: 200,
+          headers: { 'content-type': 'application/javascript; charset=utf-8' }
+        });
+      }
       return new Response(DESIGN_HTML, {
         status: 200,
         headers: { 'content-type': 'text/html; charset=utf-8' }
@@ -133,18 +148,28 @@ test('probe consulta index explícito e raiz sem retornar o HTML', async () => {
   const payload = await response.json();
   assert.equal(payload.ok, true);
   assert.equal(payload.bindingConfigured, true);
-  assert.deepEqual(calls, ['/index.html', '/']);
-  assert.equal(payload.probes.length, 2);
-  assert.deepEqual(payload.probes.map(item => item.pathname), ['/index.html', '/']);
+  assert.deepEqual(calls, [
+    '/index.html',
+    '/',
+    '/assets/v2-checkout-context.js',
+    '/assets/v2-checkout-bridge.js'
+  ]);
+  assert.equal(payload.probes.length, 4);
+  assert.deepEqual(payload.probes.map(item => item.pathname), calls);
   for (const probe of payload.probes) {
     assert.equal(probe.responseReceived, true);
     assert.equal(probe.status, 200);
-    assert.equal(probe.contentType, 'text/html');
-    assert.equal(probe.titleMatched, true);
+    assert.equal(probe.markerMatched, true);
     assert.ok(probe.bodyBytes > 0);
     assert.equal(probe.error, '');
   }
-  assert.doesNotMatch(JSON.stringify(payload), /<!doctype|Escolha suas Artes/i);
+  assert.equal(payload.probes[0].contentType, 'text/html');
+  assert.equal(payload.probes[1].contentType, 'text/html');
+  assert.equal(payload.probes[0].titleMatched, true);
+  assert.equal(payload.probes[1].titleMatched, true);
+  assert.equal(payload.probes[2].contentType, 'application/javascript');
+  assert.equal(payload.probes[3].contentType, 'application/javascript');
+  assert.doesNotMatch(JSON.stringify(payload), /<!doctype|const marker|Escolha suas Artes/i);
 });
 
 test('probe informa binding ausente sem falhar nem revelar configuração', async () => {
@@ -174,6 +199,7 @@ test('probe diferencia falha do index e da raiz sem vazar a exceção', async ()
     logger: { error: message => logs.push(String(message)) }
   });
   const payload = await response.json();
+  assert.equal(payload.ok, false);
   assert.equal(payload.probes[0].pathname, '/index.html');
   assert.equal(payload.probes[0].responseReceived, false);
   assert.equal(payload.probes[0].error, 'STAGING_ASSET_FETCH_FAILED');

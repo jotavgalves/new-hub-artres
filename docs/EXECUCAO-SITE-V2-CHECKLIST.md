@@ -1,6 +1,6 @@
 # Checklist mestre de execução do Site V2
 
-Atualizado em: 2026-07-29
+Atualizado em: 2026-07-30
 
 ## Objetivo
 
@@ -146,7 +146,7 @@ Critério de conclusão satisfeito: checkout do staging cria e reproduz pedido V
 - [x] Aplicar mínimo e incremento de cada produto.
 - [x] Migrar ou restaurar carrinho antigo sem perda.
 - [x] Conectar checkout visual à rota V2.
-- [ ] Preservar vendedora, medidas e observações.
+- [-] Preservar vendedora, medidas e observações.
 - [ ] Gerar WhatsApp com itens, variantes, quantidades e medidas corretos.
 - [ ] Tratar falha de envio e permitir repetição segura.
 
@@ -160,8 +160,9 @@ Evidência:
 - PR #52, `Site V2 Baseline` runs `30481083905`, `30481227950` e `30481385598`, incorporado no commit `40fc5c98deea42e9ab87a1d8838df2faeac6e959`: rota pública ativa somente no staging, bridge visual injetado apenas na cópia publicada, origem e rate limit ativos, valores recalculados pelo servidor, abertura do WhatsApp condicionada a `CREATED` ou `REPLAY`, rollback triplo e produção pública inalterada.
 - PRs #53 a #59, com `Site V2 Baseline` runs `30487764182`, `30488136686`, `30488522434`, `30488901740`, `30489239424`, `30489723046` e `30490127449`: correções restritas aos códigos terminais dos smokes remotos, sem alteração do runtime ou ampliação do escopo.
 - Deploy final do commit `2f879d15640d91a037a7be01da4d3445bff1c50c`: catálogo, Worker, design, contrato do checkout real, pedido sintético, `REPLAY`, bloqueios e projeção sombra no Supabase aprovados; rollback não acionado; produção pública inalterada.
+- PR #61 e `Site V2 Baseline` run `30537067316`: normalizador staging-only preserva identidade e rótulo da vendedora, cria `details.measurements` a partir dos campos legados do carrinho sem removê-los e normaliza aliases para `details.observations`; testes isolados, sintaxe, assets, bundle, Worker local e painel aprovados. Merge e deploy remoto ainda pendentes.
 
-Estado da etapa 6: conexão visual concluída. Os três itens seguintes permanecem pendentes e nenhuma atividade posterior foi iniciada automaticamente.
+Estado da etapa 6: preservação de vendedora, medidas e observações em andamento no PR #61. Os dois itens seguintes permanecem pendentes.
 
 Critério de conclusão: fluxo visual integral, da arte ao pedido e WhatsApp, aprovado no staging.
 
