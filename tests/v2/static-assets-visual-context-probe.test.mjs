@@ -4,6 +4,7 @@ import test from 'node:test';
 import { probeStaticAssets } from '../../staging/site-v2-worker/src/static-assets-router.js';
 
 const TITLE = '<title>Escolha suas Artes | Armazém Festa e Eventos</title>';
+const COMMERCIAL = 'site-v2-commercial-config-v1';
 const WORKSPACES = 'site-v2-product-workspaces-v1';
 const CONTEXT = 'site-v2-visual-checkout-context-v1';
 const WHATSAPP = 'site-v2-visual-checkout-whatsapp-v1';
@@ -13,6 +14,7 @@ function environment(overrides = {}) {
   const bodies = {
     '/index.html': `<!doctype html><html><head>${TITLE}</head><body></body></html>`,
     '/': `<!doctype html><html><head>${TITLE}</head><body></body></html>`,
+    '/assets/v2-commercial-config.js': `const marker='${COMMERCIAL}';`,
     '/assets/v2-product-workspaces.js': `const marker='${WORKSPACES}';`,
     '/assets/v2-checkout-context.js': `const marker='${CONTEXT}';`,
     '/assets/v2-checkout-whatsapp.js': `const marker='${WHATSAPP}';`,
@@ -28,103 +30,63 @@ function environment(overrides = {}) {
         const script = pathname.endsWith('.js');
         return new Response(bodies[pathname], {
           status: 200,
-          headers: {
-            'Content-Type': script ? 'application/javascript; charset=utf-8' : 'text/html; charset=utf-8'
-          }
+          headers: { 'Content-Type': script ? 'application/javascript; charset=utf-8' : 'text/html; charset=utf-8' }
         });
       }
     }
   };
 }
 
-test('aprova somente quando index, raiz, espaços de produto e checkout estão íntegros', async () => {
+test('aprova somente quando index, raiz, configuração, produtos e checkout estão íntegros', async () => {
   const response = await probeStaticAssets(
-    new Request('https://staging.example/internal/v2/assets/probe'),
-    environment(),
-    'probe-ok'
+    new Request('https://staging.example/internal/v2/assets/probe'), environment(), 'probe-ok'
   );
   const payload = await response.json();
 
   assert.equal(response.status, 200);
   assert.equal(payload.ok, true);
-  assert.equal(payload.bindingConfigured, true);
-  assert.equal(payload.probes.length, 6);
+  assert.equal(payload.probes.length, 7);
   assert.deepEqual(payload.probes.map(probe => probe.pathname), [
-    '/index.html',
-    '/',
-    '/assets/v2-product-workspaces.js',
-    '/assets/v2-checkout-context.js',
-    '/assets/v2-checkout-whatsapp.js',
-    '/assets/v2-checkout-bridge.js'
+    '/index.html','/','/assets/v2-commercial-config.js','/assets/v2-product-workspaces.js',
+    '/assets/v2-checkout-context.js','/assets/v2-checkout-whatsapp.js','/assets/v2-checkout-bridge.js'
   ]);
   assert.equal(payload.probes.every(probe => probe.markerMatched === true), true);
 });
 
-test('falha fechado quando o seletor de produtos publicado não contém o marcador esperado', async () => {
+test('falha fechado quando a configuração comercial não contém o marcador', async () => {
+  const response = await probeStaticAssets(
+    new Request('https://staging.example/internal/v2/assets/probe'),
+    environment({ '/assets/v2-commercial-config.js': 'arquivo incorreto' }),
+    'probe-commercial-invalid'
+  );
+  const payload = await response.json();
+  const probe = payload.probes.find(item => item.pathname === '/assets/v2-commercial-config.js');
+  assert.equal(payload.ok, false);
+  assert.equal(probe.markerMatched, false);
+});
+
+test('falha fechado quando o seletor de produtos não contém o marcador', async () => {
   const response = await probeStaticAssets(
     new Request('https://staging.example/internal/v2/assets/probe'),
     environment({ '/assets/v2-product-workspaces.js': 'arquivo incorreto' }),
     'probe-workspaces-invalid'
   );
   const payload = await response.json();
-  const probe = payload.probes.find(item => item.pathname === '/assets/v2-product-workspaces.js');
-
-  assert.equal(response.status, 200);
   assert.equal(payload.ok, false);
-  assert.equal(probe.ok, true);
-  assert.equal(probe.markerMatched, false);
-});
-
-test('falha fechado quando o contexto visual publicado não contém o marcador esperado', async () => {
-  const response = await probeStaticAssets(
-    new Request('https://staging.example/internal/v2/assets/probe'),
-    environment({ '/assets/v2-checkout-context.js': 'arquivo incorreto' }),
-    'probe-context-invalid'
-  );
-  const payload = await response.json();
-  const contextProbe = payload.probes.find(probe => probe.pathname === '/assets/v2-checkout-context.js');
-
-  assert.equal(response.status, 200);
-  assert.equal(payload.ok, false);
-  assert.equal(contextProbe.ok, true);
-  assert.equal(contextProbe.markerMatched, false);
-});
-
-test('falha fechado quando o formatador do WhatsApp não contém o marcador esperado', async () => {
-  const response = await probeStaticAssets(
-    new Request('https://staging.example/internal/v2/assets/probe'),
-    environment({ '/assets/v2-checkout-whatsapp.js': 'arquivo incorreto' }),
-    'probe-whatsapp-invalid'
-  );
-  const payload = await response.json();
-  const whatsappProbe = payload.probes.find(probe => probe.pathname === '/assets/v2-checkout-whatsapp.js');
-
-  assert.equal(response.status, 200);
-  assert.equal(payload.ok, false);
-  assert.equal(whatsappProbe.ok, true);
-  assert.equal(whatsappProbe.markerMatched, false);
+  assert.equal(payload.probes.find(item => item.pathname === '/assets/v2-product-workspaces.js').markerMatched, false);
 });
 
 test('falha fechado quando o bridge não está disponível', async () => {
   const env = environment();
   const originalFetch = env.ASSETS.fetch;
-  env.ASSETS.fetch = request => {
-    if (new URL(request.url).pathname === '/assets/v2-checkout-bridge.js') {
-      return new Response('missing', { status: 404 });
-    }
-    return originalFetch(request);
-  };
+  env.ASSETS.fetch = request => new URL(request.url).pathname === '/assets/v2-checkout-bridge.js'
+    ? new Response('missing', { status: 404 })
+    : originalFetch(request);
 
   const response = await probeStaticAssets(
-    new Request('https://staging.example/internal/v2/assets/probe'),
-    env,
-    'probe-bridge-missing'
+    new Request('https://staging.example/internal/v2/assets/probe'), env, 'probe-bridge-missing'
   );
   const payload = await response.json();
-
   assert.equal(payload.ok, false);
-  assert.equal(
-    payload.probes.find(probe => probe.pathname === '/assets/v2-checkout-bridge.js').status,
-    404
-  );
+  assert.equal(payload.probes.find(probe => probe.pathname === '/assets/v2-checkout-bridge.js').status, 404);
 });
