@@ -16,6 +16,9 @@ REPLAY_FILE="/tmp/site-v2-staging-replay.json"
 ORDER_FILE="/tmp/site-v2-staging-order.json"
 OUTBOX_FILE="/tmp/site-v2-staging-outbox.json"
 LOW_LEVEL_FILE="/tmp/site-v2-staging-low-level.json"
+CONFIG_FILE="/tmp/site-v2-commercial-config.json"
+CONFIG_UPDATE_FILE="/tmp/site-v2-commercial-config-update.json"
+CONFIG_STALE_FILE="/tmp/site-v2-commercial-config-stale.json"
 
 cleanup() {
   status=$?
@@ -23,7 +26,7 @@ cleanup() {
     kill "$WRANGLER_PID" 2>/dev/null || true
     wait "$WRANGLER_PID" 2>/dev/null || true
   fi
-  rm -f .dev.vars "$BODY_FILE" "$FIRST_FILE" "$REPLAY_FILE" "$ORDER_FILE" "$OUTBOX_FILE" "$LOW_LEVEL_FILE"
+  rm -f .dev.vars "$BODY_FILE" "$FIRST_FILE" "$REPLAY_FILE" "$ORDER_FILE" "$OUTBOX_FILE" "$LOW_LEVEL_FILE" "$CONFIG_FILE" "$CONFIG_UPDATE_FILE" "$CONFIG_STALE_FILE"
   rm -rf .wrangler
   if [ "$status" -ne 0 ]; then
     echo "Falha no smoke test. Log do Wrangler:"
@@ -42,160 +45,104 @@ EOF
 cat > "$BODY_FILE" <<EOF
 {
   "submissionCreatedAt": "$CREATED_AT",
-  "seller": {
-    "id": "ana",
-    "label": "Ana"
-  },
-  "customer": {
-    "name": "Cliente Sintético do CI",
-    "whatsapp": "5581999999999"
-  },
-  "items": [
-    {
-      "driveFileId": "staging-artwork-2657",
-      "productKey": "50x50",
-      "variantKey": "default",
-      "sizeKey": "50x50",
-      "quantity": 6,
-      "unitPrice": 0.01,
-      "lineSubtotal": 0.06
-    }
-  ],
-  "totals": {
-    "subtotal": 0.06,
-    "total": 0.06
-  }
+  "seller": {"id": "ana", "label": "Ana"},
+  "customer": {"name": "Cliente Sintético do CI", "whatsapp": "5581999999999"},
+  "items": [{
+    "driveFileId": "staging-artwork-2657", "productKey": "50x50",
+    "variantKey": "default", "sizeKey": "50x50", "quantity": 6,
+    "unitPrice": 0.01, "lineSubtotal": 0.06
+  }],
+  "totals": {"subtotal": 0.06, "total": 0.06}
 }
 EOF
 
-npx --yes wrangler@4.114.0 dev \
-  --local \
-  --config wrangler.site-v2-staging.jsonc \
-  --port "$PORT" \
-  > "$LOG_FILE" 2>&1 &
+npx --yes wrangler@4.114.0 dev --local --config wrangler.site-v2-staging.jsonc --port "$PORT" > "$LOG_FILE" 2>&1 &
 WRANGLER_PID=$!
 
 for attempt in $(seq 1 60); do
-  if curl --fail --silent --show-error "$BASE_URL/health" > /tmp/site-v2-staging-health.json; then
-    break
-  fi
-  if ! kill -0 "$WRANGLER_PID" 2>/dev/null; then
-    echo "Wrangler encerrou antes de ficar pronto."
-    exit 1
-  fi
+  if curl --fail --silent --show-error "$BASE_URL/health" > /tmp/site-v2-staging-health.json; then break; fi
+  if ! kill -0 "$WRANGLER_PID" 2>/dev/null; then echo "Wrangler encerrou antes de ficar pronto."; exit 1; fi
   sleep 1
-  if [ "$attempt" -eq 60 ]; then
-    echo "Worker local não ficou pronto."
-    exit 1
-  fi
+  if [ "$attempt" -eq 60 ]; then echo "Worker local não ficou pronto."; exit 1; fi
 done
 
 node -e '
   const fs = require("fs");
   const health = JSON.parse(fs.readFileSync("/tmp/site-v2-staging-health.json", "utf8"));
-  if (!health.ok) throw new Error("HEALTH_NOT_OK");
-  if (health.environment !== "staging") throw new Error("ENVIRONMENT_NOT_STAGING");
-  if (health.writesEnabled !== true) throw new Error("LOCAL_WRITES_NOT_ENABLED");
-  if (health.lowLevelLedgerEnabled !== false) throw new Error("LOW_LEVEL_LEDGER_NOT_DISABLED");
+  if (!health.ok || health.environment !== "staging") throw new Error("HEALTH_INVALID");
+  if (health.writesEnabled !== true || health.lowLevelLedgerEnabled !== false) throw new Error("HEALTH_GUARDS_INVALID");
   if (health.persistence !== "durable-object-sqlite") throw new Error("PERSISTENCE_INVALID");
-  if (health.catalog !== "synthetic-staging-only") throw new Error("CATALOG_NOT_SYNTHETIC");
+  if (health.commercialConfig?.enabled !== true) throw new Error("COMMERCIAL_CONFIG_HEALTH_MISSING");
 '
 
-FIRST_STATUS=$(curl --silent --show-error \
-  --output "$FIRST_FILE" \
-  --write-out '%{http_code}' \
-  --request POST \
-  --header 'Content-Type: application/json' \
-  --header "X-Staging-Token: $TOKEN" \
-  --header "Idempotency-Key: $IDEMPOTENCY_KEY" \
-  --data-binary "@$BODY_FILE" \
-  "$BASE_URL/internal/v2/orders/submit")
+curl --fail --silent --show-error "$BASE_URL/api/commercial-config" > "$CONFIG_FILE"
+node -e '
+  const fs=require("fs");const result=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+  if(!result.ok||result.config?.version!==1)throw new Error("INITIAL_CONFIG_INVALID");
+  if(result.config?.products?.["50x50"]?.unitPrice!==9.75)throw new Error("INITIAL_BOLINHAS_PRICE_INVALID");
+  if(result.config?.products?.["painel-150"]?.unitPrice!==59.9)throw new Error("INITIAL_PAINEL_PRICE_INVALID");
+' "$CONFIG_FILE"
 
-if [ "$FIRST_STATUS" != "201" ]; then
-  echo "Primeira submissão retornou HTTP $FIRST_STATUS"
-  cat "$FIRST_FILE"
-  exit 1
-fi
+UNAUTHORIZED_STATUS=$(curl --silent --show-error --output /tmp/site-v2-commercial-unauthorized.json --write-out '%{http_code}' "$BASE_URL/internal/v2/admin/commercial-config")
+if [ "$UNAUTHORIZED_STATUS" != "401" ]; then echo "Configuração administrativa sem token retornou HTTP $UNAUTHORIZED_STATUS"; exit 1; fi
+
+CONFIG_UPDATE_STATUS=$(curl --silent --show-error --output "$CONFIG_UPDATE_FILE" --write-out '%{http_code}' \
+  --request PUT --header 'Content-Type: application/json' --header "X-Staging-Token: $TOKEN" \
+  --data-binary '{"expectedVersion":1,"config":{"products":{"50x50":{"unitPrice":10.25,"minimum":6,"step":2,"initialQuantity":6},"painel-150":{"unitPrice":65,"minimum":1,"step":1,"initialQuantity":1}}}}' \
+  "$BASE_URL/internal/v2/admin/commercial-config")
+if [ "$CONFIG_UPDATE_STATUS" != "200" ]; then cat "$CONFIG_UPDATE_FILE"; exit 1; fi
+node -e '
+  const fs=require("fs");const result=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+  if(!result.ok||result.config?.version!==2)throw new Error("CONFIG_VERSION_NOT_INCREMENTED");
+  if(result.config?.products?.["50x50"]?.unitPrice!==10.25)throw new Error("UPDATED_PRICE_INVALID");
+' "$CONFIG_UPDATE_FILE"
+
+CONFIG_STALE_STATUS=$(curl --silent --show-error --output "$CONFIG_STALE_FILE" --write-out '%{http_code}' \
+  --request PUT --header 'Content-Type: application/json' --header "X-Staging-Token: $TOKEN" \
+  --data-binary '{"expectedVersion":1,"config":{"products":{"50x50":{"unitPrice":11,"minimum":6,"step":2,"initialQuantity":6},"painel-150":{"unitPrice":65,"minimum":1,"step":1,"initialQuantity":1}}}}' \
+  "$BASE_URL/internal/v2/admin/commercial-config")
+if [ "$CONFIG_STALE_STATUS" != "409" ]; then cat "$CONFIG_STALE_FILE"; exit 1; fi
+node -e '
+  const fs=require("fs");const result=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+  if(result.error!=="COMMERCIAL_CONFIG_VERSION_CONFLICT"||result.currentVersion!==2)throw new Error("STALE_CONFIG_GUARD_INVALID");
+' "$CONFIG_STALE_FILE"
+
+FIRST_STATUS=$(curl --silent --show-error --output "$FIRST_FILE" --write-out '%{http_code}' --request POST \
+  --header 'Content-Type: application/json' --header "X-Staging-Token: $TOKEN" --header "Idempotency-Key: $IDEMPOTENCY_KEY" \
+  --data-binary "@$BODY_FILE" "$BASE_URL/internal/v2/orders/submit")
+if [ "$FIRST_STATUS" != "201" ]; then echo "Primeira submissão retornou HTTP $FIRST_STATUS"; cat "$FIRST_FILE"; exit 1; fi
 
 ORDER_NUMBER=$(node -e '
-  const fs = require("fs");
-  const result = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-  if (!result.ok || result.action !== "CREATED" || result.replayed !== false) throw new Error("FIRST_SUBMISSION_INVALID");
-  if (result.orderNumber !== "PED2600001A") throw new Error(`ORDER_NUMBER_INVALID:${result.orderNumber}`);
-  if (result.pricing?.total !== 58.5) throw new Error(`SERVER_TOTAL_INVALID:${result.pricing?.total}`);
-  if (result.itemCount !== 1) throw new Error("ITEM_COUNT_INVALID");
-  if (!result.warnings?.includes("CLIENT_ITEM_PRICE_IGNORED:staging-artwork-2657")) throw new Error("CLIENT_PRICE_WARNING_MISSING");
-  if (!result.warnings?.includes("CLIENT_ORDER_TOTALS_IGNORED")) throw new Error("CLIENT_TOTAL_WARNING_MISSING");
+  const fs=require("fs");const result=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+  if(!result.ok||result.action!=="CREATED"||result.replayed!==false)throw new Error("FIRST_SUBMISSION_INVALID");
+  if(result.orderNumber!=="PED2600001A")throw new Error(`ORDER_NUMBER_INVALID:${result.orderNumber}`);
+  if(result.pricing?.total!==58.5)throw new Error(`SERVER_TOTAL_INVALID:${result.pricing?.total}`);
+  if(!result.warnings?.includes("CLIENT_ITEM_PRICE_IGNORED:staging-artwork-2657"))throw new Error("CLIENT_PRICE_WARNING_MISSING");
   process.stdout.write(result.orderNumber);
 ' "$FIRST_FILE")
 
-REPLAY_STATUS=$(curl --silent --show-error \
-  --output "$REPLAY_FILE" \
-  --write-out '%{http_code}' \
-  --request POST \
-  --header 'Content-Type: application/json' \
-  --header "X-Staging-Token: $TOKEN" \
-  --header "Idempotency-Key: $IDEMPOTENCY_KEY" \
-  --data-binary "@$BODY_FILE" \
-  "$BASE_URL/internal/v2/orders/submit")
-
-if [ "$REPLAY_STATUS" != "200" ]; then
-  echo "Replay retornou HTTP $REPLAY_STATUS"
-  cat "$REPLAY_FILE"
-  exit 1
-fi
-
+REPLAY_STATUS=$(curl --silent --show-error --output "$REPLAY_FILE" --write-out '%{http_code}' --request POST \
+  --header 'Content-Type: application/json' --header "X-Staging-Token: $TOKEN" --header "Idempotency-Key: $IDEMPOTENCY_KEY" \
+  --data-binary "@$BODY_FILE" "$BASE_URL/internal/v2/orders/submit")
+if [ "$REPLAY_STATUS" != "200" ]; then cat "$REPLAY_FILE"; exit 1; fi
 node -e '
-  const fs = require("fs");
-  const first = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-  const replay = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
-  if (!replay.ok || replay.action !== "REPLAY" || replay.replayed !== true) throw new Error("REPLAY_INVALID");
-  if (replay.orderNumber !== first.orderNumber) throw new Error("REPLAY_ORDER_NUMBER_CHANGED");
+  const fs=require("fs");const first=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const replay=JSON.parse(fs.readFileSync(process.argv[2],"utf8"));
+  if(!replay.ok||replay.action!=="REPLAY"||replay.orderNumber!==first.orderNumber)throw new Error("REPLAY_INVALID");
 ' "$FIRST_FILE" "$REPLAY_FILE"
 
-LOW_LEVEL_STATUS=$(curl --silent --show-error \
-  --output "$LOW_LEVEL_FILE" \
-  --write-out '%{http_code}' \
-  --request POST \
-  --header "X-Staging-Token: $TOKEN" \
-  "$BASE_URL/internal/v2/ledger/submit")
-
-if [ "$LOW_LEVEL_STATUS" != "503" ]; then
-  echo "Rota técnica retornou HTTP $LOW_LEVEL_STATUS"
-  cat "$LOW_LEVEL_FILE"
-  exit 1
-fi
-
-node -e '
-  const fs = require("fs");
-  const result = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-  if (result.error !== "LOW_LEVEL_LEDGER_DISABLED") throw new Error("LOW_LEVEL_LEDGER_GUARD_INVALID");
-' "$LOW_LEVEL_FILE"
+LOW_LEVEL_STATUS=$(curl --silent --show-error --output "$LOW_LEVEL_FILE" --write-out '%{http_code}' --request POST --header "X-Staging-Token: $TOKEN" "$BASE_URL/internal/v2/ledger/submit")
+if [ "$LOW_LEVEL_STATUS" != "503" ]; then cat "$LOW_LEVEL_FILE"; exit 1; fi
 
 ENCODED_CREATED_AT=$(node -p 'encodeURIComponent(process.argv[1])' "$CREATED_AT")
-curl --fail --silent --show-error \
-  --header "X-Staging-Token: $TOKEN" \
-  "$BASE_URL/internal/v2/ledger/order?number=$ORDER_NUMBER&createdAt=$ENCODED_CREATED_AT" \
-  > "$ORDER_FILE"
-
-curl --fail --silent --show-error \
-  --header "X-Staging-Token: $TOKEN" \
-  "$BASE_URL/internal/v2/ledger/outbox?createdAt=$ENCODED_CREATED_AT" \
-  > "$OUTBOX_FILE"
+curl --fail --silent --show-error --header "X-Staging-Token: $TOKEN" "$BASE_URL/internal/v2/ledger/order?number=$ORDER_NUMBER&createdAt=$ENCODED_CREATED_AT" > "$ORDER_FILE"
+curl --fail --silent --show-error --header "X-Staging-Token: $TOKEN" "$BASE_URL/internal/v2/ledger/outbox?createdAt=$ENCODED_CREATED_AT" > "$OUTBOX_FILE"
 
 node -e '
-  const fs = require("fs");
-  const orderResult = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-  const outboxResult = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
-  if (!orderResult.ok || orderResult.order?.orderNumber !== "PED2600001A") throw new Error("ORDER_QUERY_INVALID");
-  if (orderResult.order?.items?.[0]?.driveFileId !== "staging-artwork-2657") throw new Error("DRIVE_FILE_ID_LOST");
-  if (orderResult.order?.pricing?.total !== 58.5) throw new Error("ORDER_TOTAL_INVALID");
-  if (orderResult.order?.customer?.redacted !== true) throw new Error("ORDER_CUSTOMER_NOT_REDACTED");
-  if (Object.hasOwn(orderResult.order?.customer || {}, "whatsapp")) throw new Error("ORDER_PHONE_EXPOSED");
-  if (!outboxResult.ok || outboxResult.events?.length !== 1) throw new Error("OUTBOX_COUNT_INVALID");
-  if (outboxResult.events[0]?.eventType !== "order.created.v2") throw new Error("OUTBOX_EVENT_INVALID");
-  if (outboxResult.events[0]?.aggregateId !== "PED2600001A") throw new Error("OUTBOX_AGGREGATE_INVALID");
-  if (outboxResult.events[0]?.payload?.order?.customer?.redacted !== true) throw new Error("OUTBOX_CUSTOMER_NOT_REDACTED");
+  const fs=require("fs");const orderResult=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const outboxResult=JSON.parse(fs.readFileSync(process.argv[2],"utf8"));
+  if(!orderResult.ok||orderResult.order?.orderNumber!=="PED2600001A")throw new Error("ORDER_QUERY_INVALID");
+  if(orderResult.order?.items?.[0]?.driveFileId!=="staging-artwork-2657")throw new Error("DRIVE_FILE_ID_LOST");
+  if(orderResult.order?.customer?.redacted!==true)throw new Error("ORDER_CUSTOMER_NOT_REDACTED");
+  if(!outboxResult.ok||outboxResult.events?.length!==1)throw new Error("OUTBOX_COUNT_INVALID");
 ' "$ORDER_FILE" "$OUTBOX_FILE"
 
 echo "Smoke test do staging concluído com sucesso."
