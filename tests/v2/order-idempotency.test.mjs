@@ -36,21 +36,25 @@ const order = {
 const key = '6dcfa85f-4401-49ca-a19b-1b9ce61cc638';
 const now = new Date('2026-07-26T18:00:00.000Z');
 
-test('fingerprint ignora nome e ordem dos itens, mas preserva intenção comercial', async () => {
+test('fingerprint preserva nome e intenção comercial, mas ignora ordem dos itens', async () => {
   const first = await createOrderIntentFingerprint(order);
-  const second = await createOrderIntentFingerprint({
+  const reordered = await createOrderIntentFingerprint({
     ...order,
-    customer: { ...order.customer, name: 'Outro Nome' },
     items: [...order.items].reverse()
   });
-  const changed = await createOrderIntentFingerprint({
+  const changedName = await createOrderIntentFingerprint({
+    ...order,
+    customer: { ...order.customer, name: 'Outro Nome' }
+  });
+  const changedQuantity = await createOrderIntentFingerprint({
     ...order,
     items: [{ ...order.items[0], quantity: 8 }]
   });
 
   assert.match(first, /^[0-9a-f]{64}$/);
-  assert.equal(first, second);
-  assert.notEqual(first, changed);
+  assert.equal(first, reordered);
+  assert.notEqual(first, changedName);
+  assert.notEqual(first, changedQuantity);
 });
 
 test('chave de armazenamento usa hash e não expõe chave original', async () => {
