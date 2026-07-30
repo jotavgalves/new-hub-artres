@@ -171,13 +171,21 @@ Critério de conclusão satisfeito: fluxo visual integral, da arte ao pedido e W
 
 ### 7. Compatibilidade e produção V2
 
-- [ ] Ler pedidos antigos sem regressão.
+- [x] Ler pedidos antigos sem regressão.
 - [ ] Definir e validar estratégia temporária para KV legado.
 - [ ] Gerar payload de produção por `itemId`.
 - [ ] Preservar arquivo, nome original, produto, variante, tamanho, medidas e observações.
 - [ ] Manter separados códigos iguais de produtos distintos.
 - [ ] Manter separadas variantes da mesma arte.
 - [ ] Validar transições de status e reprocessamento.
+
+Evidência:
+
+- PR #68, `Site V2 Baseline` runs `30560202649` e `30560607318`, incorporado no commit `9fc9296bca627f192a2c2bfcdd8b27691735a92b`: leitor passivo aceita pedido direto, JSON integral do KV, `orders.raw` e linhas de `order_items`; preserva status, datas, cliente, vendedora, totais e itens; mantém códigos iguais de produtos distintos separados pelo adaptador; não inventa `driveFileId`, não altera o registro de origem, não grava, não migra e limita JSON armazenado a 512 KB. Worker, bindings, banco, assets e produção pública permaneceram inalterados.
+
+Estado da etapa 7: primeiro item concluído. Permanecem 6 itens nesta etapa e 38 itens no checklist completo, distribuídos entre as etapas 7 a 12. Nenhuma nova atividade foi iniciada automaticamente.
+
+Pendência consolidada: etapa 7 com 6 itens; etapa 8 com 6; etapa 9 com 7; etapa 10 com 7; etapa 11 com 6; etapa 12 com 6. Total: 38 itens.
 
 Critério de conclusão: pedidos V2 e antigos geram payload de produção correto e inequívoco.
 
