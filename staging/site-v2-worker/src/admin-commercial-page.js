@@ -84,7 +84,7 @@ export const ADMIN_COMMERCIAL_JS = `
   configForm.addEventListener('submit', saveConfig);
   disconnectButton.addEventListener('click', disconnect);
 
-  async function loadConfig(){
+  async function loadConfig(successText='Configuração carregada. O token permanece apenas na memória desta aba.'){
     if(!state.token||state.loading)return;
     setBusy(true);setStatus('Carregando configuração comercial...','neutral');
     try{
@@ -92,7 +92,7 @@ export const ADMIN_COMMERCIAL_JS = `
       state.config=result.config;
       render(result.config,result.history||[]);
       disconnectButton.disabled=false;tokenInput.value='';configForm.hidden=false;historyCard.hidden=false;
-      setStatus('Configuração carregada. O token permanece apenas na memória desta aba.','success');
+      setStatus(successText,'success');
     }catch(error){setStatus(message(error),'error');if(error.status===401)disconnect();}
     finally{setBusy(false);}
   }
@@ -117,14 +117,18 @@ export const ADMIN_COMMERCIAL_JS = `
         body:JSON.stringify({expectedVersion:state.config.version,config})
       });
       state.config=result.config;
-      await loadConfig();
-      setStatus('Nova versão comercial publicada com sucesso.','success');
+      render(result.config,[]);
+      setBusy(false);
+      await loadConfig('Nova versão comercial publicada com sucesso.');
+      return;
     }catch(error){
       if(error.code==='COMMERCIAL_CONFIG_VERSION_CONFLICT'){
-        setStatus('A configuração mudou em outra aba. Recarregando a versão atual...','error');
-        await loadConfig();
-      }else setStatus(message(error),'error');
-    }finally{setBusy(false);}
+        setBusy(false);
+        await loadConfig('A configuração mudou em outra aba. A versão atual foi recarregada.');
+        return;
+      }
+      setStatus(message(error),'error');
+    }finally{if(state.loading)setBusy(false);}
   }
 
   function render(config,history){
