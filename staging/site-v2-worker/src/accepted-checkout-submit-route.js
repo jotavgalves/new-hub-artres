@@ -37,7 +37,7 @@ export async function handleAcceptedCheckoutSubmit(request, env, requestId, opti
 
     const resolved = await resolveItems(driveFileIds, env, options);
     const validated = validateItems(requestItems, resolved.items);
-    const priced = priceDraft({ body, resolved, validated, env });
+    const priced = await priceDraft({ body, resolved, validated, env });
     const canonical = await prepareDraft({
       body,
       resolved,
@@ -70,6 +70,7 @@ export async function handleAcceptedCheckoutSubmit(request, env, requestId, opti
       quantity: result.order?.qty,
       pricing: result.order?.pricing,
       catalogVersion: result.order?.integrity?.catalogVersion,
+      configVersion: result.order?.integrity?.configVersion,
       canonicalDetailsPreserved: Array.isArray(result.order?.items) &&
         result.order.items.every(item => item.details && typeof item.details === 'object'),
       customerPreserved: Boolean(result.order?.customer?.name && result.order?.customer?.whatsapp),
