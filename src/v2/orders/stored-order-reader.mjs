@@ -5,30 +5,32 @@ export function readStoredOrderForCompatibility(input = {}) {
   const parsed = parseTopLevel(input);
   const root = record(parsed.value);
   const envelope = selectOrderEnvelope(root);
-  const rawOrder = parseNestedRaw(envelope.raw ?? root.raw, warnings);
+  const rawOrder = parseNestedRaw(firstDefined(root.raw, envelope.raw), warnings);
   const primary = rawOrder || envelope;
-  const rowItems = firstArray(
+  const primaryItems = nonEmptyArray(primary.items);
+  const rowItems = firstNonEmptyArray(
     envelope.orderItems,
     envelope.order_items,
     root.orderItems,
     root.order_items
   );
-  const primaryItems = firstArray(primary.items);
-  const items = primaryItems || rowItems || [];
+  const items = primaryItems || rowItems || (Array.isArray(primary.items) ? primary.items : []);
 
   if (!primaryItems && rowItems) warnings.push('LEGACY_ITEMS_READ_FROM_ROWS');
-  if (!rawOrder && Object.hasOwn(envelope, 'raw') && envelope.raw) {
-    warnings.push('LEGACY_RAW_FALLBACK_USED');
-  }
+  if (!rawOrder && firstDefined(root.raw, envelope.raw)) warnings.push('LEGACY_RAW_FALLBACK_USED');
 
   const order = deepFreeze({
     schemaVersion: firstDefined(
-      primary.schemaVersion,
-      primary.schema_version,
+      root.schemaVersion,
+      root.schema_version,
       envelope.schemaVersion,
-      envelope.schema_version
+      envelope.schema_version,
+      primary.schemaVersion,
+      primary.schema_version
     ),
     orderNumber: firstText(
+      root.orderNumber,
+      root.order_number,
       envelope.orderNumber,
       envelope.order_number,
       primary.orderNumber,
@@ -37,32 +39,37 @@ export function readStoredOrderForCompatibility(input = {}) {
       primary.displayId,
       primary.id
     ),
-    orderCode: firstText(primary.orderCode, primary.order_code, envelope.orderCode, envelope.order_code),
-    displayId: firstText(primary.displayId, primary.display_id, envelope.displayId, envelope.display_id),
-    legacyId: firstText(primary.legacyId, primary.legacy_id, envelope.legacyId, envelope.legacy_id),
+    orderCode: firstText(primary.orderCode, primary.order_code, envelope.orderCode, envelope.order_code, root.orderCode, root.order_code),
+    displayId: firstText(primary.displayId, primary.display_id, envelope.displayId, envelope.display_id, root.displayId, root.display_id),
+    legacyId: firstText(primary.legacyId, primary.legacy_id, envelope.legacyId, envelope.legacy_id, root.legacyId, root.legacy_id),
     createdAt: firstText(
+      root.createdAt,
+      root.created_at,
       envelope.createdAt,
       envelope.created_at,
       primary.createdAt,
       primary.created_at
     ),
     updatedAt: firstText(
+      root.updatedAt,
+      root.updated_at,
       envelope.updatedAt,
       envelope.updated_at,
       primary.updatedAt,
       primary.updated_at
     ),
-    status: firstText(envelope.status, primary.status, 'Novo'),
-    seller: normalizeSeller(primary, envelope),
-    customer: normalizeCustomer(primary, envelope),
-    pricing: normalizePricing(primary, envelope),
-    totals: normalizeTotals(primary, envelope),
-    source: firstText(primary.source, envelope.source, parsed.storageMode === 'direct' ? 'catalog' : 'legacy-storage'),
-    items: items.map((item, index) => normalizeStoredItem(item, index, warnings)),
-    qty: firstDefined(primary.qty, primary.quantity, envelope.qty, envelope.quantity),
+    status: firstText(root.status, envelope.status, primary.status, 'Novo'),
+    seller: normalizeSeller(primary, envelope, root),
+    customer: normalizeCustomer(primary, envelope, root),
+    pricing: normalizePricing(primary, envelope, root),
+    totals: normalizeTotals(primary, envelope, root),
+    source: firstText(primary.source, envelope.source, root.source, parsed.storageMode === 'direct' ? 'catalog' : 'legacy-storage'),
+    items: items.map(item => normalizeStoredItem(item, warnings)),
+    qty: firstDefined(primary.qty, primary.quantity, envelope.qty, envelope.quantity, root.qty, root.quantity),
     warnings: unique([
       ...(Array.isArray(primary.warnings) ? primary.warnings : []),
       ...(Array.isArray(envelope.warnings) ? envelope.warnings : []),
+      ...(Array.isArray(root.warnings) ? root.warnings : []),
       ...warnings
     ])
   });
@@ -127,9 +134,14 @@ function parseNestedRaw(value, warnings) {
   }
 }
 
-function normalizeStoredItem(input, index, warnings) {
+function normalizeStoredItem(input, warnings) {
   const item = record(input);
-  const details = firstDefined(item.details, parseOptionalJson(item.details_json, warnings, 'LEGACY_ITEM_DETAILS_INVALID_JSON'), {});
+  const details = firstDefined(
+    item.details,
+    parseOptionalJson(item.details_json, warnings, 'LEGACY_ITEM_DETAILS_INVALID_JSON'),
+    {}
+  );
+
   return deepFreeze({
     itemId: firstText(item.itemId, item.item_id),
     driveFileId: firstText(item.driveFileId, item.drive_file_id),
@@ -146,65 +158,132 @@ function normalizeStoredItem(input, index, warnings) {
     quantity: firstDefined(item.quantity, item.qty, item.quantidade, 1),
     qty: firstDefined(item.qty, item.quantity, item.quantidade, 1),
     details,
-    image: firstText(item.image, item.image_url, item.thumbnail),
-    legacyIndex: index
+    image: firstText(item.image, item.image_url, item.thumbnail)
   });
 }
 
-function normalizeSeller(primary, envelope) {
-  const seller = firstRecord(primary.seller, envelope.seller);
+function normalizeSeller(primary, envelope, root) {
+  const seller = firstRecord(primary.seller, envelope.seller, root.seller);
   if (seller !== EMPTY_RECORD) return cloneSerializable(seller);
   return deepFreeze({
-    id: firstText(primary.sellerId, primary.seller_id, envelope.sellerId, envelope.seller_id),
-    label: firstText(primary.sellerName, primary.seller_name, envelope.sellerName, envelope.seller_name),
-    name: firstText(primary.sellerName, primary.seller_name, envelope.sellerName, envelope.seller_name)
+    id: firstText(
+      primary.sellerId,
+      primary.seller_id,
+      envelope.sellerId,
+      envelope.seller_id,
+      root.sellerId,
+      root.seller_id
+    ),
+    label: firstText(
+      primary.sellerName,
+      primary.seller_name,
+      envelope.sellerName,
+      envelope.seller_name,
+      root.sellerName,
+      root.seller_name
+    ),
+    name: firstText(
+      primary.sellerName,
+      primary.seller_name,
+      envelope.sellerName,
+      envelope.seller_name,
+      root.sellerName,
+      root.seller_name
+    )
   });
 }
 
-function normalizeCustomer(primary, envelope) {
-  const customer = firstRecord(primary.customer, envelope.customer);
+function normalizeCustomer(primary, envelope, root) {
+  const customer = firstRecord(primary.customer, envelope.customer, root.customer);
   if (customer !== EMPTY_RECORD) return cloneSerializable(customer);
   return deepFreeze({
-    name: firstText(primary.customerName, primary.customer_name, envelope.customerName, envelope.customer_name),
+    name: firstText(
+      primary.customerName,
+      primary.customer_name,
+      envelope.customerName,
+      envelope.customer_name,
+      root.customerName,
+      root.customer_name
+    ),
     whatsapp: firstText(
       primary.customerWhatsapp,
       primary.customer_whatsapp,
       envelope.customerWhatsapp,
       envelope.customer_whatsapp,
+      root.customerWhatsapp,
+      root.customer_whatsapp,
       primary.customerPhone,
       primary.customer_phone,
       envelope.customerPhone,
-      envelope.customer_phone
+      envelope.customer_phone,
+      root.customerPhone,
+      root.customer_phone
     ),
     phone: firstText(
       primary.customerPhone,
       primary.customer_phone,
       envelope.customerPhone,
       envelope.customer_phone,
+      root.customerPhone,
+      root.customer_phone,
       primary.customerWhatsapp,
       primary.customer_whatsapp,
       envelope.customerWhatsapp,
-      envelope.customer_whatsapp
+      envelope.customer_whatsapp,
+      root.customerWhatsapp,
+      root.customer_whatsapp
     )
   });
 }
 
-function normalizePricing(primary, envelope) {
-  const pricing = firstRecord(primary.pricing, envelope.pricing);
+function normalizePricing(primary, envelope, root) {
+  const pricing = firstRecord(
+    primary.pricing,
+    envelope.pricing,
+    root.pricing,
+    primary.totals,
+    envelope.totals,
+    root.totals
+  );
   if (pricing !== EMPTY_RECORD) return cloneSerializable(pricing);
-  return deepFreeze({
-    currency: firstText(primary.currency, envelope.currency, 'BRL'),
-    subtotal: firstDefined(primary.subtotal, envelope.subtotal),
-    discountPercent: firstDefined(primary.discountPercent, primary.discount_percent, envelope.discountPercent, envelope.discount_percent),
-    discountAmount: firstDefined(primary.discountAmount, primary.discount_amount, envelope.discountAmount, envelope.discount_amount),
-    total: firstDefined(primary.total, envelope.total)
-  });
+  return scalarPricing(primary, envelope, root);
 }
 
-function normalizeTotals(primary, envelope) {
-  const totals = firstRecord(primary.totals, envelope.totals);
+function normalizeTotals(primary, envelope, root) {
+  const totals = firstRecord(
+    primary.totals,
+    envelope.totals,
+    root.totals,
+    primary.pricing,
+    envelope.pricing,
+    root.pricing
+  );
   if (totals !== EMPTY_RECORD) return cloneSerializable(totals);
-  return normalizePricing(primary, envelope);
+  return scalarPricing(primary, envelope, root);
+}
+
+function scalarPricing(primary, envelope, root) {
+  return deepFreeze({
+    currency: firstText(primary.currency, envelope.currency, root.currency, 'BRL'),
+    subtotal: firstDefined(primary.subtotal, envelope.subtotal, root.subtotal),
+    discountPercent: firstDefined(
+      primary.discountPercent,
+      primary.discount_percent,
+      envelope.discountPercent,
+      envelope.discount_percent,
+      root.discountPercent,
+      root.discount_percent
+    ),
+    discountAmount: firstDefined(
+      primary.discountAmount,
+      primary.discount_amount,
+      envelope.discountAmount,
+      envelope.discount_amount,
+      root.discountAmount,
+      root.discount_amount
+    ),
+    total: firstDefined(primary.total, envelope.total, root.total)
+  });
 }
 
 function parseOptionalJson(value, warnings, warning) {
@@ -217,8 +296,12 @@ function parseOptionalJson(value, warnings, warning) {
   }
 }
 
-function firstArray(...values) {
-  return values.find(Array.isArray) || null;
+function nonEmptyArray(value) {
+  return Array.isArray(value) && value.length ? value : null;
+}
+
+function firstNonEmptyArray(...values) {
+  return values.find(value => Array.isArray(value) && value.length) || null;
 }
 
 function firstRecord(...values) {
