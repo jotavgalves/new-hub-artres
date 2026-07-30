@@ -7,6 +7,7 @@ const runAttempt = String(process.env.GITHUB_RUN_ATTEMPT || '1');
 const idempotencyKey = `synthetic-shadow-${runId}-${runAttempt}`;
 const submissionCreatedAt = new Date().toISOString();
 const MAX_RESPONSE_BYTES = 64 * 1024;
+const ORDER_LIST_LIMIT = 20;
 
 if (!workerBase.startsWith('https://')) throw new Error('STAGING_URL_INVALID');
 if (workerToken.length < 32) throw new Error('SITE_V2_STAGING_API_TOKEN_MISSING_OR_SHORT');
@@ -126,7 +127,9 @@ async function waitForShadowDeployment() {
 async function waitForProjectedOrder(orderNumber) {
   let lastPayload = null;
   for (let attempt = 1; attempt <= 30; attempt += 1) {
-    const payload = await supabaseRpc('armazem_v2_list_orders_redacted_v1', { p_limit: 100 });
+    const payload = await supabaseRpc('armazem_v2_list_orders_redacted_v1', {
+      p_limit: ORDER_LIST_LIMIT
+    });
     lastPayload = payload;
     const matches = Array.isArray(payload?.orders)
       ? payload.orders.filter(order => order?.orderNumber === orderNumber)
@@ -218,7 +221,9 @@ assert(!serialized.includes(customer.whatsapp), 'SUPABASE_CUSTOMER_PHONE_EXPOSED
 assert(!serialized.includes(serviceRoleKey), 'SUPABASE_SERVICE_KEY_EXPOSED');
 
 await sleep(2000);
-const replayCheck = await supabaseRpc('armazem_v2_list_orders_redacted_v1', { p_limit: 100 });
+const replayCheck = await supabaseRpc('armazem_v2_list_orders_redacted_v1', {
+  p_limit: ORDER_LIST_LIMIT
+});
 const duplicateCount = Array.isArray(replayCheck?.orders)
   ? replayCheck.orders.filter(entry => entry?.orderNumber === first.orderNumber).length
   : 0;
