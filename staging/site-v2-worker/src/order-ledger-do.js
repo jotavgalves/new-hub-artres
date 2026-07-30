@@ -2,10 +2,16 @@ import { DurableObject } from 'cloudflare:workers';
 
 import { formatOrderNumberV2, orderYearCode } from '../../../src/v2/orders/order-number.mjs';
 import { validateLedgerSubmissionCommand } from '../../../src/v2/persistence/order-ledger-port.mjs';
+import {
+  commercialConfigUpdatePayload,
+  DEFAULT_COMMERCIAL_CONFIG,
+  normalizeCommercialConfig
+} from '../../../src/v2/products/commercial-config.mjs';
 
-const DATABASE_SCHEMA_VERSION = 1;
+const DATABASE_SCHEMA_VERSION = 2;
 const MAX_OUTBOX_BATCH = 200;
 const MAX_ORDER_BATCH = 200;
+const MAX_CONFIG_HISTORY = 100;
 
 export class OrderLedger extends DurableObject {
   constructor(ctx, env) {
@@ -107,6 +113,78 @@ export class OrderLedger extends DurableObject {
     });
   }
 
+  async getCommercialConfig() {
+    return this.#readCommercialConfig();
+  }
+
+  async updateCommercialConfig(input = {}) {
+    const expectedVersion = positiveInteger(input.expectedVersion);
+    if (!expectedVersion) throw ledgerError('COMMERCIAL_CONFIG_EXPECTED_VERSION_REQUIRED');
+    const requestId = safeRequestId(input.requestId);
+    if (!requestId) throw ledgerError('COMMERCIAL_CONFIG_REQUEST_ID_INVALID');
+    const actor = safeActor(input.actor);
+    if (!actor) throw ledgerError('COMMERCIAL_CONFIG_ACTOR_INVALID');
+    const requestedAt = validIsoDate(input.updatedAt) || new Date().toISOString();
+    const patch = input.config || input.patch;
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+      throw ledgerError('COMMERCIAL_CONFIG_PATCH_REQUIRED');
+    }
+
+    return this.ctx.storage.transactionSync(() => {
+      const current = this.#readCommercialConfig();
+      if (current.version !== expectedVersion) {
+        const error = ledgerError('COMMERCIAL_CONFIG_VERSION_CONFLICT');
+        error.currentVersion = current.version;
+        throw error;
+      }
+
+      const next = commercialConfigUpdatePayload(current, patch, {
+        version: current.version + 1,
+        updatedAt: requestedAt,
+        updatedBy: actor
+      });
+      const payload = JSON.stringify(next);
+
+      this.sql.exec(
+        `INSERT INTO commercial_config_versions (
+           version, payload_json, actor, request_id, created_at
+         ) VALUES (?, ?, ?, ?, ?)`,
+        next.version,
+        payload,
+        actor,
+        requestId,
+        requestedAt
+      );
+      this.sql.exec(
+        `UPDATE commercial_config_current
+            SET version = ?, payload_json = ?, updated_at = ?
+          WHERE singleton = 1`,
+        next.version,
+        payload,
+        requestedAt
+      );
+
+      return next;
+    });
+  }
+
+  async listCommercialConfigHistory(limit = 20) {
+    const capped = boundedLimit(limit, 20, MAX_CONFIG_HISTORY);
+    return this.sql.exec(
+      `SELECT version, payload_json, actor, request_id, created_at
+         FROM commercial_config_versions
+        ORDER BY version DESC
+        LIMIT ?`,
+      capped
+    ).toArray().map(row => ({
+      version: Number(row.version),
+      config: normalizeCommercialConfig(parseJson(row.payload_json, 'COMMERCIAL_CONFIG_PAYLOAD_INVALID')),
+      actor: String(row.actor || ''),
+      requestId: String(row.request_id || ''),
+      createdAt: String(row.created_at || '')
+    }));
+  }
+
   async health() {
     const meta = Object.fromEntries(
       this.sql.exec('SELECT key, value FROM meta ORDER BY key').toArray().map(row => [row.key, row.value])
@@ -115,14 +193,28 @@ export class OrderLedger extends DurableObject {
     const pendingOutbox = Number(
       this.sql.exec("SELECT COUNT(*) AS count FROM outbox WHERE status = 'pending'").toArray()[0]?.count || 0
     );
+    const commercialConfigVersion = Number(
+      this.sql.exec('SELECT version FROM commercial_config_current WHERE singleton = 1').toArray()[0]?.version || 0
+    );
 
     return {
       ok: true,
       schemaVersion: Number(meta.schema_version || DATABASE_SCHEMA_VERSION),
       yearCode: meta.year_code || '',
       orderCount,
-      pendingOutbox
+      pendingOutbox,
+      commercialConfigVersion
     };
+  }
+
+  #readCommercialConfig() {
+    const row = this.sql.exec(
+      'SELECT version, payload_json, updated_at FROM commercial_config_current WHERE singleton = 1 LIMIT 1'
+    ).toArray()[0];
+    if (!row) throw ledgerError('COMMERCIAL_CONFIG_CURRENT_MISSING');
+    const config = normalizeCommercialConfig(parseJson(row.payload_json, 'COMMERCIAL_CONFIG_PAYLOAD_INVALID'));
+    if (config.version !== Number(row.version)) throw ledgerError('COMMERCIAL_CONFIG_VERSION_MISMATCH');
+    return config;
   }
 
   #submitTransaction(command) {
@@ -286,10 +378,26 @@ export class OrderLedger extends DurableObject {
         delivered_at TEXT
       );
 
+      CREATE TABLE IF NOT EXISTS commercial_config_versions (
+        version INTEGER PRIMARY KEY CHECK (version > 0),
+        payload_json TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        request_id TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS commercial_config_current (
+        singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+        version INTEGER NOT NULL CHECK (version > 0),
+        payload_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
       CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_outbox_pending ON outbox(status, id);
       CREATE INDEX IF NOT EXISTS idx_outbox_aggregate ON outbox(aggregate_id, id DESC);
       CREATE INDEX IF NOT EXISTS idx_idempotency_order ON idempotency(order_number);
+      CREATE INDEX IF NOT EXISTS idx_commercial_config_created ON commercial_config_versions(created_at DESC);
     `);
 
     this.sql.exec(
@@ -298,6 +406,38 @@ export class OrderLedger extends DurableObject {
        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
       String(DATABASE_SCHEMA_VERSION)
     );
+
+    const existingConfig = this.sql.exec(
+      'SELECT version FROM commercial_config_current WHERE singleton = 1 LIMIT 1'
+    ).toArray()[0];
+    if (!existingConfig) {
+      const now = new Date().toISOString();
+      const initial = normalizeCommercialConfig({
+        ...DEFAULT_COMMERCIAL_CONFIG,
+        updatedAt: now,
+        updatedBy: 'system-default'
+      });
+      const payload = JSON.stringify(initial);
+      this.sql.exec(
+        `INSERT INTO commercial_config_versions (
+           version, payload_json, actor, request_id, created_at
+         ) VALUES (?, ?, ?, ?, ?)`,
+        initial.version,
+        payload,
+        'system-default',
+        'commercial-config-initialization',
+        now
+      );
+      this.sql.exec(
+        `INSERT INTO commercial_config_current (
+           singleton, version, payload_json, updated_at
+         ) VALUES (1, ?, ?, ?)`,
+        initial.version,
+        payload,
+        now
+      );
+    }
+
     this.sql.exec('PRAGMA optimize');
   }
 }
@@ -325,6 +465,16 @@ function parseJson(value, code) {
 function normalizeOrderNumber(value) {
   const normalized = String(value ?? '').trim().toUpperCase();
   return /^PED\d{2}\d{5}[A-Z]$/.test(normalized) ? normalized : '';
+}
+
+function safeRequestId(value) {
+  const text = String(value || '').trim();
+  return /^[A-Za-z0-9._:-]{1,100}$/.test(text) ? text : '';
+}
+
+function safeActor(value) {
+  const text = String(value || '').trim();
+  return /^[A-Za-z0-9._:@-]{1,120}$/.test(text) ? text : '';
 }
 
 function validIsoDate(value) {
