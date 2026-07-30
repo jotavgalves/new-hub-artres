@@ -11,6 +11,10 @@ import {
 import { handleAcceptedCheckoutSubmit } from './accepted-checkout-submit-route.js';
 import { handleCheckoutValidationPreview } from './checkout-validation-preview-route.js';
 import {
+  handleAdminCommercialConfig,
+  handlePublicCommercialConfig
+} from './commercial-config-route.js';
+import {
   handleOutboxInspection,
   handleRecentAdminOrders
 } from './ledger-inspection-routes.js';
@@ -34,6 +38,8 @@ import {
 export { OrderLedger };
 
 const ADMIN_ORDERS_ROUTE = '/internal/v2/admin/orders';
+const ADMIN_COMMERCIAL_CONFIG_ROUTE = '/internal/v2/admin/commercial-config';
+const PUBLIC_COMMERCIAL_CONFIG_ROUTE = '/api/commercial-config';
 const CATALOG_READONLY_ROUTE = '/internal/v2/catalog/preview';
 const LEDGER_OUTBOX_ROUTE = '/internal/v2/ledger/outbox';
 const PUBLIC_CHECKOUT_PROTECTION_ROUTE = '/internal/v2/checkout/protection';
@@ -52,9 +58,6 @@ export default {
 export async function fetchStagingShadowWorker(request, env, ctx) {
   const url = new URL(request.url);
 
-  // Todos os requests passam primeiro pelo Worker. As páginas e os arquivos do
-  // design atual são encaminhados explicitamente ao binding de assets. Isso
-  // evita depender do caminho asset-first do edge e não transforma o conteúdo.
   if (isStaticAssetRoute(url.pathname)) {
     const requestId = safeRequestId(request.headers) || crypto.randomUUID();
     return serveStaticAsset(request, env, requestId);
@@ -68,6 +71,11 @@ export async function fetchStagingShadowWorker(request, env, ctx) {
   if (PUBLIC_CATALOG_ROUTES.has(url.pathname)) {
     const requestId = safeRequestId(request.headers) || crypto.randomUUID();
     return handleCatalogAcceptedPublicRoute(request, env, requestId);
+  }
+
+  if (url.pathname === PUBLIC_COMMERCIAL_CONFIG_ROUTE) {
+    const requestId = safeRequestId(request.headers) || crypto.randomUUID();
+    return handlePublicCommercialConfig(request, env, requestId);
   }
 
   if (url.pathname === PUBLIC_CHECKOUT_ROUTE) {
@@ -85,7 +93,11 @@ export async function fetchStagingShadowWorker(request, env, ctx) {
     });
   }
 
-  if (url.pathname === ADMIN_ORDERS_ROUTE || url.pathname === LEDGER_OUTBOX_ROUTE) {
+  if (
+    url.pathname === ADMIN_ORDERS_ROUTE ||
+    url.pathname === ADMIN_COMMERCIAL_CONFIG_ROUTE ||
+    url.pathname === LEDGER_OUTBOX_ROUTE
+  ) {
     const requestId = safeRequestId(request.headers) || crypto.randomUUID();
     const authorized = await constantTimeEqualSecrets(
       request.headers.get('x-staging-token'),
@@ -94,6 +106,9 @@ export async function fetchStagingShadowWorker(request, env, ctx) {
     if (!authorized) return json({ ok: false, error: 'STAGING_TOKEN_INVALID', requestId }, 401);
     if (url.pathname === ADMIN_ORDERS_ROUTE) {
       return handleRecentAdminOrders(request, env, requestId);
+    }
+    if (url.pathname === ADMIN_COMMERCIAL_CONFIG_ROUTE) {
+      return handleAdminCommercialConfig(request, env, requestId);
     }
     return handleOutboxInspection(request, env, requestId);
   }
@@ -180,7 +195,12 @@ export async function fetchStagingShadowWorker(request, env, ctx) {
       supabaseShadow: shadowStatus,
       catalogReadonlyBridge: catalogStatus,
       acceptedCatalog: acceptedCatalogStatus,
-      publicCheckout: checkoutStatus
+      publicCheckout: checkoutStatus,
+      commercialConfig: {
+        enabled: true,
+        publicRoute: PUBLIC_COMMERCIAL_CONFIG_ROUTE,
+        adminRoute: ADMIN_COMMERCIAL_CONFIG_ROUTE
+      }
     });
   }
 
