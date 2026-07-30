@@ -26,6 +26,14 @@ test('aplica o produto ativo em todas as leituras do catálogo sem alterar o obj
   assert.equal(workspaces.scopeCatalogParams({ mode: 'health' }, 'bolinhas').product, undefined);
 });
 
+test('reconhece itens do catálogo e do carrinho pelo produto correto', () => {
+  assert.equal(workspaces.productMatches({ product: '50x50' }, '50x50'), true);
+  assert.equal(workspaces.productMatches({ productKey: 'painel-150' }, 'painel-150'), true);
+  assert.equal(workspaces.productMatches({ product: 'painel-150' }, '50x50'), false);
+  assert.equal(workspaces.workspaceForProduct('50x50').id, 'bolinhas');
+  assert.equal(workspaces.workspaceForProduct('painel-150').id, 'painel-150');
+});
+
 test('parâmetro da URL prevalece sobre a seleção anterior da sessão', () => {
   assert.equal(workspaces.resolveInitialWorkspace({
     search: '?produto=painel-150',
@@ -62,4 +70,17 @@ test('módulo contém escolha inicial, abas acessíveis e transição sem recarr
   assert.match(source, /loadThemes/);
   assert.match(source, /scrollIntoView/);
   assert.doesNotMatch(source, /location\.reload|location\.assign|location\.replace/);
+});
+
+test('módulo filtra fallback visual e troca de aba antes de localizar item do outro produto', async () => {
+  const source = await readFile('staging/site-v2-worker/public/v2-product-workspaces.js', 'utf8');
+  const preparation = await readFile('scripts/v2/prepare-site-v2-static-assets.mjs', 'utf8');
+
+  assert.match(source, /wrapProductRenderer/);
+  assert.match(source, /wrapItemFilter/);
+  assert.match(source, /wrapCartLocator/);
+  assert.match(source, /activate\(target\.id, \{ reload: false/);
+  assert.match(preparation, /filterProducts:productKey/);
+  assert.match(preparation, /getCartItemProduct:id=>entry\(id\)\?\.product/);
+  assert.match(preparation, /setLocateItem:next=>\{locateItem=next\}/);
 });
