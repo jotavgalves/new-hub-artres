@@ -1,9 +1,5 @@
 import { createAtomicLedgerCommandV2 } from '../../../src/v2/orders/atomic-command.mjs';
 import { createCanonicalItemV2 } from '../../../src/v2/orders/schema.mjs';
-import {
-  STAGING_CONFIG_VERSION,
-  STAGING_PRODUCT_SNAPSHOT
-} from './staging-catalog-fixture.js';
 
 export async function prepareAcceptedCheckoutCanonicalDraft(input = {}) {
   const body = record(input.body);
@@ -11,6 +7,7 @@ export async function prepareAcceptedCheckoutCanonicalDraft(input = {}) {
   const validated = record(input.validated);
   const priced = record(input.priced);
   const quote = record(priced.quote);
+  const productSnapshot = record(priced.productSnapshot);
   const requestId = safeRequestId(input.requestId);
   const submissionCreatedAt = validIsoDate(input.submissionCreatedAt) || new Date().toISOString();
   const idempotencyKey = input.idempotencyKey === undefined
@@ -30,6 +27,9 @@ export async function prepareAcceptedCheckoutCanonicalDraft(input = {}) {
   if (!Array.isArray(quote.items) || quote.items.length !== validated.items.length) {
     throw draftError('CHECKOUT_DRAFT_PRICED_ITEMS_INVALID');
   }
+  if (!productSnapshot.products || !positiveInteger(productSnapshot.metadata?.configVersion)) {
+    throw draftError('CHECKOUT_DRAFT_COMMERCIAL_CONFIG_INVALID');
+  }
 
   const command = await createAtomicLedgerCommandV2({
     idempotencyKey,
@@ -42,9 +42,9 @@ export async function prepareAcceptedCheckoutCanonicalDraft(input = {}) {
       totals: quote.pricing
     },
     catalogItems: resolved.items,
-    productSnapshot: STAGING_PRODUCT_SNAPSHOT,
+    productSnapshot,
     catalogVersion: positiveInteger(resolved.catalogVersion),
-    configVersion: STAGING_CONFIG_VERSION,
+    configVersion: positiveInteger(productSnapshot.metadata.configVersion),
     serverDiscountPercent: Number(quote.pricing?.discountPercent || 0),
     productRegistryVersion: 1,
     mode: 'active',
