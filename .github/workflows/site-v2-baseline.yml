@@ -70,6 +70,7 @@ jobs:
           node --check src/v2/cart/quantity-rules.mjs
           node --check src/v2/cart/variant-size.mjs
           node --check src/v2/catalog/legacy-readonly-bridge.mjs
+          node --check src/v2/products/commercial-config.mjs
           node --check src/v2/persistence/supabase-rpc-client.mjs
           node --check src/v2/persistence/supabase-order-projection.mjs
           node --check scripts/v2/prepare-site-v2-staging-deploy.mjs
@@ -83,12 +84,15 @@ jobs:
           node --check scripts/catalog-v2/post-catalog-auto-accept-status.mjs
           node --check scripts/catalog-v2/verify-staging-catalog-bridge-disabled.mjs
           node --check scripts/catalog-v2/post-catalog-inspection-status.mjs
+          node --check staging/site-v2-worker/public/v2-commercial-config.js
           node --check staging/site-v2-worker/public/v2-product-workspaces.js
           node --check staging/site-v2-worker/public/v2-checkout-context.js
           node --check staging/site-v2-worker/public/v2-checkout-whatsapp.js
           node --check staging/site-v2-worker/public/v2-checkout-bridge.js
           node --check staging/site-v2-worker/src/index.js
           node --check staging/site-v2-worker/src/index-shadow.js
+          node --check staging/site-v2-worker/src/admin-commercial-page.js
+          node --check staging/site-v2-worker/src/commercial-config-route.js
           node --check staging/site-v2-worker/src/ledger-inspection-routes.js
           node --check staging/site-v2-worker/src/catalog-accepted-route.js
           node --check staging/site-v2-worker/src/catalog-readonly-route.js

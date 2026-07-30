@@ -5,6 +5,12 @@ const ALLOWED_SEARCH_MODES = new Set(['search', 'globalSearch', 'folderSearch'])
 const DEFAULT_TIMEOUT_MS = 5000;
 const DEFAULT_MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 
+export const PANEL_150_DRIVE_ROOT_ID = '18x1qthD2RXAxRi2u-d7U3wpJLfpINU7-';
+
+const PRODUCT_DRIVE_ROOTS = Object.freeze({
+  'painel-150': PANEL_150_DRIVE_ROOT_ID
+});
+
 export function catalogAcceptedStatus(env = {}) {
   const baseUrl = normalizeSupabaseUrl(env.SUPABASE_V2_URL);
   const key = String(env.SUPABASE_V2_SERVICE_ROLE_KEY || '').trim();
@@ -45,12 +51,20 @@ export async function handleCatalogAcceptedPublicRoute(request, env, requestId, 
     }
 
     const mode = String(url.searchParams.get('mode') || 'themes').trim();
+    const productKey = resolveRequestedProductKey(request, url);
+    const driveRootId = PRODUCT_DRIVE_ROOTS[productKey] || '';
+
     if (ALLOWED_BROWSE_MODES.has(mode)) {
-      const payload = await catalogRpc('armazem_v2_catalog_route_v1', {
+      const body = {
         p_mode: mode,
         p_folder_id: String(url.searchParams.get('folderId') || '').trim(),
-        p_product_key: cleanProductKey(url.searchParams.get('product') || '')
-      }, env, options);
+        p_product_key: productKey
+      };
+      const rpcName = driveRootId
+        ? 'armazem_v2_catalog_route_scoped_v1'
+        : 'armazem_v2_catalog_route_v1';
+      if (driveRootId) body.p_root_drive_id = driveRootId;
+      const payload = await catalogRpc(rpcName, body, env, options);
       return json(payload, 200, 15);
     }
 
@@ -65,11 +79,19 @@ export async function handleCatalogAcceptedPublicRoute(request, env, requestId, 
       if (!query || ((mode === 'globalSearch' || mode === 'folderSearch') && query.length < 2)) {
         return json(emptySearchPayload(mode), 200, 15);
       }
-      const payload = await catalogRpc('armazem_v2_catalog_search_v1', {
+      const body = {
         p_mode: mode,
         p_query: query,
         p_limit: mode === 'folderSearch' ? 60 : 80
-      }, env, options);
+      };
+      const rpcName = driveRootId
+        ? 'armazem_v2_catalog_search_scoped_v1'
+        : 'armazem_v2_catalog_search_v1';
+      if (driveRootId) {
+        body.p_product_key = productKey;
+        body.p_root_drive_id = driveRootId;
+      }
+      const payload = await catalogRpc(rpcName, body, env, options);
       return json(payload, 200, 15);
     }
 
@@ -164,6 +186,24 @@ export function normalizeSearchText(value) {
     .slice(0, 120);
 }
 
+export function resolveRequestedProductKey(request, url = new URL(request.url)) {
+  const direct = String(url.searchParams.get('product') || '').trim();
+  if (direct) return cleanProductKey(direct);
+
+  try {
+    const refererValue = String(request.headers.get('referer') || '').trim();
+    if (refererValue) {
+      const referer = new URL(refererValue);
+      if (referer.origin === url.origin) {
+        const value = referer.searchParams.get('produto') || referer.searchParams.get('product') || '';
+        if (String(value).trim()) return cleanProductKey(value);
+      }
+    }
+  } catch (_) {}
+
+  return '50x50';
+}
+
 function cleanProductKey(value) {
   const text = String(value || '50x50').trim();
   return /^[A-Za-z0-9._-]{1,120}$/.test(text) ? text : '50x50';
@@ -193,7 +233,7 @@ function statusForError(code) {
   if (code === 'CATALOG_ACCEPTED_TIMEOUT') return 504;
   if (code === 'CATALOG_ACCEPTED_RESPONSE_TOO_LARGE') return 502;
   if (code.includes('NOT_READY') || code.includes('NOT_ACCEPTED')) return 503;
-  if (code.includes('INVALID') || code.includes('REQUIRED') || code.includes('NOT_FOUND')) return 422;
+  if (code.includes('INVALID') || code.includes('REQUIRED') || code.includes('NOT_FOUND') || code.includes('OUTSIDE_ROOT')) return 422;
   return 502;
 }
 
