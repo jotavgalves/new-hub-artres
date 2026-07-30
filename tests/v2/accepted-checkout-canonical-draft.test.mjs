@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import {
+  commercialConfigToProductSnapshot,
+  DEFAULT_COMMERCIAL_CONFIG
+} from '../../src/v2/products/commercial-config.mjs';
 import { validateAcceptedCheckoutItems } from '../../staging/site-v2-worker/src/accepted-checkout-item-validator.js';
 import { priceAcceptedCheckoutDraft } from '../../staging/site-v2-worker/src/accepted-checkout-pricing.js';
 import { prepareAcceptedCheckoutCanonicalDraft } from '../../staging/site-v2-worker/src/accepted-checkout-canonical-draft.js';
@@ -46,11 +50,15 @@ function body(overrides = {}) {
 async function build(inputBody = body(), options = {}) {
   const resolved = { catalogVersion: 49, items: catalogItems };
   const validated = validateAcceptedCheckoutItems(inputBody.items, catalogItems);
-  const priced = priceAcceptedCheckoutDraft({
+  const priced = await priceAcceptedCheckoutDraft({
     body: inputBody,
     resolved,
     validated,
-    env: {}
+    env: {},
+    loadCommercialConfig: async (_env, { catalogVersion }) => ({
+      config: DEFAULT_COMMERCIAL_CONFIG,
+      productSnapshot: commercialConfigToProductSnapshot(DEFAULT_COMMERCIAL_CONFIG, { catalogVersion })
+    })
   });
   return prepareAcceptedCheckoutCanonicalDraft({
     body: inputBody,
@@ -87,6 +95,7 @@ test('preserva cliente vendedora medidas observações e personalização no com
   assert.equal(order.items[0].unitPrice, 9.75);
   assert.equal(order.pricing.total, 58.5);
   assert.equal(order.integrity.catalogVersion, 49);
+  assert.equal(order.integrity.configVersion, 1);
   assert.equal(order.source, 'catalog-v2-staging-accepted-preview');
   assert.equal(result.summary.sellerPresent, true);
   assert.equal(result.summary.customerNamePresent, true);
