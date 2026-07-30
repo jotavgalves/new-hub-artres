@@ -83,6 +83,7 @@ jobs:
           node --check scripts/catalog-v2/post-catalog-auto-accept-status.mjs
           node --check scripts/catalog-v2/verify-staging-catalog-bridge-disabled.mjs
           node --check scripts/catalog-v2/post-catalog-inspection-status.mjs
+          node --check staging/site-v2-worker/public/v2-checkout-context.js
           node --check staging/site-v2-worker/public/v2-checkout-bridge.js
           node --check staging/site-v2-worker/src/index.js
           node --check staging/site-v2-worker/src/index-shadow.js
