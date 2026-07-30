@@ -36,7 +36,7 @@
       ? SELLERS
       : {};
     const sellerProfile = sellers[sellerId] || null;
-    const whatsappUrl = typeof waUrl === 'function' ? String(waUrl() || '') : String(anchor.href || '');
+    const formatter = whatsappFormatter();
 
     if (anchor.classList.contains('disabled') || !lines.length) {
       return { ok: false, message: 'Revise o carrinho antes de enviar.' };
@@ -44,20 +44,25 @@
     if (!sellerId || !sellerProfile) {
       return { ok: false, message: 'Escolha uma vendedora antes de enviar.' };
     }
-    if (!/^https:\/\/wa\.me\//.test(whatsappUrl)) {
+    if (!formatter) {
       return { ok: false, message: 'Não foi possível preparar o WhatsApp.' };
     }
 
     try {
+      const items = lines.map(mapCartItem);
+      const whatsappItems = formatter.createVisualWhatsAppSnapshot(lines, items);
+      const sellerPhone = digits(sellerProfile.phone).slice(0, 15);
+      if (sellerPhone.length < 10) throw new Error('WHATSAPP_PHONE_INVALID');
       return {
         ok: true,
         anchor,
-        whatsappUrl,
+        sellerPhone,
         seller: {
           id: sellerId,
           label: String(sellerProfile.label || sellerId).trim()
         },
-        items: lines.map(mapCartItem)
+        items,
+        whatsappItems
       };
     } catch (error) {
       return { ok: false, message: messageForError(error?.message) };
@@ -193,6 +198,18 @@
         throw new Error(publicError(payload.error, response.status));
       }
 
+      const formatter = whatsappFormatter();
+      if (!formatter) throw new Error('WHATSAPP_FORMATTER_UNAVAILABLE');
+      const whatsappMessage = formatter.createVisualWhatsAppMessage({
+        orderNumber: payload.orderNumber,
+        seller: snapshot.seller,
+        items: snapshot.whatsappItems
+      });
+      const whatsappUrl = formatter.createVisualWhatsAppUrl({
+        phone: snapshot.sellerPhone,
+        message: whatsappMessage
+      });
+
       sessionStorage.setItem(RESULT_KEY, JSON.stringify({
         orderNumber: payload.orderNumber,
         action: payload.action,
@@ -200,8 +217,8 @@
       }));
       notify(`Pedido ${payload.orderNumber} registrado. Abrindo o WhatsApp.`);
       closeDialog();
-      if (popup) popup.location.replace(snapshot.whatsappUrl);
-      else window.location.assign(snapshot.whatsappUrl);
+      if (popup) popup.location.replace(whatsappUrl);
+      else window.location.assign(whatsappUrl);
     } catch (error) {
       if (popup) popup.close();
       errorBox.textContent = messageForError(error?.message);
@@ -234,6 +251,16 @@
     return `{${keys.map(key => `${JSON.stringify(key)}:${stableSerialize(value[key])}`).join(',')}}`;
   }
 
+  function whatsappFormatter() {
+    const formatter = globalThis.SiteV2CheckoutWhatsApp;
+    return formatter &&
+      typeof formatter.createVisualWhatsAppSnapshot === 'function' &&
+      typeof formatter.createVisualWhatsAppMessage === 'function' &&
+      typeof formatter.createVisualWhatsAppUrl === 'function'
+      ? formatter
+      : null;
+  }
+
   function clonePlain(value) {
     return JSON.parse(JSON.stringify(value && typeof value === 'object' ? value : {}));
   }
@@ -253,7 +280,17 @@
       PUBLIC_CHECKOUT_DISABLED: 'O checkout está temporariamente indisponível.',
       PUBLIC_CHECKOUT_RATE_LIMITED: 'Aguarde um minuto antes de tentar novamente.',
       IDEMPOTENCY_KEY_CONFLICT: 'O carrinho mudou durante o envio. Tente novamente.',
-      ORDER_QUANTITY_RULES_INVALID: 'Revise as quantidades mínimas do carrinho.'
+      ORDER_QUANTITY_RULES_INVALID: 'Revise as quantidades mínimas do carrinho.',
+      WHATSAPP_ITEM_SNAPSHOT_INVALID: 'Não foi possível conferir os itens para o WhatsApp.',
+      WHATSAPP_ITEMS_REQUIRED: 'Revise os itens antes de abrir o WhatsApp.',
+      WHATSAPP_ITEM_PRODUCT_REQUIRED: 'Um produto não pôde ser descrito no WhatsApp.',
+      WHATSAPP_ITEM_QUANTITY_INVALID: 'Uma quantidade não pôde ser descrita no WhatsApp.',
+      WHATSAPP_ORDER_NUMBER_REQUIRED: 'O pedido não recebeu uma identificação válida.',
+      WHATSAPP_SELLER_REQUIRED: 'A vendedora não pôde ser identificada.',
+      WHATSAPP_PHONE_INVALID: 'O WhatsApp da vendedora não está configurado corretamente.',
+      WHATSAPP_MESSAGE_REQUIRED: 'Não foi possível gerar a mensagem do pedido.',
+      WHATSAPP_MESSAGE_TOO_LARGE: 'A seleção ficou grande demais para abrir no WhatsApp.',
+      WHATSAPP_FORMATTER_UNAVAILABLE: 'Não foi possível preparar o WhatsApp.'
     };
     return messages[code] || 'Não foi possível registrar o pedido agora. Revise os dados e tente novamente.';
   }
