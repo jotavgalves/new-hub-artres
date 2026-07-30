@@ -45,11 +45,16 @@ test('rota pública expõe somente configuração sanitizada', async () => {
 
   assert.equal(response.status, 200);
   assert.equal(payload.ok, true);
+  assert.equal(payload.requestId, 'public-config');
   assert.equal(payload.config.version, 1);
   assert.deepEqual(Object.keys(payload.config.products), ['50x50', 'painel-150']);
   assert.equal(payload.config.products['50x50'].unitPrice, 9.75);
   assert.equal(response.headers.get('etag'), '"commercial-config-v1"');
-  assert.doesNotMatch(JSON.stringify(payload), /actor|requestId.*initial/);
+  assert.equal(Object.hasOwn(payload.config, 'updatedBy'), false);
+  assert.equal(Object.hasOwn(payload.config, 'actor'), false);
+  assert.equal(Object.hasOwn(payload.config, 'requestId'), false);
+  assert.equal(JSON.stringify(payload.config).includes('system-default'), false);
+  assert.equal(JSON.stringify(payload.config).includes('initial'), false);
 });
 
 test('rota administrativa atualiza com expectedVersion e rejeita versão obsoleta', async () => {
