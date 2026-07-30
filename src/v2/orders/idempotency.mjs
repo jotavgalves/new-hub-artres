@@ -7,6 +7,7 @@ export async function createOrderIntentFingerprint(order) {
   const adapted = adaptOrderForV2(order || {});
   const intent = {
     sellerId: clean(adapted.seller.id),
+    customerName: clean(adapted.customer.name),
     customerWhatsapp: digits(adapted.customer.whatsapp || adapted.customer.phone),
     items: adapted.items
       .map(item => ({
