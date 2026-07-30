@@ -125,7 +125,7 @@ test('smoke público valida bridge origem criação replay e ausência de segred
   assert.ok(workflow.includes('node tests/v2/run-staging-public-checkout-remote-smoke.mjs'));
   assert.ok(publicCheckoutSmoke.includes('v2-checkout-bridge.js'));
   assert.ok(publicCheckoutSmoke.includes("new URL('/api/orders/v2', STAGING_URL)"));
-  assert.ok(publicCheckoutSmoke.includes("created.payload?.action !== 'CREATED'"));
+  assert.ok(publicCheckoutSmoke.includes("created.payload?.action === 'CREATED'"));
   assert.ok(publicCheckoutSmoke.includes("replay.payload?.action !== 'REPLAY'"));
   assert.ok(publicCheckoutSmoke.includes('PUBLIC_CHECKOUT_ORIGIN_NOT_ALLOWED'));
   assert.ok(publicCheckoutSmoke.includes('productionChanged: false'));
