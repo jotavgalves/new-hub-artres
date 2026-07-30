@@ -45,6 +45,8 @@ test('lê JSON integral salvo em ORDER:<orderNumber> no KV', () => {
   assert.equal(result.storageMode, 'kv-json');
   assert.equal(adapted.orderNumber, 'PED2600001A');
   assert.equal(adapted.compatibilityMode, 'adapted-legacy');
+  assert.equal(adapted.pricing.subtotal, 58.5);
+  assert.equal(adapted.pricing.total, 58.5);
   assert.equal(adapted.items[0].identityStatus, 'unresolved-legacy');
   assert.equal(adapted.items[0].driveFileId, '');
 });
@@ -57,12 +59,14 @@ test('lê orders.raw do Supabase e respeita status atualizado da linha', () => {
     updated_at: '2026-07-27T12:00:00.000Z',
     raw: JSON.stringify(legacyOrder)
   });
+  const adapted = adaptOrderForV2(result.order);
 
   assert.equal(result.storageMode, 'supabase-raw');
   assert.equal(result.order.orderNumber, 'PED2600001A');
   assert.equal(result.order.status, 'Em produção');
   assert.equal(result.order.updatedAt, '2026-07-27T12:00:00.000Z');
   assert.equal(result.order.items[0].productName, 'Bolinhas 50x50');
+  assert.equal(adapted.pricing.total, 58.5);
   assert.deepEqual(result.warnings, []);
 });
 
@@ -102,6 +106,7 @@ test('lê linha de orders e order_items quando raw não existe', () => {
   assert.equal(adapted.orderNumber, 'PED2600002A');
   assert.equal(adapted.seller.name, 'Ana');
   assert.equal(adapted.customer.name, 'Cliente Antigo');
+  assert.equal(adapted.pricing.total, 156);
   assert.equal(adapted.items.length, 2);
   assert.equal(adapted.items[0].code, adapted.items[1].code);
   assert.notEqual(adapted.items[0].itemId, adapted.items[1].itemId);
@@ -109,9 +114,31 @@ test('lê linha de orders e order_items quando raw não existe', () => {
   assert.deepEqual(adapted.items[1].details, { size: 'P', observations: 'Alça rosa' });
 });
 
-test('raw inválido usa linhas separadas sem apagar o aviso', () => {
+test('raw sem itens usa order_items sem perder metadados do raw', () => {
   const result = readStoredOrderForCompatibility({
     order_number: 'PED2600003A',
+    status: 'Separado',
+    raw: JSON.stringify({
+      id: 'PED2600003A',
+      customer: { name: 'Cliente Raw' },
+      totals: { total: 9.75 },
+      items: []
+    }),
+    order_items: [{ code: '4100', product: 'painel', product_name: 'Painel', quantity: 1 }]
+  });
+  const adapted = adaptOrderForV2(result.order);
+
+  assert.equal(result.storageMode, 'supabase-raw');
+  assert.ok(result.warnings.includes('LEGACY_ITEMS_READ_FROM_ROWS'));
+  assert.equal(adapted.customer.name, 'Cliente Raw');
+  assert.equal(adapted.pricing.total, 9.75);
+  assert.equal(adapted.items.length, 1);
+  assert.equal(adapted.items[0].code, '4100');
+});
+
+test('raw inválido usa linhas separadas sem apagar o aviso', () => {
+  const result = readStoredOrderForCompatibility({
+    order_number: 'PED2600004A',
     raw: '{json-invalido',
     order_items: [{ code: '4100', product: 'painel', product_name: 'Painel', quantity: 1 }]
   });
