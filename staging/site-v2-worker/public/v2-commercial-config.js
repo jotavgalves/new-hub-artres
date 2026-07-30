@@ -11,6 +11,7 @@
   let activeConfig = null;
   let hooks = null;
   let started = false;
+  let hooksWrapped = false;
   let refreshTimer = null;
 
   async function start(input = {}) {
@@ -51,12 +52,15 @@
 
   function applyCommercialConfig(config) {
     activeConfig = config;
-    wrapProductConfig();
-    wrapPrice();
-    wrapDiscount();
-    wrapQuantityRule();
-    wrapCartRule();
-    wrapRenderCart();
+    if (!hooksWrapped) {
+      wrapProductConfig();
+      wrapPrice();
+      wrapDiscount();
+      wrapQuantityRule();
+      wrapCartRule();
+      wrapRenderCart();
+      hooksWrapped = true;
+    }
     patchCommercialCopy(root?.document);
     hooks.renderCart();
     return activeConfig;
@@ -241,7 +245,7 @@
   }
 
   function getState() {
-    return Object.freeze({ started, marker: MARKER, config: activeConfig });
+    return Object.freeze({ started, hooksWrapped, marker: MARKER, config: activeConfig });
   }
 
   function money(value) {
