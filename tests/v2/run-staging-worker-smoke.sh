@@ -98,6 +98,14 @@ node -e '
   if(result.config?.products?.["50x50"]?.unitPrice!==10.25)throw new Error("UPDATED_PRICE_INVALID");
 ' "$CONFIG_UPDATE_FILE"
 
+curl --fail --silent --show-error "$BASE_URL/api/commercial-config" > "$CONFIG_FILE"
+node -e '
+  const fs=require("fs");const result=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+  if(!result.ok||result.config?.version!==2)throw new Error("PUBLIC_CONFIG_VERSION_NOT_UPDATED");
+  if(result.config?.products?.["50x50"]?.unitPrice!==10.25)throw new Error("PUBLIC_CONFIG_PRICE_NOT_UPDATED");
+  if(result.config?.products?.["painel-150"]?.unitPrice!==65)throw new Error("PUBLIC_CONFIG_PAINEL_PRICE_NOT_UPDATED");
+' "$CONFIG_FILE"
+
 CONFIG_STALE_STATUS=$(curl --silent --show-error --output "$CONFIG_STALE_FILE" --write-out '%{http_code}' \
   --request PUT --header 'Content-Type: application/json' --header "X-Staging-Token: $TOKEN" \
   --data-binary '{"expectedVersion":1,"config":{"products":{"50x50":{"unitPrice":11,"minimum":6,"step":2,"initialQuantity":6},"painel-150":{"unitPrice":65,"minimum":1,"step":1,"initialQuantity":1}}}}' \
@@ -108,6 +116,8 @@ node -e '
   if(result.error!=="COMMERCIAL_CONFIG_VERSION_CONFLICT"||result.currentVersion!==2)throw new Error("STALE_CONFIG_GUARD_INVALID");
 ' "$CONFIG_STALE_FILE"
 
+# Esta rota usa deliberadamente o catálogo sintético fixo. O checkout real com configuração
+# administrativa é exercitado pelos testes de pricing e pelo smoke remoto de /api/orders/v2.
 FIRST_STATUS=$(curl --silent --show-error --output "$FIRST_FILE" --write-out '%{http_code}' --request POST \
   --header 'Content-Type: application/json' --header "X-Staging-Token: $TOKEN" --header "Idempotency-Key: $IDEMPOTENCY_KEY" \
   --data-binary "@$BODY_FILE" "$BASE_URL/internal/v2/orders/submit")
@@ -117,8 +127,8 @@ ORDER_NUMBER=$(node -e '
   const fs=require("fs");const result=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
   if(!result.ok||result.action!=="CREATED"||result.replayed!==false)throw new Error("FIRST_SUBMISSION_INVALID");
   if(result.orderNumber!=="PED2600001A")throw new Error(`ORDER_NUMBER_INVALID:${result.orderNumber}`);
-  if(result.pricing?.total!==61.5)throw new Error(`SERVER_TOTAL_INVALID:${result.pricing?.total}`);
-  if(result.configVersion!==2)throw new Error(`CONFIG_VERSION_INVALID:${result.configVersion}`);
+  if(result.pricing?.total!==58.5)throw new Error(`SYNTHETIC_SERVER_TOTAL_INVALID:${result.pricing?.total}`);
+  if(result.configVersion!==9001)throw new Error(`SYNTHETIC_CONFIG_VERSION_INVALID:${result.configVersion}`);
   if(!result.warnings?.includes("CLIENT_ITEM_PRICE_IGNORED"))throw new Error("CLIENT_PRICE_WARNING_MISSING");
   process.stdout.write(result.orderNumber);
 ' "$FIRST_FILE")
@@ -130,7 +140,7 @@ if [ "$REPLAY_STATUS" != "200" ]; then cat "$REPLAY_FILE"; exit 1; fi
 node -e '
   const fs=require("fs");const first=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const replay=JSON.parse(fs.readFileSync(process.argv[2],"utf8"));
   if(!replay.ok||replay.action!=="REPLAY"||replay.orderNumber!==first.orderNumber)throw new Error("REPLAY_INVALID");
-  if(replay.configVersion!==2||replay.pricing?.total!==61.5)throw new Error("REPLAY_COMMERCIAL_VERSION_INVALID");
+  if(replay.configVersion!==9001||replay.pricing?.total!==58.5)throw new Error("REPLAY_SYNTHETIC_VERSION_INVALID");
 ' "$FIRST_FILE" "$REPLAY_FILE"
 
 LOW_LEVEL_STATUS=$(curl --silent --show-error --output "$LOW_LEVEL_FILE" --write-out '%{http_code}' --request POST --header "X-Staging-Token: $TOKEN" "$BASE_URL/internal/v2/ledger/submit")
@@ -144,8 +154,8 @@ node -e '
   const fs=require("fs");const orderResult=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const outboxResult=JSON.parse(fs.readFileSync(process.argv[2],"utf8"));
   if(!orderResult.ok||orderResult.order?.orderNumber!=="PED2600001A")throw new Error("ORDER_QUERY_INVALID");
   if(orderResult.order?.items?.[0]?.driveFileId!=="staging-artwork-2657")throw new Error("DRIVE_FILE_ID_LOST");
-  if(orderResult.order?.integrity?.configVersion!==2)throw new Error("ORDER_CONFIG_VERSION_LOST");
-  if(orderResult.order?.pricing?.total!==61.5)throw new Error("ORDER_COMMERCIAL_TOTAL_LOST");
+  if(orderResult.order?.integrity?.configVersion!==9001)throw new Error("SYNTHETIC_ORDER_CONFIG_VERSION_LOST");
+  if(orderResult.order?.pricing?.total!==58.5)throw new Error("SYNTHETIC_ORDER_TOTAL_LOST");
   if(orderResult.order?.customer?.redacted!==true)throw new Error("ORDER_CUSTOMER_NOT_REDACTED");
   if(!outboxResult.ok||outboxResult.events?.length!==1)throw new Error("OUTBOX_COUNT_INVALID");
 ' "$ORDER_FILE" "$OUTBOX_FILE"
