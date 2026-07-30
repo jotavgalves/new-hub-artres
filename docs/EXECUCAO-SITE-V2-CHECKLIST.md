@@ -146,7 +146,7 @@ Critério de conclusão satisfeito: checkout do staging cria e reproduz pedido V
 - [x] Aplicar mínimo e incremento de cada produto.
 - [x] Migrar ou restaurar carrinho antigo sem perda.
 - [x] Conectar checkout visual à rota V2.
-- [-] Preservar vendedora, medidas e observações.
+- [x] Preservar vendedora, medidas e observações.
 - [ ] Gerar WhatsApp com itens, variantes, quantidades e medidas corretos.
 - [ ] Tratar falha de envio e permitir repetição segura.
 
@@ -160,9 +160,10 @@ Evidência:
 - PR #52, `Site V2 Baseline` runs `30481083905`, `30481227950` e `30481385598`, incorporado no commit `40fc5c98deea42e9ab87a1d8838df2faeac6e959`: rota pública ativa somente no staging, bridge visual injetado apenas na cópia publicada, origem e rate limit ativos, valores recalculados pelo servidor, abertura do WhatsApp condicionada a `CREATED` ou `REPLAY`, rollback triplo e produção pública inalterada.
 - PRs #53 a #59, com `Site V2 Baseline` runs `30487764182`, `30488136686`, `30488522434`, `30488901740`, `30489239424`, `30489723046` e `30490127449`: correções restritas aos códigos terminais dos smokes remotos, sem alteração do runtime ou ampliação do escopo.
 - Deploy final do commit `2f879d15640d91a037a7be01da4d3445bff1c50c`: catálogo, Worker, design, contrato do checkout real, pedido sintético, `REPLAY`, bloqueios e projeção sombra no Supabase aprovados; rollback não acionado; produção pública inalterada.
-- PR #61 e `Site V2 Baseline` run `30537067316`: normalizador staging-only preserva identidade e rótulo da vendedora, cria `details.measurements` a partir dos campos legados do carrinho sem removê-los e normaliza aliases para `details.observations`; testes isolados, sintaxe, assets, bundle, Worker local e painel aprovados. Merge e deploy remoto ainda pendentes.
+- PR #61, `Site V2 Baseline` runs `30537067316` e `30537272846`, incorporado no commit `caafbaec047ac8ee8203e9d254989864614bb525`: normalizador staging-only preserva identidade e rótulo da vendedora, cria `details.measurements` a partir dos campos legados do carrinho sem removê-los, normaliza aliases para `details.observations` e valida remotamente os assets de contexto e bridge.
+- PR #62 e `Site V2 Baseline` run `30538029717`, incorporado no commit `3181b5fc54cd466c865680544389f24a064464f8`: o smoke de projeção manteve o teto defensivo de 64 KB e passou a consultar somente os 20 pedidos redigidos mais recentes. O deploy `30538136169` aprovou catálogo, Worker, design, checkout real, pedido sintético, `REPLAY`, bloqueios e projeção no Supabase; rollback não acionado e produção pública inalterada.
 
-Estado da etapa 6: preservação de vendedora, medidas e observações em andamento no PR #61. Os dois itens seguintes permanecem pendentes.
+Estado da etapa 6: preservação de vendedora, medidas e observações concluída. Os dois itens seguintes permanecem pendentes e nenhuma nova atividade foi iniciada automaticamente.
 
 Critério de conclusão: fluxo visual integral, da arte ao pedido e WhatsApp, aprovado no staging.
 
