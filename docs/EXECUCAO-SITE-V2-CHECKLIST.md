@@ -147,7 +147,7 @@ Critério de conclusão satisfeito: checkout do staging cria e reproduz pedido V
 - [x] Migrar ou restaurar carrinho antigo sem perda.
 - [x] Conectar checkout visual à rota V2.
 - [x] Preservar vendedora, medidas e observações.
-- [ ] Gerar WhatsApp com itens, variantes, quantidades e medidas corretos.
+- [x] Gerar WhatsApp com itens, variantes, quantidades e medidas corretos.
 - [ ] Tratar falha de envio e permitir repetição segura.
 
 Evidência:
@@ -162,8 +162,9 @@ Evidência:
 - Deploy final do commit `2f879d15640d91a037a7be01da4d3445bff1c50c`: catálogo, Worker, design, contrato do checkout real, pedido sintético, `REPLAY`, bloqueios e projeção sombra no Supabase aprovados; rollback não acionado; produção pública inalterada.
 - PR #61, `Site V2 Baseline` runs `30537067316` e `30537272846`, incorporado no commit `caafbaec047ac8ee8203e9d254989864614bb525`: normalizador staging-only preserva identidade e rótulo da vendedora, cria `details.measurements` a partir dos campos legados do carrinho sem removê-los, normaliza aliases para `details.observations` e valida remotamente os assets de contexto e bridge.
 - PR #62 e `Site V2 Baseline` run `30538029717`, incorporado no commit `3181b5fc54cd466c865680544389f24a064464f8`: o smoke de projeção manteve o teto defensivo de 64 KB e passou a consultar somente os 20 pedidos redigidos mais recentes. O deploy `30538136169` aprovou catálogo, Worker, design, checkout real, pedido sintético, `REPLAY`, bloqueios e projeção no Supabase; rollback não acionado e produção pública inalterada.
+- PR #64, `Site V2 Baseline` runs `30540207055` e `30540436068`, incorporado no commit `3717912201390741786f491c0837da0bcfc274df`: formatador staging-only gera a mensagem apenas após `CREATED` ou `REPLAY`, inclui o número confirmado do pedido e descreve separadamente cada item com produto, variante, tamanho, quantidade, medidas e observações, inclusive para códigos iguais, painéis, romanos e cilindros P/M/G. O deploy `30540529974` aprovou os cinco assets obrigatórios, catálogo, Worker, checkout real, pedido sintético, `REPLAY`, bloqueios e projeção no Supabase; rollback não acionado e produção pública inalterada.
 
-Estado da etapa 6: preservação de vendedora, medidas e observações concluída. Os dois itens seguintes permanecem pendentes e nenhuma nova atividade foi iniciada automaticamente.
+Estado da etapa 6: geração do WhatsApp com itens, variantes, quantidades e medidas corretos concluída. O tratamento de falha de envio e repetição segura permanece pendente e nenhuma nova atividade foi iniciada automaticamente.
 
 Critério de conclusão: fluxo visual integral, da arte ao pedido e WhatsApp, aprovado no staging.
 
