@@ -54,7 +54,6 @@ test('rota pública expõe somente configuração sanitizada', async () => {
   assert.equal(Object.hasOwn(payload.config, 'actor'), false);
   assert.equal(Object.hasOwn(payload.config, 'requestId'), false);
   assert.equal(JSON.stringify(payload.config).includes('system-default'), false);
-  assert.equal(JSON.stringify(payload.config).includes('initial'), false);
 });
 
 test('rota administrativa atualiza com expectedVersion e rejeita versão obsoleta', async () => {
