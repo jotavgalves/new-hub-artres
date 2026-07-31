@@ -115,6 +115,30 @@ jobs:
           }));
           NODE
 
+      - name: Validar seletor de produtos publicado
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://new-hub-artres.pages.dev'
+          for attempt in $(seq 1 30); do
+            curl --fail --silent --show-error --location --max-time 30 \
+              "$BASE/assets/catalog-cache-bust.js?_verify=$(date +%s)" -o catalog-loader.js || true
+            curl --fail --silent --show-error --location --max-time 30 \
+              "$BASE/assets/production-v2-compat.js?v=20260731-2&_verify=$(date +%s)" -o selector-fix.js || true
+            if grep -q "production-v2-compat.js?v=20260731-2" catalog-loader.js 2>/dev/null \
+              && grep -q "__ARMAZEM_PRODUCTION_V2_COMPAT__='2'" selector-fix.js 2>/dev/null \
+              && grep -q ".productionV2Chooser{display:none!important}" selector-fix.js 2>/dev/null \
+              && grep -q "DEFAULT_PRODUCT='bolinhas'" selector-fix.js 2>/dev/null \
+              && grep -q "fallback.click()" selector-fix.js 2>/dev/null; then
+              echo "Seletor corrigido disponível na tentativa $attempt."
+              exit 0
+            fi
+            echo "Aguardando correção do seletor... tentativa $attempt/30"
+            sleep 10
+          done
+          echo 'A correção do seletor ainda não está no domínio oficial.' >&2
+          exit 1
+
       - name: Validar frontend e admin oficiais
         shell: bash
         run: |
