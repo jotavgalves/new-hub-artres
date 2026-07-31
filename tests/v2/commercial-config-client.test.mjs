@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { readFile } from 'node:fs/promises';
+import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 
 const require = createRequire(import.meta.url);
@@ -93,3 +94,90 @@ test('desconto zero remove toda a apresentação promocional legada', async () =
   assert.match(source, /Seu pedido ainda está vazio[\s\S]+adicione as artes que mais gostar/);
   assert.doesNotMatch(source, /line\.hidden = percent <= 0/);
 });
+
+test('configuração zero oculta visualmente desconto e usa total neutro', async () => {
+  const source = await readFile('staging/site-v2-worker/public/v2-commercial-config.js', 'utf8');
+  const subtitle = element('10% de desconto');
+  const promoPill = element('10% OFF por aqui');
+  const promoTitle = element('Escolha suas artes com desconto');
+  const promoText = element('O desconto de 10% é aplicado automaticamente.');
+  const caption = element('Toque na arte; o desconto de 10% entra automaticamente.');
+  const discountSpan = element('10% OFF por aqui');
+  const discountSmall = element('O desconto entra automaticamente.');
+  const discountCard = element('', { span: discountSpan, small: discountSmall });
+  const discountLabel = element('Desconto por aqui 10%');
+  const discountLine = element('', { span: discountLabel });
+  const totalLabel = element('Total com desconto');
+  const total = element('', { span: totalLabel });
+  const whatsapp = element('Enviar pedido com 10% OFF');
+  const emptyCart = element('');
+  emptyCart.innerHTML = '<b>Seu pedido ainda está vazio</b>O desconto de 10% será aplicado.';
+  const ruleCard = element('Perfeito. Sua seleção está pronta para enviar com 10% de desconto por aqui.');
+
+  const singles = new Map([
+    ['.subtitle strong', subtitle],
+    ['.promoPill', promoPill],
+    ['.promo h3', promoTitle],
+    ['.promo p:last-child', promoText],
+    ['#viewCaption', caption]
+  ]);
+  const multiples = new Map([
+    ['.discountCard', [discountCard]],
+    ['.totalLine', [discountLine]],
+    ['.total', [total]],
+    ['.wa', [whatsapp]],
+    ['.emptyCart', [emptyCart]],
+    ['.ruleCard', [ruleCard]]
+  ]);
+  const document = {
+    body: {},
+    documentElement: { setAttribute() {} },
+    querySelector(selector) { return singles.get(selector) || null; },
+    querySelectorAll(selector) { return multiples.get(selector) || []; }
+  };
+  const context = { module: { exports: {} }, exports: {}, document, Response };
+  context.globalThis = context;
+  runInNewContext(source, context, { filename: 'v2-commercial-config.js' });
+  const api = context.module.exports;
+
+  let cartRule = () => ({ ok: true, msg: 'Perfeito. Sua seleção está pronta para enviar com 10% de desconto por aqui.' });
+  await api.start({
+    fetch: async () => Response.json({
+      ok: true,
+      config: { ...validConfig, version: 5, effectiveDiscountPercent: 0 }
+    }),
+    getProductConfig: () => () => ({}),
+    setProductConfig() {},
+    getPrice: () => () => 0,
+    setPrice() {},
+    setDiscount() {},
+    getGross: () => 129.55,
+    getRule50: () => () => null,
+    setRule50() {},
+    getCartRule: () => cartRule,
+    setCartRule(next) { cartRule = next; },
+    getRenderCart: () => () => {},
+    setRenderCart() {},
+    renderCart() {},
+    getCartItems: () => []
+  });
+
+  assert.equal(discountCard.style.display, 'none');
+  assert.equal(discountLine.style.display, 'none');
+  assert.equal(totalLabel.textContent, 'Total');
+  assert.equal(whatsapp.textContent, 'Enviar pedido');
+  assert.equal(subtitle.textContent, 'valores atualizados');
+  assert.doesNotMatch(emptyCart.innerHTML, /desconto|10%/i);
+  assert.doesNotMatch(cartRule().msg, /desconto|10%/i);
+});
+
+function element(text = '', children = {}) {
+  return {
+    textContent: text,
+    innerHTML: text,
+    style: {},
+    attributes: {},
+    setAttribute(name, value) { this.attributes[name] = value; },
+    querySelector(selector) { return children[selector] || null; }
+  };
+}
