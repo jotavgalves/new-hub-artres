@@ -1,0 +1,56 @@
+name: Verificar Painel 150 agora
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-panel-themes-now.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Aguardar publicação e validar catálogo real
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            if node <<'NODE'
+          const BASE = 'https://new-hub-artres.pages.dev';
+          async function get(params) {
+            params.set('_verify', String(Date.now()));
+            const r = await fetch(`${BASE}/api/catalog-v2?${params}`, { headers: { accept: 'application/json' } });
+            const text = await r.text();
+            let data;
+            try { data = JSON.parse(text); } catch { throw new Error(`JSON_INVALID_${r.status}`); }
+            if (!r.ok || data.ok === false) throw new Error(`HTTP_${r.status}_${data.error || 'UNKNOWN'}`);
+            return data;
+          }
+          const themes = await get(new URLSearchParams({ mode: 'themes', product: 'painel-150' }));
+          const names = (themes.folders || []).map(folder => String(folder.name || ''));
+          if (names.some(name => /^CODEX\s+TEST(?:E)?\b/i.test(name))) throw new Error(`CODEX_PUBLIC_${JSON.stringify(names)}`);
+          const ana = (themes.folders || []).find(folder => /ANA\s+CASTELA/i.test(String(folder.name || '')));
+          if (!ana) throw new Error(`ANA_CASTELA_MISSING_${JSON.stringify(names)}`);
+          const products = await get(new URLSearchParams({ mode: 'products', product: 'painel-150', folderId: ana.id, theme: ana.name }));
+          let item = null;
+          for (const folder of products.folders || []) {
+            const items = await get(new URLSearchParams({ mode: 'items', product: 'painel-150', folderId: folder.id, theme: ana.name }));
+            if (items.items?.length) { item = items.items[0]; break; }
+          }
+          if (!item?.image) throw new Error('ANA_CASTELA_WITHOUT_ITEMS');
+          const image = await fetch(item.image, { redirect: 'follow' });
+          const type = image.headers.get('content-type') || '';
+          if (!image.ok || !type.startsWith('image/')) throw new Error(`IMAGE_INVALID_${image.status}_${type}`);
+          console.log(JSON.stringify({ names, ana, item: { id: item.id, code: item.code }, imageStatus: image.status, contentType: type }));
+          NODE
+            then
+              echo "Validação concluída na tentativa $attempt."
+              exit 0
+            fi
+            sleep 10
+          done
+          exit 1
