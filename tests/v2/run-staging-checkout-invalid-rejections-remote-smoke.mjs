@@ -3,6 +3,8 @@ import { waitForStagingCheckoutProtection } from './wait-for-staging-checkout-pr
 const STAGING_URL = normalizeOrigin(process.env.STAGING_URL);
 const STAGING_API_TOKEN = String(process.env.SITE_V2_STAGING_API_TOKEN || '').trim();
 const MAX_FOLDERS = 40;
+const MAX_TRANSIENT_ATTEMPTS = 3;
+const TRANSIENT_HTTP_STATUSES = new Set([429, 500, 502, 503, 504]);
 
 async function main() {
   if (STAGING_API_TOKEN.length < 32) {
@@ -92,20 +94,29 @@ async function main() {
   ];
 
   const responses = [];
+  const transientRetries = [];
   for (const testCase of cases) {
-    const preview = await postValidation({ items: [testCase.item] });
-    assertRejected(preview, testCase, 'PREVIEW');
-    responses.push(preview.payload);
+    const previewResult = await requestExpectedRejection(
+      () => postValidation({ items: [testCase.item] }),
+      testCase,
+      'PREVIEW'
+    );
+    responses.push(previewResult.result.payload);
+    transientRetries.push(previewResult.transientRetries);
 
     const idempotencyKey = `checkout-rejection-${crypto.randomUUID()}`;
-    const submission = await postSubmit({
-      ...requestBody,
-      items: [testCase.item]
-    }, idempotencyKey);
-    assertRejected(submission, testCase, 'SUBMIT');
-    responses.push(submission.payload);
+    const submissionResult = await requestExpectedRejection(
+      () => postSubmit({
+        ...requestBody,
+        items: [testCase.item]
+      }, idempotencyKey),
+      testCase,
+      'SUBMIT'
+    );
+    responses.push(submissionResult.result.payload);
+    transientRetries.push(submissionResult.transientRetries);
 
-    assertPrivateValuesAbsent(submission.payload, [
+    assertPrivateValuesAbsent(submissionResult.result.payload, [
       driveFileId,
       missingArtworkId,
       privateCustomerName,
@@ -136,6 +147,7 @@ async function main() {
     invalidVariantRejectedInSubmit: true,
     invalidQuantityRejectedInPreview: true,
     invalidQuantityRejectedInSubmit: true,
+    transientRetries: transientRetries.reduce((sum, value) => sum + value, 0),
     invalidRequestsReachedLedger: false,
     publicCheckoutEnabled: true,
     publicCheckoutProtected: true,
@@ -144,21 +156,51 @@ async function main() {
   })}\n`);
 }
 
+async function requestExpectedRejection(operation, testCase, surface) {
+  let result;
+  let transientRetries = 0;
+
+  for (let attempt = 1; attempt <= MAX_TRANSIENT_ATTEMPTS; attempt += 1) {
+    result = await operation();
+    if (!isTransientResult(result) || attempt === MAX_TRANSIENT_ATTEMPTS) break;
+    transientRetries += 1;
+    await delay(attempt * 750);
+  }
+
+  assertRejected(result, testCase, surface);
+  return { result, transientRetries };
+}
+
+function isTransientResult(result) {
+  if (TRANSIENT_HTTP_STATUSES.has(Number(result?.status))) return true;
+  const code = String(result?.payload?.error || '').trim();
+  return /(?:TIMEOUT|RPC_FAILED|RPC_5\d\d|NOT_CONFIGURED|WRITES_DISABLED|SERVICE_UNAVAILABLE|TEMPORARILY_UNAVAILABLE)/.test(code);
+}
+
 function assertRejected(result, testCase, surface) {
-  if (
-    result.status !== 422 ||
-    result.payload?.ok !== false ||
-    result.payload?.error !== testCase.expectedCode
-  ) {
-    throw smokeError(`CHECKOUT_${surface}_${testCase.name}_NOT_REJECTED`);
+  const status = Number(result?.status || 0);
+  const actualCode = publicCode(result?.payload?.error, 'UNKNOWN_ERROR');
+  const prefix = `CHECKOUT_${surface}_${testCase.name}`;
+
+  if (status >= 200 && status < 300) {
+    throw smokeError(`${prefix}_NOT_REJECTED`);
+  }
+  if (status !== 422) {
+    throw smokeError(`${prefix}_HTTP_${status || 0}`);
+  }
+  if (result.payload?.ok !== false) {
+    throw smokeError(`${prefix}_PAYLOAD_INVALID`);
+  }
+  if (actualCode !== testCase.expectedCode) {
+    throw smokeError(`${prefix}_${actualCode}`.slice(0, 100));
   }
 
   if (testCase.expectsItemIndex) {
     if (Number(result.payload?.itemIndex) !== 0) {
-      throw smokeError(`CHECKOUT_${surface}_${testCase.name}_INDEX_INVALID`);
+      throw smokeError(`${prefix}_INDEX_INVALID`);
     }
   } else if (result.payload?.itemIndex !== undefined) {
-    throw smokeError(`CHECKOUT_${surface}_${testCase.name}_INDEX_EXPOSED`);
+    throw smokeError(`${prefix}_INDEX_EXPOSED`);
   }
 }
 
@@ -281,7 +323,7 @@ async function requestJson(pathOrUrl, options = {}) {
     return { status: response.status, payload };
   } catch (error) {
     if (error?.name === 'AbortError') {
-      throw smokeError('CHECKOUT_REJECTIONS_REQUEST_TIMEOUT');
+      return { status: 504, payload: { ok: false, error: 'CHECKOUT_REJECTIONS_REQUEST_TIMEOUT' } };
     }
     throw error;
   } finally {
@@ -301,6 +343,10 @@ function uniqueFolders(payload) {
 
 function identity(value) {
   return String(value?.driveFileId || value?.id || value?.driveId || value?.drive_id || '').trim();
+}
+
+function delay(milliseconds) {
+  return new Promise(resolve => setTimeout(resolve, milliseconds));
 }
 
 function normalizeOrigin(value) {
