@@ -35,6 +35,15 @@ test('valida contrato público dos dois produtos', () => {
   );
 });
 
+test('aceita desconto zero como configuração comercial válida', () => {
+  const config = commercial.validatePublicConfig({
+    ...validConfig,
+    version: 4,
+    effectiveDiscountPercent: 0
+  });
+  assert.equal(config.effectiveDiscountPercent, 0);
+});
+
 test('busca endpoint público sem cache e rejeita resposta inválida', async () => {
   const calls = [];
   const config = await commercial.fetchCommercialConfig(async (url, init) => {
@@ -69,4 +78,18 @@ test('asset altera funções comerciais sem guardar preços no navegador', async
   assert.match(source, /hooksWrapped = true/);
   assert.doesNotMatch(source, /localStorage|sessionStorage|indexedDB/);
   assert.doesNotMatch(source, /unitPrice\s*:\s*9\.75|unitPrice\s*:\s*59\.90/);
+});
+
+test('desconto zero remove toda a apresentação promocional legada', async () => {
+  const source = await readFile('staging/site-v2-worker/public/v2-commercial-config.js', 'utf8');
+
+  assert.match(source, /hooks\.renderCart\(\);\s*patchCommercialCopy\(root\?\.document\)/);
+  assert.match(source, /line\.style\.display = hasDiscount \? '' : 'none'/);
+  assert.match(source, /setText\(label, hasDiscount \? 'Total com desconto' : 'Total'\)/);
+  assert.match(source, /setText\(link, hasDiscount \? `Enviar pedido com \$\{percentText\} OFF` : 'Enviar pedido'\)/);
+  assert.match(source, /card\.style\.display = hasDiscount \? '' : 'none'/);
+  assert.match(source, /observeCommercialCopy/);
+  assert.match(source, /MutationObserver/);
+  assert.match(source, /Seu pedido ainda está vazio[\s\S]+adicione as artes que mais gostar/);
+  assert.doesNotMatch(source, /line\.hidden = percent <= 0/);
 });
