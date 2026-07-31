@@ -1,12 +1,16 @@
-name: Diagnosticar imagens do catálogo
+name: Verificar imagens do catálogo
 
 on:
   pull_request:
     branches: [main]
     paths:
       - '.github/workflows/diagnose-catalog-images.yml'
-      - 'assets/production-v2.js'
-      - 'assets/production-v2-compat.js'
+      - 'functions/api/catalog-v2.js'
+      - 'functions/api/_catalog_index.js'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnose-catalog-images.yml'
       - 'functions/api/catalog-v2.js'
       - 'functions/api/_catalog_index.js'
 
@@ -14,48 +18,91 @@ permissions:
   contents: read
 
 jobs:
-  diagnose:
+  contract:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 8
     steps:
-      - name: Percorrer catálogo corrigido até as imagens
+      - uses: actions/checkout@v4
+      - name: Validar preservação dos IDs do Drive
         shell: bash
         run: |
           set -euo pipefail
+          node --check functions/api/catalog-v2.js
           node <<'NODE'
-          const BASE = 'https://186e9642.new-hub-artres.pages.dev';
+          const fs = require('node:fs');
+          const source = fs.readFileSync('functions/api/catalog-v2.js', 'utf8');
+          if (!source.includes("const folderId = catalogFolderId(url.searchParams.get('folderId'), rootId);")) {
+            throw new Error('CATALOG_FOLDER_ID_NOT_PRESERVED');
+          }
+          if (!source.includes("if (text.startsWith('catalog-v2-product:')) return text;")) {
+            throw new Error('VIRTUAL_PRODUCT_ID_NOT_PRESERVED');
+          }
+          if (source.includes("const folderId = cleanLabel(url.searchParams.get('folderId') || rootId);")) {
+            throw new Error('OPAQUE_ID_STILL_NORMALIZED_AS_LABEL');
+          }
+          const catalogFolderId = (value, fallback) => {
+            const text = String(value || '').trim();
+            if (!text) return fallback;
+            if (text.startsWith('catalog-v2-product:')) return text;
+            return /^[A-Za-z0-9_-]{5,200}$/.test(text) ? text : fallback;
+          };
+          const driveId = '18x1qthD2RXAxRi2u-d7U3wpJLfpINU7-';
+          const virtualId = 'catalog-v2-product:1PLFdLh0GMVMfHUd8dCod3tsludtUlhJ2:50x50';
+          if (catalogFolderId(driveId, 'fallback') !== driveId) throw new Error('DRIVE_ID_CHANGED');
+          if (catalogFolderId(virtualId, 'fallback') !== virtualId) throw new Error('VIRTUAL_ID_CHANGED');
+          NODE
+
+  production:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Aguardar publicação e validar imagens reais
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            if node <<'NODE'
+          const BASE = 'https://new-hub-artres.pages.dev';
 
           async function get(path) {
             const r = await fetch(BASE + path, { headers: { accept: 'application/json' } });
             const text = await r.text();
             let data;
-            try { data = JSON.parse(text); } catch { throw new Error(`JSON_INVALID ${path} ${r.status} ${text.slice(0,200)}`); }
-            if (!r.ok || data.ok === false) throw new Error(`HTTP_${r.status} ${path} ${JSON.stringify(data).slice(0,400)}`);
+            try { data = JSON.parse(text); } catch { throw new Error(`JSON_INVALID ${path} ${r.status}`); }
+            if (!r.ok || data.ok === false) throw new Error(`HTTP_${r.status}_${data.error || 'UNKNOWN'}`);
             return data;
           }
 
           async function findItems(product) {
-            const themes = await get(`/api/catalog-v2?mode=themes&product=${encodeURIComponent(product)}&_diag=${Date.now()}`);
-            for (const theme of (themes.folders || []).slice(0, 160)) {
-              const products = await get(`/api/catalog-v2?mode=products&product=${encodeURIComponent(product)}&folderId=${encodeURIComponent(theme.id)}&theme=${encodeURIComponent(theme.name || '')}&_diag=${Date.now()}`);
+            const themes = await get(`/api/catalog-v2?mode=themes&product=${encodeURIComponent(product)}&_verify=${Date.now()}`);
+            for (const theme of (themes.folders || []).slice(0, 180)) {
+              const products = await get(`/api/catalog-v2?mode=products&product=${encodeURIComponent(product)}&folderId=${encodeURIComponent(theme.id)}&theme=${encodeURIComponent(theme.name || '')}&_verify=${Date.now()}`);
               for (const folder of (products.folders || [])) {
-                const items = await get(`/api/catalog-v2?mode=items&product=${encodeURIComponent(product)}&folderId=${encodeURIComponent(folder.id)}&theme=${encodeURIComponent(theme.name || '')}&_diag=${Date.now()}`);
-                if (Array.isArray(items.items) && items.items.length) return { theme, folder, payload: items };
+                const items = await get(`/api/catalog-v2?mode=items&product=${encodeURIComponent(product)}&folderId=${encodeURIComponent(folder.id)}&theme=${encodeURIComponent(theme.name || '')}&_verify=${Date.now()}`);
+                if (Array.isArray(items.items) && items.items.length) return { theme, items };
               }
             }
-            return null;
+            throw new Error(`NO_ITEMS_FOUND_${product}`);
           }
 
-          for (const product of ['50x50','painel-150']) {
+          for (const product of ['50x50', 'painel-150']) {
             const found = await findItems(product);
-            if (!found) throw new Error(`NO_ITEMS_FOUND_${product}`);
-            const item = found.payload.items[0];
-            console.log('FOUND', product, found.theme.name, found.payload.total, item.id, item.image);
-            if (!item.id || !item.image) throw new Error(`ITEM_WITHOUT_IMAGE_${product}_${JSON.stringify(item)}`);
+            const item = found.items.items[0];
+            if (!item?.id || !item?.image) throw new Error(`ITEM_WITHOUT_IMAGE_${product}`);
             const image = await fetch(item.image, { redirect: 'follow' });
             const type = image.headers.get('content-type') || '';
-            console.log('IMAGE_FETCH', product, image.status, type, image.url);
             if (!image.ok) throw new Error(`IMAGE_HTTP_${image.status}_${product}`);
             if (!type.startsWith('image/')) throw new Error(`IMAGE_CONTENT_TYPE_${product}_${type}`);
+            console.log(JSON.stringify({ product, theme: found.theme.name, total: found.items.total, imageStatus: image.status, contentType: type }));
           }
           NODE
+            then
+              echo "Catálogos e imagens validados na tentativa $attempt."
+              exit 0
+            fi
+            echo "Aguardando a versão corrigida no Pages: tentativa $attempt/30"
+            sleep 10
+          done
+          echo 'O catálogo oficial não apresentou imagens válidas dentro do prazo.' >&2
+          exit 1
