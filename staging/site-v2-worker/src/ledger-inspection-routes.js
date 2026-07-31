@@ -23,7 +23,7 @@ export async function handleRecentAdminOrders(request, env, requestId) {
   const etag = adminSalesEtag(snapshot.revision, limit);
   const headers = adminSnapshotHeaders(snapshot, etag);
 
-  if (request.headers.get('if-none-match') === etag) {
+  if (ifNoneMatchMatches(request.headers.get('if-none-match'), etag)) {
     return new Response(null, { status: 304, headers });
   }
 
@@ -93,6 +93,20 @@ export async function handleOutboxInspection(request, env, requestId) {
   return json({ ok: true, requestId, events: events.map(outboxInspectionView) });
 }
 
+export function ifNoneMatchMatches(headerValue, currentEtag) {
+  const header = String(headerValue || '').trim();
+  if (!header || header.length > 4096) return false;
+  if (header === '*') return true;
+
+  const current = normalizeEntityTag(currentEtag);
+  if (!current) return false;
+
+  return header.split(',').some(candidate => {
+    const text = candidate.trim();
+    return text === '*' || normalizeEntityTag(text) === current;
+  });
+}
+
 async function directSnapshot(env, limit) {
   const year = new Date().getUTCFullYear();
   const stub = ledgerStub(env, `${year}-01-01T00:00:00.000Z`);
@@ -153,6 +167,11 @@ function adminSnapshotHeaders(snapshot, etag) {
     'X-Data-Generated-At': String(snapshot.generatedAt || ''),
     'X-Data-Verified-At': String(snapshot.verifiedAt || '')
   };
+}
+
+function normalizeEntityTag(value) {
+  const text = String(value || '').trim().replace(/^W\/\s*/i, '');
+  return /^"[^"\r\n]{1,256}"$/.test(text) ? text : '';
 }
 
 function boundedPositiveInteger(value, fallback, maximum) {
