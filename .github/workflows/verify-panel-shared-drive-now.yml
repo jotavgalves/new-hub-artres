@@ -1,4 +1,4 @@
-name: Verificar Shared Drive do Painel 150
+name: Diagnosticar pasta do Painel 150
 
 on:
   pull_request:
@@ -10,68 +10,61 @@ permissions:
   contents: read
 
 jobs:
-  production:
+  diagnose:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 5
     steps:
-      - name: Aguardar Pages e validar catálogo real
+      - name: Inspecionar páginas públicas do Google Drive
         shell: bash
         run: |
           set -euo pipefail
-          for attempt in $(seq 1 40); do
-            if node <<'NODE'
-          const BASE = 'https://new-hub-artres.pages.dev';
-          async function get(params) {
-            params.set('_verify', `${Date.now()}-${Math.random()}`);
-            const r = await fetch(`${BASE}/api/catalog-v2?${params}`, {
-              headers: { accept: 'application/json', 'cache-control': 'no-cache' }
+          node <<'NODE'
+          import { writeFile } from 'node:fs/promises';
+
+          const root = '18x1qthD2RXAxRi2u-d7U3wpJLfpINU7-';
+          const urls = [
+            `https://drive.google.com/embeddedfolderview?id=${root}#grid`,
+            `https://drive.google.com/drive/folders/${root}?usp=sharing`,
+            `https://drive.google.com/drive/u/0/folders/${root}`
+          ];
+
+          for (let index = 0; index < urls.length; index += 1) {
+            const url = urls[index];
+            const response = await fetch(url, {
+              redirect: 'follow',
+              headers: {
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/149 Safari/537.36',
+                accept: 'text/html,application/xhtml+xml'
+              }
             });
-            const text = await r.text();
-            let data;
-            try { data = JSON.parse(text); } catch { throw new Error(`JSON_INVALID_${r.status}_${text.slice(0,120)}`); }
-            if (!r.ok || data.ok === false) throw new Error(`HTTP_${r.status}_${data.error || 'UNKNOWN'}_${data.detail || ''}`);
-            return data;
-          }
-
-          const themes = await get(new URLSearchParams({ mode: 'themes', product: 'painel-150' }));
-          const folders = Array.isArray(themes.folders) ? themes.folders : [];
-          const names = folders.map(folder => String(folder.name || ''));
-          console.log('PANEL_THEMES', JSON.stringify(names));
-          if (!names.length) throw new Error('PANEL_THEMES_EMPTY');
-          if (names.some(name => /^CODEX\s+TEST(?:E)?\b/i.test(name))) {
-            throw new Error(`CODEX_THEME_STILL_PUBLIC_${JSON.stringify(names)}`);
-          }
-          const ana = folders.find(folder => /ANA.*CASTELA|CASTELA.*ANA/i.test(String(folder.name || '')));
-          if (!ana) throw new Error(`ANA_CASTELA_NOT_FOUND_${JSON.stringify(names)}`);
-
-          const products = await get(new URLSearchParams({
-            mode: 'products', product: 'painel-150', folderId: ana.id, theme: ana.name
-          }));
-          console.log('ANA_PRODUCTS', JSON.stringify(products.folders || []));
-          let item = null;
-          for (const folder of products.folders || []) {
-            const items = await get(new URLSearchParams({
-              mode: 'items', product: 'painel-150', folderId: folder.id, theme: ana.name
-            }));
-            if (Array.isArray(items.items) && items.items.length) {
-              item = items.items[0];
-              break;
+            const text = await response.text();
+            await writeFile(`/tmp/drive-${index}.html`, text);
+            const normalized = text
+              .replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+              .replace(/&quot;/g, '"')
+              .replace(/&amp;/g, '&')
+              .replace(/&#39;/g, "'")
+              .replace(/<[^>]+>/g, ' ')
+              .replace(/\s+/g, ' ');
+            const upper = normalized.toUpperCase();
+            const matches = [];
+            for (const needle of ['ANA CASTELA', 'CASTELA', 'CODEX TESTE', 'ARCA DE NOÉ', 'ARCA DE NOE']) {
+              let position = upper.indexOf(needle);
+              while (position >= 0 && matches.length < 30) {
+                matches.push(normalized.slice(Math.max(0, position - 180), Math.min(normalized.length, position + needle.length + 260)));
+                position = upper.indexOf(needle, position + needle.length);
+              }
             }
+            const ids = [...new Set((text.match(/[A-Za-z0-9_-]{20,80}/g) || []))].slice(0, 40);
+            console.log(JSON.stringify({
+              requestedUrl: url,
+              finalUrl: response.url,
+              status: response.status,
+              contentType: response.headers.get('content-type'),
+              bytes: text.length,
+              hasLogin: /accounts\.google\.com|ServiceLogin|Sign in/i.test(text),
+              matches,
+              sampleIds: ids
+            }, null, 2));
           }
-          if (!item?.image) throw new Error('ANA_CASTELA_WITHOUT_ITEMS');
-          const image = await fetch(item.image, { redirect: 'follow' });
-          const type = image.headers.get('content-type') || '';
-          if (!image.ok || !type.startsWith('image/')) {
-            throw new Error(`ANA_CASTELA_IMAGE_INVALID_${image.status}_${type}`);
-          }
-          console.log('PANEL_OK', JSON.stringify({ ana: ana.name, itemId: item.id, code: item.code, imageStatus: image.status, contentType: type }));
           NODE
-            then
-              echo "Painel 150 validado na tentativa $attempt."
-              exit 0
-            fi
-            echo "Aguardando publicação do hotfix: tentativa $attempt/40"
-            sleep 10
-          done
-          echo 'O catálogo correto não ficou disponível dentro do prazo.' >&2
-          exit 1
