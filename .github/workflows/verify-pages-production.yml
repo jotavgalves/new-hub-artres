@@ -51,9 +51,11 @@ jobs:
             if curl --fail --silent --show-error --location \
               --max-time 20 \
               "$BASE/assets/production-v2.js?v=20260731" \
-              | grep -q "__ARMAZEM_PRODUCTION_V2__"; then
-              echo "Asset produtivo disponível na tentativa $attempt."
-              exit 0
+              -o production-v2.js; then
+              if grep -q "__ARMAZEM_PRODUCTION_V2__" production-v2.js; then
+                echo "Asset produtivo disponível na tentativa $attempt."
+                exit 0
+              fi
             fi
             echo "Aguardando Pages... tentativa $attempt/30"
             sleep 10
