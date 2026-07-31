@@ -1,9 +1,15 @@
-import { json, loadConfig } from './_config.js';
+import { json, loadConfig, saveConfig } from './_config.js';
+
+const ROOTS = Object.freeze({
+  '50x50': '193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae',
+  'painel-150': '18x1qthD2RXAxRi2u-d7U3wpJLfpINU7-'
+});
 
 export async function onRequestGet(context) {
   try {
-    const { config } = await loadConfig(context.env);
-    return json({ ok: true, config: publicCommercialConfig(config) }, 200, {
+    const loaded = await loadConfig(context.env);
+    const migrated = await ensureProductionProducts(context.env, loaded.config, loaded.storageReady);
+    return json({ ok: true, config: publicCommercialConfig(migrated) }, 200, {
       'Cache-Control': 'private, max-age=0, must-revalidate'
     });
   } catch (error) {
@@ -15,6 +21,74 @@ export async function onRequestGet(context) {
   }
 }
 
+async function ensureProductionProducts(env, source, storageReady) {
+  const config = clone(source || {});
+  config.products = record(config.products);
+  const currentPanel = config.products.panel150 || config.products['painel-150'];
+  let changed = false;
+
+  if (!currentPanel || typeof currentPanel !== 'object') {
+    config.products.panel150 = panelDefaults();
+    config.products['painel-150'] = clone(config.products.panel150);
+    changed = true;
+  } else {
+    config.products.panel150 = { ...panelDefaults(), ...currentPanel, productKey: 'painel-150' };
+    config.products['painel-150'] = clone(config.products.panel150);
+  }
+
+  config.productCatalog = Array.isArray(config.productCatalog) ? config.productCatalog : [];
+  if (!config.productCatalog.some(item => item && item.productKey === 'painel-150')) {
+    config.productCatalog.push({
+      id: 'painel-150',
+      label: config.products.panel150.label,
+      productKey: 'painel-150',
+      active: config.products.panel150.enabled !== false,
+      editable: true
+    });
+    changed = true;
+  }
+
+  config.drives = Array.isArray(config.drives) ? config.drives : [];
+  const panelDrive = config.drives.find(item => item && item.productKey === 'painel-150');
+  if (!panelDrive || panelDrive.folderId !== ROOTS['painel-150']) {
+    config.drives = config.drives.filter(item => !item || item.productKey !== 'painel-150');
+    config.drives.push({
+      id: 'painel-150',
+      name: 'Drive Painel 150 cm',
+      folderId: ROOTS['painel-150'],
+      active: true,
+      type: 'painel-150',
+      productKey: 'painel-150',
+      structure: 'theme-or-subtheme-images',
+      filenamePattern: 'ID_TEMA_PRODUTO_DIMENSAO'
+    });
+    changed = true;
+  }
+
+  const bolinhasDrive = config.drives.find(item => item && item.productKey === '50x50');
+  if (!bolinhasDrive || bolinhasDrive.folderId !== ROOTS['50x50']) {
+    config.drives = config.drives.filter(item => !item || item.productKey !== '50x50');
+    config.drives.unshift({
+      id: 'bolinhas',
+      name: 'Drive Bolinhas',
+      folderId: ROOTS['50x50'],
+      active: true,
+      type: 'bolinhas',
+      productKey: '50x50',
+      structure: 'theme-or-subtheme-images',
+      filenamePattern: 'ID_TEMA_PRODUTO_DIMENSAO'
+    });
+    changed = true;
+  }
+
+  if (!changed || !storageReady) return config;
+  config.commercialVersion = positive(config.commercialVersion, config.ui && config.ui.cacheVersion, config.version, 1) + 1;
+  config.commercialUpdatedAt = new Date().toISOString();
+  config.ui = record(config.ui);
+  config.ui.cacheVersion = config.commercialVersion;
+  return saveConfig(env, config);
+}
+
 function publicCommercialConfig(config) {
   const products = config && config.products && typeof config.products === 'object' ? config.products : {};
   const bolinhas = normalizeProduct(products.bolinhas, {
@@ -24,8 +98,7 @@ function publicCommercialConfig(config) {
     minimum: 6,
     step: 2,
     initial: 6,
-    scope: 'cart-product-total',
-    enabled: true
+    scope: 'cart-product-total'
   });
   const panel = normalizeProduct(products.panel150 || products['painel-150'], {
     key: 'painel-150',
@@ -34,8 +107,7 @@ function publicCommercialConfig(config) {
     minimum: 1,
     step: 1,
     initial: 1,
-    scope: 'item',
-    enabled: true
+    scope: 'item'
   });
   const discount = percentage(
     config && config.ui && config.ui.discountPercent,
@@ -58,10 +130,22 @@ function publicCommercialConfig(config) {
       '50x50': bolinhas,
       'painel-150': panel
     },
-    protectedRoots: {
-      '50x50': '193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae',
-      'painel-150': '18x1qthD2RXAxRi2u-d7U3wpJLfpINU7-'
-    }
+    protectedRoots: ROOTS
+  };
+}
+
+function panelDefaults() {
+  return {
+    label: 'Painel 150 cm',
+    productKey: 'painel-150',
+    enabled: true,
+    unitPrice: 59.9,
+    priceLabel: 'R$ 59,90 cada',
+    minQty: 1,
+    step: 1,
+    initialQty: 1,
+    disableCustomization: true,
+    skipProductsStep: true
   };
 }
 
@@ -88,6 +172,12 @@ function normalizeProduct(input, defaults) {
   };
 }
 
+function record(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+function clone(value) {
+  return JSON.parse(JSON.stringify(value && typeof value === 'object' ? value : {}));
+}
 function clean(value) {
   return String(value || '').replace(/\s+/g, ' ').trim().slice(0, 120);
 }
@@ -112,5 +202,5 @@ function percentage(...values) {
 }
 function validDate(value) {
   const parsed = new Date(String(value || ''));
-  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : '1970-01-01T00:00:00.000Z';
+  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : new Date().toISOString();
 }
