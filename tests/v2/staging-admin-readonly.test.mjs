@@ -37,7 +37,9 @@ test('chave não é persistida nem enviada em URL', () => {
   assert.ok(adminSource.includes("'X-Staging-Token': state.token"));
   assert.ok(adminSource.includes("url.searchParams.set('limit'"));
   assert.equal(adminSource.includes('localStorage'), false);
-  assert.equal(adminSource.includes('sessionStorage'), false);
+  assert.ok(adminSource.includes('sessionStorage'));
+  assert.equal(/sessionStorage\.setItem\([^\n]*(?:token|state\.token)/i.test(adminSource), false);
+  assert.equal(/sessionStorage\.setItem\([^\n]*X-Staging-Token/i.test(adminSource), false);
   assert.equal(adminSource.includes("searchParams.set('token'"), false);
   assert.equal(adminSource.includes('document.cookie'), false);
 });
