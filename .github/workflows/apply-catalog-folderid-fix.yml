@@ -1,0 +1,55 @@
+name: Aplicar correção do catálogo
+
+on:
+  push:
+    branches: [fix/catalog-images-live]
+    paths:
+      - '.github/workflows/apply-catalog-folderid-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/catalog-images-live
+          fetch-depth: 0
+      - name: Preservar identificadores opacos das pastas
+        shell: bash
+        run: |
+          set -euo pipefail
+          python <<'PY'
+          from pathlib import Path
+          path = Path('functions/api/catalog-v2.js')
+          text = path.read_text(encoding='utf-8')
+          old = "const folderId = cleanLabel(url.searchParams.get('folderId') || rootId);"
+          new = "const folderId = catalogFolderId(url.searchParams.get('folderId'), rootId);"
+          if old in text:
+              text = text.replace(old, new, 1)
+          marker = "function canonicalProduct(value) {"
+          helper = """function catalogFolderId(value, fallback) {
+  const text = String(value || '').trim();
+  if (!text) return fallback;
+  if (text.startsWith('catalog-v2-product:')) return text;
+  return /^[A-Za-z0-9_-]{5,200}$/.test(text) ? text : fallback;
+}
+
+"""
+          if 'function catalogFolderId(value, fallback)' not in text:
+              if marker not in text:
+                  raise SystemExit('CATALOG_FOLDER_HELPER_MARKER_NOT_FOUND')
+              text = text.replace(marker, helper + marker, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if git diff --quiet; then
+            echo 'Correção já aplicada.'
+            exit 0
+          fi
+          git add functions/api/catalog-v2.js
+          git commit -m 'Preserva IDs de pasta no catálogo V2'
+          git push origin HEAD:fix/catalog-images-live
