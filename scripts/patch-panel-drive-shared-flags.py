@@ -2,6 +2,7 @@ from pathlib import Path
 
 path = Path('functions/api/catalog-v2.js')
 text = path.read_text(encoding='utf-8')
+changed = False
 
 replacements = [
     (
@@ -37,9 +38,15 @@ replacements = [
 ]
 
 for old, new, label in replacements:
+    if new in text:
+        continue
     if old not in text:
         raise SystemExit(f'PATCH_TARGET_NOT_FOUND: {label}')
     text = text.replace(old, new, 1)
+    changed = True
 
-path.write_text(text, encoding='utf-8')
-print('Panel Drive hotfix applied successfully.')
+if changed:
+    path.write_text(text, encoding='utf-8')
+    print('Panel Drive hotfix applied successfully.')
+else:
+    print('Panel Drive hotfix already applied.')
