@@ -1,0 +1,77 @@
+name: Verificar Shared Drive do Painel 150
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-panel-shared-drive-now.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Aguardar Pages e validar catálogo real
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 40); do
+            if node <<'NODE'
+          const BASE = 'https://new-hub-artres.pages.dev';
+          async function get(params) {
+            params.set('_verify', `${Date.now()}-${Math.random()}`);
+            const r = await fetch(`${BASE}/api/catalog-v2?${params}`, {
+              headers: { accept: 'application/json', 'cache-control': 'no-cache' }
+            });
+            const text = await r.text();
+            let data;
+            try { data = JSON.parse(text); } catch { throw new Error(`JSON_INVALID_${r.status}_${text.slice(0,120)}`); }
+            if (!r.ok || data.ok === false) throw new Error(`HTTP_${r.status}_${data.error || 'UNKNOWN'}_${data.detail || ''}`);
+            return data;
+          }
+
+          const themes = await get(new URLSearchParams({ mode: 'themes', product: 'painel-150' }));
+          const folders = Array.isArray(themes.folders) ? themes.folders : [];
+          const names = folders.map(folder => String(folder.name || ''));
+          console.log('PANEL_THEMES', JSON.stringify(names));
+          if (!names.length) throw new Error('PANEL_THEMES_EMPTY');
+          if (names.some(name => /^CODEX\s+TEST(?:E)?\b/i.test(name))) {
+            throw new Error(`CODEX_THEME_STILL_PUBLIC_${JSON.stringify(names)}`);
+          }
+          const ana = folders.find(folder => /ANA.*CASTELA|CASTELA.*ANA/i.test(String(folder.name || '')));
+          if (!ana) throw new Error(`ANA_CASTELA_NOT_FOUND_${JSON.stringify(names)}`);
+
+          const products = await get(new URLSearchParams({
+            mode: 'products', product: 'painel-150', folderId: ana.id, theme: ana.name
+          }));
+          console.log('ANA_PRODUCTS', JSON.stringify(products.folders || []));
+          let item = null;
+          for (const folder of products.folders || []) {
+            const items = await get(new URLSearchParams({
+              mode: 'items', product: 'painel-150', folderId: folder.id, theme: ana.name
+            }));
+            if (Array.isArray(items.items) && items.items.length) {
+              item = items.items[0];
+              break;
+            }
+          }
+          if (!item?.image) throw new Error('ANA_CASTELA_WITHOUT_ITEMS');
+          const image = await fetch(item.image, { redirect: 'follow' });
+          const type = image.headers.get('content-type') || '';
+          if (!image.ok || !type.startsWith('image/')) {
+            throw new Error(`ANA_CASTELA_IMAGE_INVALID_${image.status}_${type}`);
+          }
+          console.log('PANEL_OK', JSON.stringify({ ana: ana.name, itemId: item.id, code: item.code, imageStatus: image.status, contentType: type }));
+          NODE
+            then
+              echo "Painel 150 validado na tentativa $attempt."
+              exit 0
+            fi
+            echo "Aguardando publicação do hotfix: tentativa $attempt/40"
+            sleep 10
+          done
+          echo 'O catálogo correto não ficou disponível dentro do prazo.' >&2
+          exit 1
