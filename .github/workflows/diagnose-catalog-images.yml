@@ -18,29 +18,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - name: Aguardar prévia do Cloudflare Pages
-        shell: bash
-        run: |
-          set -euo pipefail
-          BASE='https://fix-catalog-images-live.new-hub-artres.pages.dev'
-          for attempt in $(seq 1 30); do
-            if curl --fail --silent --show-error --location --max-time 20 "$BASE/api/catalog-v2?mode=themes&product=50x50&_wait=$(date +%s)" -o themes.json; then
-              if grep -q '"ok":true' themes.json; then
-                echo "Prévia disponível na tentativa $attempt."
-                exit 0
-              fi
-            fi
-            sleep 10
-          done
-          echo 'A prévia não ficou disponível.' >&2
-          exit 1
-
-      - name: Percorrer catálogo até as imagens
+      - name: Percorrer catálogo corrigido até as imagens
         shell: bash
         run: |
           set -euo pipefail
           node <<'NODE'
-          const BASE = 'https://fix-catalog-images-live.new-hub-artres.pages.dev';
+          const BASE = 'https://186e9642.new-hub-artres.pages.dev';
 
           async function get(path) {
             const r = await fetch(BASE + path, { headers: { accept: 'application/json' } });
@@ -53,7 +36,7 @@ jobs:
 
           async function findItems(product) {
             const themes = await get(`/api/catalog-v2?mode=themes&product=${encodeURIComponent(product)}&_diag=${Date.now()}`);
-            for (const theme of (themes.folders || []).slice(0, 120)) {
+            for (const theme of (themes.folders || []).slice(0, 160)) {
               const products = await get(`/api/catalog-v2?mode=products&product=${encodeURIComponent(product)}&folderId=${encodeURIComponent(theme.id)}&theme=${encodeURIComponent(theme.name || '')}&_diag=${Date.now()}`);
               for (const folder of (products.folders || [])) {
                 const items = await get(`/api/catalog-v2?mode=items&product=${encodeURIComponent(product)}&folderId=${encodeURIComponent(folder.id)}&theme=${encodeURIComponent(theme.name || '')}&_diag=${Date.now()}`);
