@@ -1,0 +1,41 @@
+name: Diagnosticar temas do Painel 150
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnose-panel-themes.yml'
+      - 'functions/api/catalog-v2.js'
+      - 'functions/api/_catalog_rules.js'
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Consultar catálogo oficial
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const BASE = 'https://new-hub-artres.pages.dev';
+          async function get(params) {
+            params.set('_diag', String(Date.now()));
+            const url = `${BASE}/api/catalog-v2?${params}`;
+            const r = await fetch(url, { headers: { accept: 'application/json' } });
+            const text = await r.text();
+            let data;
+            try { data = JSON.parse(text); } catch { throw new Error(`JSON_INVALID ${r.status} ${text.slice(0,300)}`); }
+            console.log('\nURL', url, '\nSTATUS', r.status, '\nBODY', JSON.stringify(data, null, 2));
+            if (!r.ok || data.ok === false) throw new Error(`HTTP_${r.status}_${data.error || 'UNKNOWN'}`);
+            return data;
+          }
+
+          await get(new URLSearchParams({ mode: 'themes', product: 'painel-150' }));
+          await get(new URLSearchParams({ mode: 'folderSearch', product: 'painel-150', q: 'ANA CASTELA' }));
+          await get(new URLSearchParams({ mode: 'globalSearch', product: 'painel-150', q: 'ANA CASTELA' }));
+          await get(new URLSearchParams({ mode: 'search', product: 'painel-150', q: 'ANA CASTELA' }));
+          NODE
