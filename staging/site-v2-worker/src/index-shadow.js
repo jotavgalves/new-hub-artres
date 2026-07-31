@@ -6,6 +6,16 @@ import {
   ADMIN_COMMERCIAL_JS
 } from './admin-commercial-page.js';
 import {
+  ADMIN_READONLY_CSS,
+  ADMIN_READONLY_HTML,
+  ADMIN_READONLY_JS
+} from './admin-readonly-page.js';
+import {
+  AdminSalesCache,
+  adminSalesCacheStatus,
+  scheduleAdminSalesCacheRefresh
+} from './admin-sales-cache-do.js';
+import {
   catalogAcceptedStatus,
   handleCatalogAcceptedPublicRoute
 } from './catalog-accepted-route.js';
@@ -20,6 +30,7 @@ import {
   handlePublicCommercialConfig
 } from './commercial-config-route.js';
 import {
+  handleAdminOrdersStream,
   handleOutboxInspection,
   handleRecentAdminOrders
 } from './ledger-inspection-routes.js';
@@ -40,9 +51,11 @@ import {
   serveStaticAsset
 } from './static-assets-router.js';
 
-export { OrderLedger };
+export { AdminSalesCache, OrderLedger };
 
+const ADMIN_PAGE = '/admin';
 const ADMIN_ORDERS_ROUTE = '/internal/v2/admin/orders';
+const ADMIN_ORDERS_STREAM_ROUTE = '/internal/v2/admin/orders/stream';
 const ADMIN_COMMERCIAL_CONFIG_ROUTE = '/internal/v2/admin/commercial-config';
 const PUBLIC_COMMERCIAL_CONFIG_ROUTE = '/api/commercial-config';
 const ADMIN_COMMERCIAL_PAGE = '/admin/commercial';
@@ -63,6 +76,19 @@ export default {
 
 export async function fetchStagingShadowWorker(request, env, ctx) {
   const url = new URL(request.url);
+
+  if (url.pathname === ADMIN_PAGE || url.pathname === `${ADMIN_PAGE}/`) {
+    if (request.method !== 'GET') return methodNotAllowed(['GET'], safeRequestId(request.headers) || crypto.randomUUID());
+    return adminAsset(ADMIN_READONLY_HTML, 'text/html; charset=utf-8', true);
+  }
+  if (url.pathname === `${ADMIN_PAGE}/app.css`) {
+    if (request.method !== 'GET') return methodNotAllowed(['GET'], safeRequestId(request.headers) || crypto.randomUUID());
+    return adminAsset(ADMIN_READONLY_CSS, 'text/css; charset=utf-8');
+  }
+  if (url.pathname === `${ADMIN_PAGE}/app.js`) {
+    if (request.method !== 'GET') return methodNotAllowed(['GET'], safeRequestId(request.headers) || crypto.randomUUID());
+    return adminAsset(ADMIN_READONLY_JS, 'text/javascript; charset=utf-8');
+  }
 
   if (url.pathname === ADMIN_COMMERCIAL_PAGE || url.pathname === `${ADMIN_COMMERCIAL_PAGE}/`) {
     if (request.method !== 'GET') return methodNotAllowed(['GET'], safeRequestId(request.headers) || crypto.randomUUID());
@@ -86,6 +112,7 @@ export async function fetchStagingShadowWorker(request, env, ctx) {
   const catalogStatus = catalogReadonlyBridgeStatus(env);
   const acceptedCatalogStatus = catalogAcceptedStatus(env);
   const checkoutStatus = publicCheckoutStatus(env);
+  const salesCacheStatus = adminSalesCacheStatus(env);
 
   if (PUBLIC_CATALOG_ROUTES.has(url.pathname)) {
     const requestId = safeRequestId(request.headers) || crypto.randomUUID();
@@ -101,19 +128,14 @@ export async function fetchStagingShadowWorker(request, env, ctx) {
     const requestId = safeRequestId(request.headers) || crypto.randomUUID();
     return handlePublicCheckoutRoute(request, env, requestId, {
       onOrderCommitted({ command, result }) {
-        return scheduleSupabaseShadowProjection({
-          ctx,
-          env,
-          command,
-          result,
-          logger: console
-        });
+        return scheduleCommittedEffects({ ctx, env, command, result });
       }
     });
   }
 
   if (
     url.pathname === ADMIN_ORDERS_ROUTE ||
+    url.pathname === ADMIN_ORDERS_STREAM_ROUTE ||
     url.pathname === ADMIN_COMMERCIAL_CONFIG_ROUTE ||
     url.pathname === LEDGER_OUTBOX_ROUTE
   ) {
@@ -125,6 +147,9 @@ export async function fetchStagingShadowWorker(request, env, ctx) {
     if (!authorized) return json({ ok: false, error: 'STAGING_TOKEN_INVALID', requestId }, 401);
     if (url.pathname === ADMIN_ORDERS_ROUTE) {
       return handleRecentAdminOrders(request, env, requestId);
+    }
+    if (url.pathname === ADMIN_ORDERS_STREAM_ROUTE) {
+      return handleAdminOrdersStream(request, env, requestId);
     }
     if (url.pathname === ADMIN_COMMERCIAL_CONFIG_ROUTE) {
       return handleAdminCommercialConfig(request, env, requestId);
@@ -151,13 +176,7 @@ export async function fetchStagingShadowWorker(request, env, ctx) {
     if (!authorized) return json({ ok: false, error: 'STAGING_TOKEN_INVALID', requestId }, 401);
     return handleAcceptedCheckoutSubmit(request, env, requestId, {
       onOrderCommitted({ command, result }) {
-        return scheduleSupabaseShadowProjection({
-          ctx,
-          env,
-          command,
-          result,
-          logger: console
-        });
+        return scheduleCommittedEffects({ ctx, env, command, result });
       }
     });
   }
@@ -193,19 +212,11 @@ export async function fetchStagingShadowWorker(request, env, ctx) {
     return handleCatalogReadonlyRoute(request, env, requestId);
   }
 
-  const hooks = shadowStatus.enabled && shadowStatus.configured
-    ? {
-        onOrderCommitted({ command, result }) {
-          return scheduleSupabaseShadowProjection({
-            ctx,
-            env,
-            command,
-            result,
-            logger: console
-          });
-        }
-      }
-    : {};
+  const hooks = {
+    onOrderCommitted({ command, result }) {
+      return scheduleCommittedEffects({ ctx, env, command, result });
+    }
+  };
 
   const response = await fetchStagingWorker(request, env, ctx, hooks);
 
@@ -215,6 +226,7 @@ export async function fetchStagingShadowWorker(request, env, ctx) {
       catalogReadonlyBridge: catalogStatus,
       acceptedCatalog: acceptedCatalogStatus,
       publicCheckout: checkoutStatus,
+      adminSalesCache: salesCacheStatus,
       commercialConfig: {
         enabled: true,
         publicRoute: PUBLIC_COMMERCIAL_CONFIG_ROUTE,
@@ -225,6 +237,23 @@ export async function fetchStagingShadowWorker(request, env, ctx) {
   }
 
   return response;
+}
+
+function scheduleCommittedEffects({ ctx, env, command, result }) {
+  const projection = scheduleSupabaseShadowProjection({
+    ctx,
+    env,
+    command,
+    result,
+    logger: console
+  });
+  const adminSales = scheduleAdminSalesCacheRefresh({
+    ctx,
+    env,
+    result,
+    logger: console
+  });
+  return { projection, adminSales };
 }
 
 async function augmentHealthResponse(response, statusFields) {
