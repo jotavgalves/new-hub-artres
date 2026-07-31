@@ -10,11 +10,11 @@ import {
   ADMIN_READONLY_HTML,
   ADMIN_READONLY_JS
 } from './admin-readonly-page.js';
+import { AdminSalesCache } from './admin-sales-cache-do.js';
 import {
-  AdminSalesCache,
   adminSalesCacheStatus,
   scheduleAdminSalesCacheRefresh
-} from './admin-sales-cache-do.js';
+} from './admin-sales-cache-client.js';
 import {
   catalogAcceptedStatus,
   handleCatalogAcceptedPublicRoute
@@ -51,7 +51,8 @@ import {
   serveStaticAsset
 } from './static-assets-router.js';
 
-export { AdminSalesCache, OrderLedger };
+export { OrderLedger };
+export { AdminSalesCache };
 
 const ADMIN_PAGE = '/admin';
 const ADMIN_ORDERS_ROUTE = '/internal/v2/admin/orders';
