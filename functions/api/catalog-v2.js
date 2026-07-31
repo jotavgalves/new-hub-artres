@@ -34,7 +34,7 @@ export async function onRequestGet(context) {
     const rootId = ROOTS[productKey];
     const { config } = await loadConfig(context.env);
     const commercial = productConfig(config, productKey);
-    const folderId = cleanLabel(url.searchParams.get('folderId') || rootId);
+    const folderId = catalogFolderId(url.searchParams.get('folderId'), rootId);
     const theme = cleanLabel(url.searchParams.get('theme') || '');
     const rawSearch = String(
       url.searchParams.get('q') ||
@@ -316,6 +316,13 @@ function productConfig(config, productKey) {
     initial: positive(raw.initialQty ?? raw.initial, defaults.initial),
     enabled: raw.enabled !== false && unitPrice > 0
   };
+}
+
+function catalogFolderId(value, fallback) {
+  const text = String(value || '').trim();
+  if (!text) return fallback;
+  if (text.startsWith('catalog-v2-product:')) return text;
+  return /^[A-Za-z0-9_-]{5,200}$/.test(text) ? text : fallback;
 }
 
 function canonicalProduct(value) {
