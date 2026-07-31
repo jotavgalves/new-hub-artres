@@ -8,7 +8,8 @@ import {
 } from '../../staging/site-v2-worker/src/admin-commercial-page.js';
 
 test('página comercial expõe somente assets próprios e não persiste o token', () => {
-  assert.match(ADMIN_COMMERCIAL_HTML, /<title>Armazem \| Configuração comercial<\/title>/);
+  assert.match(ADMIN_COMMERCIAL_HTML, /<title>Armazem \| Produtos e preços<\/title>/);
+  assert.match(ADMIN_COMMERCIAL_HTML, /Produtos, preços e quantidades/);
   assert.match(ADMIN_COMMERCIAL_HTML, /\/admin\/commercial\/app\.css/);
   assert.match(ADMIN_COMMERCIAL_HTML, /\/admin\/commercial\/app\.js/);
   assert.match(ADMIN_COMMERCIAL_HTML, /autocomplete="off"/);
@@ -25,11 +26,34 @@ test('salvamento usa versão esperada, atualiza a tela e recarrega histórico', 
   assert.match(ADMIN_COMMERCIAL_JS, /A versão atual foi recarregada/);
 });
 
-test('formulário permite controlar os dois produtos e somente os campos autorizados', () => {
-  assert.match(ADMIN_COMMERCIAL_JS, /\['50x50','painel-150'\]/);
+test('formulário controla preço e quantidade de Bolinhas e Painel 150 separadamente', () => {
+  assert.match(ADMIN_COMMERCIAL_JS, /'50x50'/);
+  assert.match(ADMIN_COMMERCIAL_JS, /'painel-150'/);
   for (const field of ['enabled', 'unitPrice', 'minimum', 'step', 'initialQuantity']) {
     assert.match(ADMIN_COMMERCIAL_JS, new RegExp(field));
   }
+  assert.match(ADMIN_COMMERCIAL_JS, /Preço unitário \(R\$\)/);
+  assert.match(ADMIN_COMMERCIAL_JS, /Quantidade mínima/);
+  assert.match(ADMIN_COMMERCIAL_JS, /Incremento de quantidade/);
+  assert.match(ADMIN_COMMERCIAL_JS, /Quantidade inicial sugerida/);
   assert.match(ADMIN_COMMERCIAL_JS, /effectiveDiscountPercent/);
   assert.doesNotMatch(ADMIN_COMMERCIAL_JS, /productKey\s*:\s*document|label\s*:\s*document|quantityScope\s*:\s*document/);
+});
+
+test('raízes exclusivas do Drive aparecem travadas e não entram no payload editável', () => {
+  assert.match(ADMIN_COMMERCIAL_JS, /193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae/);
+  assert.match(ADMIN_COMMERCIAL_JS, /18x1qthD2RXAxRi2u-d7U3wpJLfpINU7-/);
+  assert.match(ADMIN_COMMERCIAL_JS, /ORIGEM PROTEGIDA/);
+  assert.match(ADMIN_COMMERCIAL_JS, /Somente artes descendentes desta raiz/);
+  assert.doesNotMatch(ADMIN_COMMERCIAL_JS, /rootDriveId\s*:\s*document/);
+  assert.doesNotMatch(ADMIN_COMMERCIAL_JS, /catalogRootDriveId\s*:\s*document/);
+});
+
+test('validação impede quantidade inicial incompatível e mostra prévia comercial', () => {
+  assert.match(ADMIN_COMMERCIAL_JS, /initial<minimum/);
+  assert.match(ADMIN_COMMERCIAL_JS, /\(initial-minimum\)%step!==0/);
+  assert.match(ADMIN_COMMERCIAL_JS, /Corrija as regras destacadas antes de publicar/);
+  assert.match(ADMIN_COMMERCIAL_JS, /Pedido na quantidade inicial/);
+  assert.match(ADMIN_COMMERCIAL_JS, /Intl\.NumberFormat\('pt-BR',\{style:'currency',currency:'BRL'\}\)/);
+  assert.match(ADMIN_COMMERCIAL_JS, /saveButton\.disabled=state\.loading\|\|!validation\.ok/);
 });
