@@ -97,7 +97,7 @@ async function directSnapshot(env, limit) {
   const year = new Date().getUTCFullYear();
   const stub = ledgerStub(env, `${year}-01-01T00:00:00.000Z`);
   const [orders, ledgerHealth] = await Promise.all([
-    stub.listRecentOrders(100),
+    stub.listRecentOrders(limit),
     stub.health()
   ]);
   const generatedAt = new Date().toISOString();
