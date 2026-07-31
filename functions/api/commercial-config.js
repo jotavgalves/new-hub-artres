@@ -30,12 +30,12 @@ function publicCommercialConfig(config) {
   const panel = normalizeProduct(products.panel150 || products['painel-150'], {
     key: 'painel-150',
     label: 'Painel 150 cm',
-    unitPrice: 0,
+    unitPrice: 59.9,
     minimum: 1,
     step: 1,
     initial: 1,
     scope: 'item',
-    enabled: false
+    enabled: true
   });
   const discount = percentage(
     config && config.ui && config.ui.discountPercent,
@@ -77,7 +77,7 @@ function normalizeProduct(input, defaults) {
   return {
     key: defaults.key,
     label: clean(raw.label || defaults.label),
-    enabled: raw.enabled !== false && (defaults.enabled || unitPrice > 0),
+    enabled: raw.enabled !== false && unitPrice > 0,
     unitPrice,
     quantity: {
       minimum,
