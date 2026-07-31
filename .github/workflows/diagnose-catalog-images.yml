@@ -1,3 +1,4 @@
+# execução temporária para diagnóstico do catálogo oficial
 name: Diagnosticar imagens do catálogo
 
 on:
