@@ -92,6 +92,10 @@ jobs:
           node --check staging/site-v2-worker/src/index.js
           node --check staging/site-v2-worker/src/index-shadow.js
           node --check staging/site-v2-worker/src/admin-commercial-page.js
+          node --check staging/site-v2-worker/src/admin-readonly-page.js
+          node --check staging/site-v2-worker/src/admin-sales-cache-model.js
+          node --check staging/site-v2-worker/src/admin-sales-cache-client.js
+          node --check staging/site-v2-worker/src/admin-sales-cache-do.js
           node --check staging/site-v2-worker/src/commercial-config-route.js
           node --check staging/site-v2-worker/src/ledger-inspection-routes.js
           node --check staging/site-v2-worker/src/catalog-accepted-route.js
@@ -105,7 +109,6 @@ jobs:
           node --check staging/site-v2-worker/src/checkout-validation-preview-route.js
           node --check staging/site-v2-worker/src/supabase-shadow-projector.js
           node --check staging/site-v2-worker/src/order-ledger-do.js
-          node --check staging/site-v2-worker/src/admin-readonly-page.js
           node --check tests/v2/run-staging-accepted-catalog-remote-smoke.mjs
           node --check tests/v2/wait-for-staging-checkout-pricing.mjs
           node --check tests/v2/wait-for-staging-checkout-protection.mjs
@@ -113,6 +116,7 @@ jobs:
           node --check tests/v2/run-staging-checkout-invalid-rejections-remote-smoke.mjs
           node --check tests/v2/run-staging-checkout-protection-remote-smoke.mjs
           node --check tests/v2/run-staging-public-checkout-remote-smoke.mjs
+          node --check tests/v2/run-staging-admin-cache-remote-smoke.mjs
           node --check tests/v2/run-staging-synthetic-remote-smoke-with-code.mjs
           node --check tests/v2/run-staging-supabase-shadow-remote-smoke.mjs
 
