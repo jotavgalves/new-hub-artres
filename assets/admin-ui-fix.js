@@ -21,7 +21,7 @@
     var script=document.createElement('script');
     script.id=id;
     script.src=src;
-    script.defer=true;
+    script.async=false;
     document.body.appendChild(script);
   }
   function setTab(tab){
@@ -49,6 +49,7 @@
       }
     }catch(e){}
     document.body.dataset.userRole='admin';
+    loadScript('adminSalesCacheRealScript','/assets/admin-sales-cache-real.js?v=1');
     loadScript('adminPedidosSidebarScript','/assets/pedidos-sidebar.js?v=4');
     loadScript('adminOrdersUnifiedScript','/assets/admin-orders-unified.js?v=4');
     loadScript('adminCampaignDiscountScript','/assets/admin-campaign-discount.js?v=1');
