@@ -35,9 +35,23 @@ assert(Array.isArray(adminResult.payload?.history) && adminResult.payload.histor
 
 const pageResult = await fetchText('COMMERCIAL_ADMIN_PAGE', `${base}/admin/commercial`);
 assert(pageResult.response.status === 200, 'COMMERCIAL_ADMIN_PAGE_STATUS_INVALID');
-assert(pageResult.text.includes('Configuração comercial'), 'COMMERCIAL_ADMIN_PAGE_TITLE_MISSING');
+assert(pageResult.text.includes('Produtos, preços e quantidades'), 'COMMERCIAL_ADMIN_PAGE_TITLE_MISSING');
+assert(pageResult.text.includes('Gerencie Bolinhas e Painel 150 cm'), 'COMMERCIAL_ADMIN_PRODUCTS_COPY_MISSING');
 assert(pageResult.text.includes('/admin/commercial/app.js'), 'COMMERCIAL_ADMIN_PAGE_SCRIPT_MISSING');
 assert(!pageResult.text.includes(token), 'COMMERCIAL_ADMIN_PAGE_TOKEN_EXPOSED');
+
+const adminScript = await fetchText('COMMERCIAL_ADMIN_SCRIPT', `${base}/admin/commercial/app.js`);
+assert(adminScript.response.status === 200, 'COMMERCIAL_ADMIN_SCRIPT_STATUS_INVALID');
+assert(adminScript.text.includes("'50x50'"), 'COMMERCIAL_ADMIN_BOLINHAS_MISSING');
+assert(adminScript.text.includes("'painel-150'"), 'COMMERCIAL_ADMIN_PANEL150_MISSING');
+assert(adminScript.text.includes('Preço unitário (R$)'), 'COMMERCIAL_ADMIN_PRICE_FIELD_MISSING');
+assert(adminScript.text.includes('Quantidade mínima'), 'COMMERCIAL_ADMIN_MINIMUM_FIELD_MISSING');
+assert(adminScript.text.includes('Incremento de quantidade'), 'COMMERCIAL_ADMIN_STEP_FIELD_MISSING');
+assert(adminScript.text.includes('Quantidade inicial sugerida'), 'COMMERCIAL_ADMIN_INITIAL_FIELD_MISSING');
+assert(adminScript.text.includes('193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae'), 'COMMERCIAL_ADMIN_BOLINHAS_ROOT_MISSING');
+assert(adminScript.text.includes('18x1qthD2RXAxRi2u-d7U3wpJLfpINU7-'), 'COMMERCIAL_ADMIN_PANEL_ROOT_MISSING');
+assert(adminScript.text.includes('expectedVersion:state.config.version'), 'COMMERCIAL_ADMIN_VERSION_GUARD_MISSING');
+assert(!adminScript.text.includes('localStorage'), 'COMMERCIAL_ADMIN_TOKEN_STORAGE_PRESENT');
 
 const scriptResult = await fetchText('COMMERCIAL_ASSET', `${base}/assets/v2-commercial-config.js`);
 assert(scriptResult.response.status === 200, 'COMMERCIAL_ASSET_STATUS_INVALID');
@@ -55,6 +69,8 @@ console.log(JSON.stringify({
   commercialConfigVersion: config.version,
   publicAndAdminAligned: true,
   products: ['50x50', 'painel-150'],
+  adminProductControls: true,
+  protectedDriveRoots: true,
   adminPage: true,
   writePerformed: false,
   productionChanged: false
