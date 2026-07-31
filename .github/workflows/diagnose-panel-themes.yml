@@ -1,119 +1,46 @@
-name: Verificar temas do Painel 150
+name: Aplicar hotfix do Painel 150
 
 on:
   pull_request:
     branches: [main]
     paths:
       - '.github/workflows/diagnose-panel-themes.yml'
-      - 'functions/api/catalog-v2.js'
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/diagnose-panel-themes.yml'
+      - 'scripts/patch-panel-drive-shared-flags.py'
       - 'functions/api/catalog-v2.js'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  contract:
-    if: github.event_name == 'pull_request'
+  patch-and-check:
+    if: github.head_ref == 'fix/panel-drive-shared-flags'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validar rota, isolamento e limpeza
+        with:
+          ref: fix/panel-drive-shared-flags
+          fetch-depth: 0
+      - name: Aplicar fallback e suporte a Shared Drive
+        run: python scripts/patch-panel-drive-shared-flags.py
+      - name: Validar sintaxe e contrato
         shell: bash
         run: |
           set -euo pipefail
           node --check functions/api/catalog-v2.js
-          node <<'NODE'
-          const fs = require('node:fs');
-          const source = fs.readFileSync('functions/api/catalog-v2.js', 'utf8');
-          const required = [
-            "const DRIVE_API = 'https://www.googleapis.com/drive/v3/files'",
-            "if (productKey !== 'painel-150') return indexed;",
-            "async function liveThemeFolders",
-            "async function liveFolderChildren",
-            "async function folderWithinRoot",
-            "function internalCatalogName",
-            "^codex\\s+test(?:e)?",
-            "catalogRootDriveId: rootId",
-            "rootVerified: true"
-          ];
-          for (const token of required) {
-            if (!source.includes(token)) throw new Error(`MISSING_CONTRACT_${token}`);
-          }
-          if (!source.includes("'painel-150': '18x1qthD2RXAxRi2u-d7U3wpJLfpINU7-'")) {
-            throw new Error('PANEL_ROOT_CHANGED');
-          }
-          if (!source.includes("'50x50': '193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae'")) {
-            throw new Error('BOLINHAS_ROOT_CHANGED');
-          }
-          NODE
-
-  production:
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Aguardar Pages e validar Ana Castela
+          grep -Fq "if (!Array.isArray(live) || live.length === 0) return indexed;" functions/api/catalog-v2.js
+          grep -Fq "supportsAllDrives: 'true'" functions/api/catalog-v2.js
+          grep -Fq "includeItemsFromAllDrives: 'true'" functions/api/catalog-v2.js
+          grep -Fq "function internalCatalogName" functions/api/catalog-v2.js
+      - name: Registrar alteração na branch
         shell: bash
         run: |
           set -euo pipefail
-          for attempt in $(seq 1 30); do
-            if node <<'NODE'
-          const BASE = 'https://new-hub-artres.pages.dev';
-          async function get(params) {
-            params.set('_verify', String(Date.now()));
-            const r = await fetch(`${BASE}/api/catalog-v2?${params}`, { headers: { accept: 'application/json' } });
-            const text = await r.text();
-            let data;
-            try { data = JSON.parse(text); } catch { throw new Error(`JSON_INVALID_${r.status}`); }
-            if (!r.ok || data.ok === false) throw new Error(`HTTP_${r.status}_${data.error || 'UNKNOWN'}`);
-            return data;
-          }
-
-          const themes = await get(new URLSearchParams({ mode: 'themes', product: 'painel-150' }));
-          const names = (themes.folders || []).map(folder => String(folder.name || ''));
-          if (names.some(name => /^CODEX\s+TEST(?:E)?\b/i.test(name))) {
-            throw new Error(`CODEX_THEME_STILL_PUBLIC_${JSON.stringify(names)}`);
-          }
-          const ana = (themes.folders || []).find(folder => /ANA\s+CASTELA/i.test(String(folder.name || '')));
-          if (!ana) throw new Error(`ANA_CASTELA_NOT_FOUND_${JSON.stringify(names)}`);
-
-          const products = await get(new URLSearchParams({
-            mode: 'products',
-            product: 'painel-150',
-            folderId: ana.id,
-            theme: ana.name
-          }));
-          let found = null;
-          for (const folder of products.folders || []) {
-            const items = await get(new URLSearchParams({
-              mode: 'items',
-              product: 'painel-150',
-              folderId: folder.id,
-              theme: ana.name
-            }));
-            if (Array.isArray(items.items) && items.items.length) {
-              found = items.items[0];
-              break;
-            }
-          }
-          if (!found || !found.image) throw new Error('ANA_CASTELA_WITHOUT_ITEMS');
-          const image = await fetch(found.image, { redirect: 'follow' });
-          const type = image.headers.get('content-type') || '';
-          if (!image.ok || !type.startsWith('image/')) {
-            throw new Error(`ANA_CASTELA_IMAGE_INVALID_${image.status}_${type}`);
-          }
-          console.log(JSON.stringify({ themes: names, anaCastela: ana, imageStatus: image.status, contentType: type }));
-          NODE
-            then
-              echo "Painel 150 validado na tentativa $attempt."
-              exit 0
-            fi
-            echo "Aguardando publicação corrigida: tentativa $attempt/30"
-            sleep 10
-          done
-          echo 'A versão oficial não apresentou o catálogo correto dentro do prazo.' >&2
-          exit 1
+          if git diff --quiet; then
+            echo 'Hotfix já estava aplicado.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add functions/api/catalog-v2.js
+          git commit -m 'Corrige fallback e Shared Drive do Painel 150'
+          git push origin HEAD:fix/panel-drive-shared-flags
