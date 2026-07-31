@@ -5,6 +5,7 @@ import test from 'node:test';
 const files = {
   page: 'staging/site-v2-worker/src/admin-readonly-page.js',
   cache: 'staging/site-v2-worker/src/admin-sales-cache-do.js',
+  client: 'staging/site-v2-worker/src/admin-sales-cache-client.js',
   route: 'staging/site-v2-worker/src/ledger-inspection-routes.js',
   worker: 'staging/site-v2-worker/src/index-shadow.js',
   wrangler: 'wrangler.site-v2-staging.jsonc'
@@ -31,15 +32,18 @@ test('API administrativa usa snapshot, ETag e resposta 304', async () => {
   assert.match(source, /private, max-age=0, must-revalidate/);
   assert.match(source, /X-Data-Revision/);
   assert.match(source, /handleAdminOrdersStream/);
+  assert.match(source, /admin-sales-cache-client\.js/);
+  assert.doesNotMatch(source, /cloudflare:workers/);
 });
 
 test('pedido criado invalida cache e publica revisão ao vivo', async () => {
   const cache = await readFile(files.cache, 'utf8');
+  const client = await readFile(files.client, 'utf8');
   const worker = await readFile(files.worker, 'utf8');
   assert.match(cache, /orderCommitted/);
   assert.match(cache, /this\.#broadcast\('revision'/);
   assert.match(cache, /RECONCILE_AFTER_MS = 30_000/);
-  assert.match(cache, /scheduleAdminSalesCacheRefresh/);
+  assert.match(client, /scheduleAdminSalesCacheRefresh/);
   assert.match(worker, /scheduleCommittedEffects/);
   assert.match(worker, /ADMIN_ORDERS_STREAM_ROUTE/);
   assert.match(worker, /adminSalesCacheStatus/);
