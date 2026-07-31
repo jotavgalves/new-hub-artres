@@ -13,6 +13,8 @@
   let started = false;
   let hooksWrapped = false;
   let refreshTimer = null;
+  let copyObserver = null;
+  let copyPatchScheduled = false;
 
   async function start(input = {}) {
     if (started && activeConfig) return activeConfig;
@@ -21,6 +23,7 @@
     root?.document?.documentElement?.setAttribute?.('data-v2-commercial-config', MARKER);
     const config = await fetchCommercialConfig(input.fetch || root?.fetch?.bind(root));
     applyCommercialConfig(config);
+    observeCommercialCopy(root?.document);
     scheduleRefresh(input.refreshMs);
     return activeConfig;
   }
@@ -61,8 +64,8 @@
       wrapRenderCart();
       hooksWrapped = true;
     }
-    patchCommercialCopy(root?.document);
     hooks.renderCart();
+    patchCommercialCopy(root?.document);
     return activeConfig;
   }
 
@@ -176,12 +179,27 @@
     const original = hooks.getCartRule();
     hooks.setCartRule(function configuredCartRule() {
       const result = original();
-      const discount = activeConfig.effectiveDiscountPercent;
       if (!result || typeof result !== 'object') return result;
-      const replacement = discount > 0
-        ? `${formatPercent(discount)} de desconto`
-        : 'valores atualizados';
-      return { ...result, msg: clean(result.msg).replace(/10% de desconto|desconto de 10%/gi, replacement) };
+      const discount = activeConfig.effectiveDiscountPercent;
+      const percentText = formatPercent(discount);
+      let msg = clean(result.msg);
+      if (discount > 0) {
+        msg = msg
+          .replace(/10% de desconto|desconto de 10%/gi, `${percentText} de desconto`)
+          .replace(/10% OFF/gi, `${percentText} OFF`);
+      } else {
+        msg = msg
+          .replace(
+            /Seu pedido ainda está vazio\. Escolha o tema da festa e adicione as artes que mais gostar\. O desconto de 10% entra automaticamente\.?/gi,
+            'Seu pedido ainda está vazio. Escolha o tema da festa e adicione as artes que mais gostar.'
+          )
+          .replace(
+            /Perfeito\. Sua seleção está pronta para enviar com 10% de desconto por aqui\.?/gi,
+            'Perfeito. Sua seleção está pronta para enviar com os valores atuais.'
+          )
+          .replace(/10% de desconto|desconto de 10%/gi, 'valores atuais');
+      }
+      return { ...result, msg };
     });
   }
 
@@ -194,36 +212,108 @@
     });
   }
 
+  function observeCommercialCopy(documentRef) {
+    if (!documentRef?.body || copyObserver || typeof root?.MutationObserver !== 'function') return;
+    copyObserver = new root.MutationObserver(() => scheduleCommercialCopyPatch(documentRef));
+    copyObserver.observe(documentRef.body, { childList: true, subtree: true, characterData: true });
+  }
+
+  function scheduleCommercialCopyPatch(documentRef) {
+    if (copyPatchScheduled) return;
+    copyPatchScheduled = true;
+    const schedule = typeof root?.queueMicrotask === 'function'
+      ? root.queueMicrotask.bind(root)
+      : callback => Promise.resolve().then(callback);
+    schedule(() => {
+      copyPatchScheduled = false;
+      patchCommercialCopy(documentRef);
+    });
+  }
+
   function patchCommercialCopy(documentRef) {
     if (!documentRef || !activeConfig) return;
     const percent = activeConfig.effectiveDiscountPercent;
     const percentText = formatPercent(percent);
+    const hasDiscount = percent > 0;
+
     const subtitleStrong = documentRef.querySelector('.subtitle strong');
-    if (subtitleStrong) subtitleStrong.textContent = percent > 0 ? `${percentText} de desconto` : 'valores atualizados';
+    setText(subtitleStrong, hasDiscount ? `${percentText} de desconto` : 'valores atualizados');
+
     const promoPill = documentRef.querySelector('.promoPill');
     const promoTitle = documentRef.querySelector('.promo h3');
     const promoText = documentRef.querySelector('.promo p:last-child');
-    if (promoPill) promoPill.textContent = percent > 0 ? `${percentText} OFF por aqui` : 'Valores atualizados';
-    if (promoTitle) promoTitle.textContent = percent > 0 ? 'Escolha suas artes e já envie com desconto' : 'Escolha suas artes com os valores atuais';
-    if (promoText) promoText.textContent = percent > 0
+    setText(promoPill, hasDiscount ? `${percentText} OFF por aqui` : 'Valores atualizados');
+    setText(promoTitle, hasDiscount
+      ? 'Escolha suas artes e já envie com desconto'
+      : 'Escolha suas artes com os valores atuais');
+    setText(promoText, hasDiscount
       ? `O desconto de ${percentText} é aplicado automaticamente antes do envio.`
-      : 'Os preços, mínimos e incrementos exibidos são controlados pelo painel administrativo.';
+      : 'Os preços, mínimos e incrementos exibidos são controlados pelo painel administrativo.');
+
+    const viewCaption = documentRef.querySelector('#viewCaption');
+    if (viewCaption) {
+      const current = clean(viewCaption.textContent);
+      if (hasDiscount && /10%|desconto/i.test(current)) {
+        setText(viewCaption, current.replace(/10%/g, percentText));
+      } else if (!hasDiscount && /desconto|10%/i.test(current)) {
+        setText(viewCaption, 'Toque na arte para ver melhor. Quando gostar, adicione ao seu pedido.');
+      }
+    }
 
     documentRef.querySelectorAll('.discountCard').forEach(card => {
-      card.hidden = percent <= 0;
+      card.style.display = hasDiscount ? '' : 'none';
+      card.setAttribute('aria-hidden', hasDiscount ? 'false' : 'true');
       const span = card.querySelector('span');
-      if (span) span.textContent = `${percentText} OFF por aqui`;
+      setText(span, `${percentText} OFF por aqui`);
+      const small = card.querySelector('small');
+      if (small) setText(small, `O desconto de ${percentText} entra automaticamente no total antes do envio.`);
     });
+
     documentRef.querySelectorAll('.totalLine').forEach(line => {
       const label = line.querySelector('span');
       if (label && /Desconto por aqui/i.test(label.textContent || '')) {
-        line.hidden = percent <= 0;
-        label.textContent = `Desconto por aqui ${percentText}`;
+        line.style.display = hasDiscount ? '' : 'none';
+        line.setAttribute('aria-hidden', hasDiscount ? 'false' : 'true');
+        setText(label, `Desconto por aqui ${percentText}`);
       }
     });
-    documentRef.querySelectorAll('.wa').forEach(link => {
-      link.textContent = percent > 0 ? `Enviar pedido com ${percentText} OFF` : 'Enviar pedido';
+
+    documentRef.querySelectorAll('.total').forEach(total => {
+      const label = total.querySelector('span');
+      setText(label, hasDiscount ? 'Total com desconto' : 'Total');
     });
+
+    documentRef.querySelectorAll('.wa').forEach(link => {
+      setText(link, hasDiscount ? `Enviar pedido com ${percentText} OFF` : 'Enviar pedido');
+    });
+
+    documentRef.querySelectorAll('.emptyCart').forEach(empty => {
+      const nextHtml = hasDiscount
+        ? `<b>Seu pedido ainda está vazio</b>Escolha um tema que combine com sua festa e adicione as artes que mais gostar. O desconto de ${percentText} será aplicado automaticamente no final.`
+        : '<b>Seu pedido ainda está vazio</b>Escolha um tema que combine com sua festa e adicione as artes que mais gostar.';
+      if (empty.innerHTML !== nextHtml) empty.innerHTML = nextHtml;
+    });
+
+    documentRef.querySelectorAll('.ruleCard').forEach(card => {
+      if (card.querySelector('b')) return;
+      const current = clean(card.textContent);
+      if (!/10%|desconto/i.test(current)) return;
+      const next = hasDiscount
+        ? current.replace(/10%/g, percentText)
+        : current
+            .replace(/O desconto de 10% entra automaticamente\.?/gi, '')
+            .replace(/com 10% de desconto por aqui/gi, 'com os valores atuais')
+            .replace(/10% de desconto|desconto de 10%/gi, 'valores atuais')
+            .replace(/\s+/g, ' ')
+            .trim();
+      setText(card, next);
+    });
+  }
+
+  function setText(node, value) {
+    if (!node) return;
+    const next = String(value ?? '');
+    if (node.textContent !== next) node.textContent = next;
   }
 
   function validateHooks(input) {
