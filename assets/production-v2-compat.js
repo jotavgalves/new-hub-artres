@@ -4,6 +4,7 @@
 
   var DEFAULT_PRODUCT='bolinhas';
   var bootstrapped=false;
+  var scheduled=false;
 
   function injectProductStyle(){
     if(document.getElementById('productionV2UxFixStyle'))return;
@@ -133,15 +134,18 @@
     if(chooser)chooser.remove();
   }
 
+  function setIcon(selector,label){
+    document.querySelectorAll(selector).forEach(function(icon){
+      if(icon.dataset.productionV2UxIcon===label)return;
+      icon.textContent=label;
+      icon.setAttribute('aria-hidden','true');
+      icon.dataset.productionV2UxIcon=label;
+    });
+  }
+
   function improveProductButtons(){
-    document.querySelectorAll('[data-workspace="bolinhas"] i').forEach(function(icon){
-      icon.textContent='50';
-      icon.setAttribute('aria-hidden','true');
-    });
-    document.querySelectorAll('[data-workspace="painel-150"] i').forEach(function(icon){
-      icon.textContent='150';
-      icon.setAttribute('aria-hidden','true');
-    });
+    setIcon('[data-workspace="bolinhas"] i','50');
+    setIcon('[data-workspace="painel-150"] i','150');
   }
 
   function activateDefaultProduct(){
@@ -156,28 +160,31 @@
     fallback.click();
   }
 
-  function ensureProductExperience(){
-    injectProductStyle();
-    removeBlockingChooser();
-    improveProductButtons();
-    activateDefaultProduct();
-  }
-
   function neutralizeLegacyCheckout(){
     if(!window.__ARMAZEM_PRODUCTION_V2__)return;
     document.querySelectorAll('a.wa').forEach(function(link){
       var href=link.getAttribute('href')||'';
       if(href&&href!=='#')link.dataset.legacyWhatsappHref=href;
-      link.setAttribute('href','#');
-      link.dataset.productionV2Neutralized='1';
+      if(href!=='#')link.setAttribute('href','#');
+      if(link.dataset.productionV2Neutralized!=='1')link.dataset.productionV2Neutralized='1';
     });
   }
 
-  ensureProductExperience();
-  neutralizeLegacyCheckout();
-
-  new MutationObserver(function(){
-    ensureProductExperience();
+  function run(){
+    scheduled=false;
+    injectProductStyle();
+    removeBlockingChooser();
+    improveProductButtons();
+    activateDefaultProduct();
     neutralizeLegacyCheckout();
-  }).observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['href','class']});
+  }
+
+  function schedule(){
+    if(scheduled)return;
+    scheduled=true;
+    requestAnimationFrame(run);
+  }
+
+  run();
+  new MutationObserver(schedule).observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['href','class']});
 })();
