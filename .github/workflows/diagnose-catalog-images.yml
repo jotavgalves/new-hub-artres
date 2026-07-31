@@ -31,29 +31,13 @@ jobs:
           node <<'NODE'
           const fs = require('node:fs');
           const source = fs.readFileSync('functions/api/catalog-v2.js', 'utf8');
-          if (!source.includes("const folderId = catalogFolderId(url.searchParams.get('folderId'), rootId);")) {
-            throw new Error('CATALOG_FOLDER_ID_NOT_PRESERVED');
-          }
-          if (!source.includes("if (text.startsWith('catalog-v2-product:')) return text;")) {
-            throw new Error('VIRTUAL_PRODUCT_ID_NOT_PRESERVED');
-          }
-          if (source.includes("const folderId = cleanLabel(url.searchParams.get('folderId') || rootId);")) {
-            throw new Error('OPAQUE_ID_STILL_NORMALIZED_AS_LABEL');
-          }
-          const catalogFolderId = (value, fallback) => {
-            const text = String(value || '').trim();
-            if (!text) return fallback;
-            if (text.startsWith('catalog-v2-product:')) return text;
-            return /^[A-Za-z0-9_-]{5,200}$/.test(text) ? text : fallback;
-          };
-          const driveId = '18x1qthD2RXAxRi2u-d7U3wpJLfpINU7-';
-          const virtualId = 'catalog-v2-product:1PLFdLh0GMVMfHUd8dCod3tsludtUlhJ2:50x50';
-          if (catalogFolderId(driveId, 'fallback') !== driveId) throw new Error('DRIVE_ID_CHANGED');
-          if (catalogFolderId(virtualId, 'fallback') !== virtualId) throw new Error('VIRTUAL_ID_CHANGED');
+          if (!source.includes("const folderId = catalogFolderId(url.searchParams.get('folderId'), rootId);")) throw new Error('CATALOG_FOLDER_ID_NOT_PRESERVED');
+          if (!source.includes("if (text.startsWith('catalog-v2-product:')) return text;")) throw new Error('VIRTUAL_PRODUCT_ID_NOT_PRESERVED');
+          if (source.includes("const folderId = cleanLabel(url.searchParams.get('folderId') || rootId);")) throw new Error('OPAQUE_ID_STILL_NORMALIZED_AS_LABEL');
           NODE
 
   production:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
