@@ -17,6 +17,7 @@ export const ADMIN_READONLY_HTML = `<!doctype html>
     <div class="badges" aria-label="Estado do painel">
       <span class="badge badge-staging">STAGING</span>
       <span class="badge badge-readonly">SOMENTE LEITURA</span>
+      <span class="badge badge-live-off" id="live-badge">DESCONECTADO</span>
     </div>
   </header>
 
@@ -53,6 +54,12 @@ export const ADMIN_READONLY_HTML = `<!doctype html>
     <div id="status" class="status" role="status" aria-live="polite">Informe a chave para consultar o ledger sintético.</div>
 
     <section id="dashboard" class="dashboard" hidden>
+      <div class="sync-strip" aria-label="Sincronização dos dados">
+        <div><span>Origem</span><strong id="data-source">Servidor</strong></div>
+        <div><span>Última atualização</span><strong id="last-updated">—</strong></div>
+        <div><span>Revisão</span><strong id="data-revision">0</strong></div>
+      </div>
+
       <div class="summary-grid" aria-label="Resumo dos pedidos">
         <article class="metric"><span>Pedidos no ledger</span><strong id="order-count">0</strong></article>
         <article class="metric"><span>Valor sintético retornado</span><strong id="total-value">R$ 0,00</strong></article>
@@ -66,7 +73,7 @@ export const ADMIN_READONLY_HTML = `<!doctype html>
             <p class="section-kicker">LEDGER SQLITE · ANO ATUAL</p>
             <h2 id="orders-title">Pedidos recentes</h2>
           </div>
-          <button type="button" id="refresh" class="secondary">Atualizar</button>
+          <button type="button" id="refresh" class="secondary">Atualizar agora</button>
         </div>
         <div class="table-wrap">
           <table>
@@ -122,8 +129,11 @@ h2 { margin-bottom: .35rem; letter-spacing: -.025em; }
 .badge { padding: .48rem .72rem; border-radius: 999px; border: 1px solid; font-size: .7rem; font-weight: 850; letter-spacing: .08em; }
 .badge-staging { border-color: #155e75; background: #083344; color: #a5f3fc; }
 .badge-readonly { border-color: #166534; background: #052e16; color: #bbf7d0; }
+.badge-live { border-color: #166534; background: #052e16; color: #bbf7d0; }
+.badge-live-wait { border-color: #854d0e; background: #422006; color: #fde68a; }
+.badge-live-off { border-color: #475569; background: #1e293b; color: #cbd5e1; }
 .shell { width: min(1380px, calc(100% - 2rem)); margin: 2rem auto 4rem; }
-.notice, .access-card, .orders-card, .metric { border: 1px solid var(--line); background: linear-gradient(145deg, rgba(23,28,38,.96), rgba(14,18,25,.96)); box-shadow: 0 20px 70px rgba(0,0,0,.22); }
+.notice, .access-card, .orders-card, .metric, .sync-strip { border: 1px solid var(--line); background: linear-gradient(145deg, rgba(23,28,38,.96), rgba(14,18,25,.96)); box-shadow: 0 20px 70px rgba(0,0,0,.22); }
 .notice { display: flex; gap: 1rem; padding: 1.15rem 1.3rem; border-radius: 16px; margin-bottom: 1rem; }
 .notice p, .muted { margin-bottom: 0; color: var(--muted); line-height: 1.55; }
 .notice-icon { display: grid; place-items: center; flex: 0 0 2rem; height: 2rem; border-radius: 50%; background: #164e63; color: #cffafe; font-weight: 900; }
@@ -142,6 +152,10 @@ button { padding: 0 1rem; font-weight: 800; }
 .status { margin: 1rem 0; min-height: 48px; display: flex; align-items: center; padding: .85rem 1rem; border-radius: 12px; border: 1px dashed var(--line); color: var(--muted); }
 .status[data-tone="error"] { border-style: solid; border-color: #7f1d1d; background: rgba(69,10,10,.42); color: #fecaca; }
 .status[data-tone="success"] { border-style: solid; border-color: #14532d; background: rgba(5,46,22,.42); color: #bbf7d0; }
+.sync-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin-bottom: 1rem; border-radius: 15px; overflow: hidden; }
+.sync-strip > div { padding: .85rem 1rem; background: rgba(11,15,22,.76); }
+.sync-strip span { display: block; color: var(--muted); font-size: .7rem; font-weight: 750; text-transform: uppercase; letter-spacing: .07em; }
+.sync-strip strong { display: block; margin-top: .3rem; color: #e5eef8; font-size: .88rem; }
 .summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; margin-bottom: 1rem; }
 .metric { padding: 1.15rem; border-radius: 15px; }
 .metric span { display: block; color: var(--muted); font-size: .78rem; font-weight: 700; }
@@ -158,6 +172,8 @@ td strong { color: white; }
 .order-meta { display: block; margin-top: .2rem; color: var(--muted); font-size: .72rem; }
 .pill { display: inline-flex; padding: .3rem .55rem; border-radius: 999px; background: #1e293b; color: #dbeafe; font-size: .72rem; font-weight: 800; }
 .synthetic { color: var(--accent); }
+.new-order { animation: newOrder 2.4s ease; }
+@keyframes newOrder { 0% { background: rgba(34,211,238,.24); } 100% { background: transparent; } }
 .empty { padding: 3rem 1rem; text-align: center; color: var(--muted); }
 footer { padding: 1.5rem; text-align: center; color: #657184; font-size: .74rem; }
 @media (max-width: 980px) {
@@ -169,7 +185,7 @@ footer { padding: 1.5rem; text-align: center; color: #657184; font-size: .74rem;
 @media (max-width: 620px) {
   .topbar { align-items: flex-start; flex-direction: column; }
   .badges { justify-content: flex-start; }
-  .access-row, .summary-grid { grid-template-columns: 1fr; }
+  .access-row, .summary-grid, .sync-strip { grid-template-columns: 1fr; }
   .shell { width: min(100% - 1rem, 1380px); }
 }
 `;
@@ -178,7 +194,14 @@ export const ADMIN_READONLY_JS = `
 (() => {
   'use strict';
 
-  const state = { token: '', loading: false };
+  const CACHE_PREFIX = 'armazem:v2:admin-orders-cache:v2:';
+  const FALLBACK_REFRESH_MS = 60000;
+  const MAX_RECONNECT_MS = 30000;
+  const state = {
+    token: '', loading: false, etag: '', revision: 0, updatedAt: '',
+    streamAbort: null, reconnectTimer: null, reconnectAttempt: 0,
+    fallbackTimer: null, validated: false, lastOrderNumber: ''
+  };
   const form = document.getElementById('access-form');
   const tokenInput = document.getElementById('token');
   const limitInput = document.getElementById('limit');
@@ -188,13 +211,12 @@ export const ADMIN_READONLY_JS = `
   const dashboard = document.getElementById('dashboard');
   const bodyNode = document.getElementById('orders-body');
   const emptyNode = document.getElementById('empty');
+  const liveBadge = document.getElementById('live-badge');
 
   const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
   const integer = new Intl.NumberFormat('pt-BR');
   const dateTime = new Intl.DateTimeFormat('pt-BR', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-    timeZone: 'America/Recife'
+    dateStyle: 'short', timeStyle: 'medium', timeZone: 'America/Recife'
   });
 
   form.addEventListener('submit', async event => {
@@ -205,61 +227,199 @@ export const ADMIN_READONLY_JS = `
       return;
     }
     state.token = candidate;
-    await loadOrders();
+    const loaded = await loadOrders({ initial: true });
+    if (loaded) {
+      startLiveStream();
+      startFallbackRefresh();
+    }
   });
 
-  refreshButton.addEventListener('click', loadOrders);
-  disconnectButton.addEventListener('click', disconnect);
+  refreshButton.addEventListener('click', () => loadOrders({ force: true, manual: true }));
+  disconnectButton.addEventListener('click', () => disconnect(true));
+  limitInput.addEventListener('change', () => {
+    if (state.token) loadOrders({ force: true, manual: true });
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && state.token && state.validated) loadOrders({ background: true });
+  });
+  window.addEventListener('beforeunload', stopLiveStream);
 
-  async function loadOrders() {
-    if (!state.token || state.loading) return;
+  async function loadOrders(options) {
+    options = options || {};
+    if (!state.token || (state.loading && !options.background)) return false;
     state.loading = true;
-    setBusy(true);
-    setStatus('Consultando o ledger sintético...', 'neutral');
+    if (!options.background) setBusy(true);
+    if (options.initial) setStatus('Validando acesso e verificando a revisão mais recente...', 'neutral');
+    else if (options.manual) setStatus('Atualizando agora...', 'neutral');
+
+    const limit = String(limitInput.value || '50');
+    const cached = readCache(limit);
+    const headers = {
+      Accept: 'application/json',
+      'X-Staging-Token': state.token
+    };
+    const conditionalEtag = options.force ? '' : (state.etag || (cached && cached.etag) || '');
+    if (conditionalEtag) headers['If-None-Match'] = conditionalEtag;
 
     try {
       const url = new URL('/internal/v2/admin/orders', window.location.origin);
-      url.searchParams.set('limit', String(limitInput.value || '50'));
+      url.searchParams.set('limit', limit);
       const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json',
-          'X-Staging-Token': state.token
-        },
-        cache: 'no-store',
-        credentials: 'omit',
-        redirect: 'error'
+        method: 'GET', headers: headers, cache: 'no-cache',
+        credentials: 'omit', redirect: 'error'
       });
-      const payload = await readJson(response);
 
       if (response.status === 401) {
         disconnect(false);
         throw new Error('Chave inválida ou expirada.');
       }
+
+      if (response.status === 304) {
+        if (!cached || !cached.payload) throw new Error('O servidor validou um cache que não está disponível nesta aba.');
+        state.etag = conditionalEtag;
+        applyPayload(cached.payload, 'Cache validado', options.background);
+        state.validated = true;
+        disconnectButton.disabled = false;
+        setStatus('Dados em cache confirmados pelo servidor. O painel continua acompanhando novos pedidos.', 'success');
+        return true;
+      }
+
+      const payload = await readJson(response);
       if (!response.ok || payload?.ok !== true || payload?.readOnly !== true) {
         throw new Error('Falha na consulta: ' + String(payload?.error || response.status));
       }
 
-      renderSummary(payload.summary || {});
-      renderOrders(Array.isArray(payload.orders) ? payload.orders : []);
-      dashboard.hidden = false;
+      state.etag = response.headers.get('etag') || '';
+      applyPayload(payload, payload.cacheState === 'hit' ? 'Snapshot do servidor' : 'Servidor atualizado', options.background);
+      writeCache(limit, state.etag, payload);
+      state.validated = true;
       disconnectButton.disabled = false;
-      setStatus('Consulta concluída. Nenhuma operação de escrita foi disponibilizada.', 'success');
+      setStatus(options.background ? 'Atualização automática concluída.' : 'Consulta concluída. Atualização ao vivo ativada.', 'success');
+      return true;
     } catch (error) {
-      setStatus(String(error?.message || 'Não foi possível carregar os pedidos.'), 'error');
+      if (state.token) setStatus(String(error?.message || 'Não foi possível carregar os pedidos.'), 'error');
+      setLiveState('reconnecting');
+      return false;
     } finally {
       state.loading = false;
-      setBusy(false);
+      if (!options.background) setBusy(false);
     }
+  }
+
+  function applyPayload(payload, source, background) {
+    const orders = Array.isArray(payload.orders) ? payload.orders : [];
+    const previousFirst = state.lastOrderNumber;
+    renderSummary(payload.summary || {});
+    renderOrders(orders, background && previousFirst && orders[0]?.orderNumber !== previousFirst);
+    state.lastOrderNumber = orders[0]?.orderNumber || '';
+    state.revision = number(payload.revision);
+    state.updatedAt = String(payload.updatedAt || payload.generatedAt || '');
+    setText('data-source', source);
+    setText('data-revision', integer.format(state.revision));
+    setText('last-updated', state.updatedAt ? dateTime.format(new Date(state.updatedAt)) : '—');
+    dashboard.hidden = false;
+    refreshButton.disabled = false;
+  }
+
+  function startLiveStream() {
+    stopLiveStream();
+    if (!state.token || !state.validated) return;
+    const abort = new AbortController();
+    state.streamAbort = abort;
+    setLiveState('connecting');
+
+    void (async () => {
+      try {
+        const response = await fetch('/internal/v2/admin/orders/stream', {
+          method: 'GET',
+          headers: { Accept: 'text/event-stream', 'X-Staging-Token': state.token },
+          cache: 'no-store', credentials: 'omit', redirect: 'error', signal: abort.signal
+        });
+        if (response.status === 401) {
+          disconnect(false);
+          throw new Error('Chave inválida ou expirada.');
+        }
+        if (!response.ok || !response.body) throw new Error('Canal ao vivo indisponível.');
+        state.reconnectAttempt = 0;
+        setLiveState('live');
+        await consumeEventStream(response.body);
+        if (!abort.signal.aborted) throw new Error('Canal ao vivo encerrado.');
+      } catch (error) {
+        if (abort.signal.aborted || !state.token) return;
+        setLiveState('reconnecting');
+        scheduleReconnect();
+      }
+    })();
+  }
+
+  async function consumeEventStream(body) {
+    const reader = body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    try {
+      while (true) {
+        const result = await reader.read();
+        if (result.done) break;
+        buffer += decoder.decode(result.value, { stream: true });
+        let boundary;
+        while ((boundary = buffer.indexOf('\n\n')) >= 0) {
+          const block = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 2);
+          handleEventBlock(block);
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
+  function handleEventBlock(block) {
+    if (!block || block.startsWith(':')) return;
+    const lines = block.split('\n');
+    let eventName = 'message';
+    let data = '';
+    for (const line of lines) {
+      if (line.startsWith('event:')) eventName = line.slice(6).trim();
+      if (line.startsWith('data:')) data += line.slice(5).trim();
+    }
+    if (!data) return;
+    let payload;
+    try { payload = JSON.parse(data); } catch (_) { return; }
+    if (eventName === 'ready') {
+      setLiveState('live');
+      if (number(payload.revision) > state.revision) loadOrders({ background: true });
+      return;
+    }
+    if (eventName === 'revision' && number(payload.revision) > state.revision) {
+      setStatus('Novo pedido detectado. Atualizando o painel...', 'neutral');
+      loadOrders({ background: true });
+    }
+  }
+
+  function scheduleReconnect() {
+    clearTimeout(state.reconnectTimer);
+    const delay = Math.min(MAX_RECONNECT_MS, 1000 * Math.pow(2, state.reconnectAttempt++));
+    state.reconnectTimer = setTimeout(startLiveStream, delay);
+  }
+
+  function startFallbackRefresh() {
+    clearInterval(state.fallbackTimer);
+    state.fallbackTimer = setInterval(() => {
+      if (state.token && state.validated && !document.hidden) loadOrders({ background: true });
+    }, FALLBACK_REFRESH_MS);
+  }
+
+  function stopLiveStream() {
+    clearTimeout(state.reconnectTimer);
+    state.reconnectTimer = null;
+    if (state.streamAbort) state.streamAbort.abort();
+    state.streamAbort = null;
   }
 
   async function readJson(response) {
     const text = await response.text();
-    try {
-      return text ? JSON.parse(text) : null;
-    } catch (_) {
-      throw new Error('A API retornou uma resposta inválida.');
-    }
+    try { return text ? JSON.parse(text) : null; }
+    catch (_) { throw new Error('A API retornou uma resposta inválida.'); }
   }
 
   function renderSummary(summary) {
@@ -269,12 +429,13 @@ export const ADMIN_READONLY_JS = `
     setText('pending-outbox', integer.format(number(summary.pendingOutbox)));
   }
 
-  function renderOrders(orders) {
+  function renderOrders(orders, highlightFirst) {
     bodyNode.replaceChildren();
     emptyNode.hidden = orders.length !== 0;
-
-    for (const order of orders) {
+    for (let index = 0; index < orders.length; index += 1) {
+      const order = orders[index];
       const row = document.createElement('tr');
+      if (highlightFirst && index === 0) row.className = 'new-order';
       row.append(
         cellWithMeta(order.orderNumber || '—', order.displayId || ''),
         textCell(formatDate(order.createdAt)),
@@ -336,6 +497,37 @@ export const ADMIN_READONLY_JS = `
     return Number.isFinite(date.getTime()) ? dateTime.format(date) : '—';
   }
 
+  function cacheKey(limit) { return CACHE_PREFIX + String(limit || '50'); }
+
+  function readCache(limit) {
+    try {
+      const raw = sessionStorage.getItem(cacheKey(limit));
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed && parsed.payload && typeof parsed.payload === 'object' ? parsed : null;
+    } catch (_) { return null; }
+  }
+
+  function writeCache(limit, etag, payload) {
+    try {
+      sessionStorage.setItem(cacheKey(limit), JSON.stringify({ etag: etag, payload: payload, storedAt: Date.now() }));
+    } catch (_) {}
+  }
+
+  function clearCache() {
+    try {
+      for (let index = sessionStorage.length - 1; index >= 0; index -= 1) {
+        const key = sessionStorage.key(index);
+        if (key && key.startsWith(CACHE_PREFIX)) sessionStorage.removeItem(key);
+      }
+    } catch (_) {}
+  }
+
+  function setLiveState(mode) {
+    liveBadge.className = 'badge ' + (mode === 'live' ? 'badge-live' : mode === 'connecting' || mode === 'reconnecting' ? 'badge-live-wait' : 'badge-live-off');
+    liveBadge.textContent = mode === 'live' ? 'AO VIVO' : mode === 'connecting' ? 'CONECTANDO' : mode === 'reconnecting' ? 'RECONECTANDO' : 'DESCONECTADO';
+  }
+
   function number(value) {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : 0;
@@ -359,14 +551,24 @@ export const ADMIN_READONLY_JS = `
     limitInput.disabled = busy;
   }
 
-  function disconnect(showMessage = true) {
+  function disconnect(showMessage) {
+    stopLiveStream();
+    clearInterval(state.fallbackTimer);
+    state.fallbackTimer = null;
     state.token = '';
+    state.etag = '';
+    state.revision = 0;
+    state.updatedAt = '';
+    state.validated = false;
+    state.lastOrderNumber = '';
     tokenInput.value = '';
     bodyNode.replaceChildren();
     dashboard.hidden = true;
     disconnectButton.disabled = true;
     refreshButton.disabled = true;
-    if (showMessage) setStatus('Sessão local encerrada. A chave foi removida da memória da página.', 'neutral');
+    clearCache();
+    setLiveState('off');
+    if (showMessage !== false) setStatus('Sessão local encerrada. A chave e o cache desta aba foram removidos.', 'neutral');
     tokenInput.focus();
   }
 })();

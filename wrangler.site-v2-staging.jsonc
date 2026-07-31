@@ -49,6 +49,10 @@
       {
         "name": "ORDER_LEDGER",
         "class_name": "OrderLedger"
+      },
+      {
+        "name": "ADMIN_SALES_CACHE",
+        "class_name": "AdminSalesCache"
       }
     ]
   },
@@ -56,6 +60,10 @@
     {
       "tag": "v1",
       "new_sqlite_classes": ["OrderLedger"]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["AdminSalesCache"]
     }
   ]
 }

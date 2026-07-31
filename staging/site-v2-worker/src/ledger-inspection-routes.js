@@ -1,20 +1,31 @@
 import { orderLedgerShardName } from '../../../src/v2/orders/order-number.mjs';
-
-const MAX_ADMIN_ORDERS = 100;
+import {
+  adminSalesCacheStub
+} from './admin-sales-cache-client.js';
+import {
+  adminOrderInspectionView,
+  adminSalesEtag,
+  adminSummary,
+  boundedAdminLimit,
+  buildAdminSalesSnapshot,
+  sliceAdminSalesSnapshot
+} from './admin-sales-cache-model.js';
 
 export async function handleRecentAdminOrders(request, env, requestId) {
   if (request.method !== 'GET') return methodNotAllowed(['GET'], requestId);
 
   const url = new URL(request.url);
-  const limit = boundedPositiveInteger(url.searchParams.get('limit'), 50, MAX_ADMIN_ORDERS);
-  const year = new Date().getUTCFullYear();
-  const shardDate = `${year}-01-01T00:00:00.000Z`;
-  const stub = ledgerStub(env, shardDate);
-  const [orders, ledgerHealth] = await Promise.all([
-    stub.listRecentOrders(limit),
-    stub.health()
-  ]);
-  const inspectedOrders = orders.map(orderInspectionView);
+  const limit = boundedAdminLimit(url.searchParams.get('limit'));
+  const cache = adminSalesCacheStub(env);
+  const snapshot = cache
+    ? await cache.getSnapshot(limit)
+    : await directSnapshot(env, limit);
+  const etag = adminSalesEtag(snapshot.revision, limit);
+  const headers = adminSnapshotHeaders(snapshot, etag);
+
+  if (request.headers.get('if-none-match') === etag) {
+    return new Response(null, { status: 304, headers });
+  }
 
   return json({
     ok: true,
@@ -23,10 +34,37 @@ export async function handleRecentAdminOrders(request, env, requestId) {
     environment: env.ENVIRONMENT || 'staging',
     catalog: 'synthetic-staging-only',
     catalogVersion: 9001,
-    year,
-    summary: adminSummary(inspectedOrders, ledgerHealth),
-    orders: inspectedOrders
-  });
+    year: snapshot.year,
+    revision: snapshot.revision,
+    updatedAt: snapshot.updatedAt,
+    generatedAt: snapshot.generatedAt,
+    verifiedAt: snapshot.verifiedAt,
+    cacheState: snapshot.cacheState,
+    summary: snapshot.summary,
+    orders: snapshot.orders
+  }, 200, headers);
+}
+
+export async function handleAdminOrdersStream(request, env, requestId) {
+  if (request.method !== 'GET') return methodNotAllowed(['GET'], requestId);
+  const cache = adminSalesCacheStub(env);
+  if (!cache) {
+    return json({ ok: false, error: 'ADMIN_SALES_CACHE_NOT_CONFIGURED', requestId }, 503);
+  }
+
+  const response = await cache.fetch(new Request('https://admin-sales-cache.internal/events', {
+    method: 'GET',
+    headers: {
+      Accept: 'text/event-stream',
+      'X-Request-Id': requestId
+    }
+  }));
+  const headers = new Headers(response.headers);
+  headers.set('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
+  headers.set('Cross-Origin-Resource-Policy', 'same-origin');
+  headers.set('Referrer-Policy', 'no-referrer');
+  headers.set('X-Content-Type-Options', 'nosniff');
+  return new Response(response.body, { status: response.status, headers });
 }
 
 export async function handleOutboxInspection(request, env, requestId) {
@@ -55,6 +93,29 @@ export async function handleOutboxInspection(request, env, requestId) {
   return json({ ok: true, requestId, events: events.map(outboxInspectionView) });
 }
 
+async function directSnapshot(env, limit) {
+  const year = new Date().getUTCFullYear();
+  const stub = ledgerStub(env, `${year}-01-01T00:00:00.000Z`);
+  const [orders, ledgerHealth] = await Promise.all([
+    stub.listRecentOrders(limit),
+    stub.health()
+  ]);
+  const generatedAt = new Date().toISOString();
+  const snapshot = buildAdminSalesSnapshot({
+    orders,
+    ledgerHealth,
+    meta: {
+      revision: Number(ledgerHealth.orderCount || 0),
+      updatedAt: orders[0]?.updatedAt || orders[0]?.createdAt || generatedAt,
+      orderNumber: orders[0]?.orderNumber || ''
+    },
+    generatedAt,
+    verifiedAt: generatedAt,
+    year
+  });
+  return sliceAdminSalesSnapshot(snapshot, limit, 'fallback');
+}
+
 function ledgerStub(env, createdAt) {
   if (!env?.ORDER_LEDGER || typeof env.ORDER_LEDGER.getByName !== 'function') {
     throw routeError('ORDER_LEDGER_NOT_CONFIGURED');
@@ -62,31 +123,12 @@ function ledgerStub(env, createdAt) {
   return env.ORDER_LEDGER.getByName(orderLedgerShardName(createdAt));
 }
 
-function orderInspectionView(order = {}) {
-  return {
-    schemaVersion: order.schemaVersion,
-    orderNumber: order.orderNumber,
-    orderCode: order.orderCode,
-    displayId: order.displayId,
-    status: order.status,
-    seller: order.seller,
-    customer: { redacted: true },
-    items: Array.isArray(order.items) ? order.items : [],
-    qty: order.qty,
-    pricing: order.pricing,
-    integrity: order.integrity,
-    source: order.source,
-    createdAt: order.createdAt,
-    updatedAt: order.updatedAt
-  };
-}
-
 function outboxInspectionView(event = {}) {
   const payload = event.eventType === 'order.created.v2'
     ? {
         schemaVersion: event.payload?.schemaVersion,
         orderNumber: event.payload?.orderNumber,
-        order: orderInspectionView(event.payload?.order)
+        order: adminOrderInspectionView(event.payload?.order)
       }
     : { redacted: true };
 
@@ -101,13 +143,15 @@ function outboxInspectionView(event = {}) {
   };
 }
 
-function adminSummary(orders, ledgerHealth = {}) {
+function adminSnapshotHeaders(snapshot, etag) {
   return {
-    orderCount: Number(ledgerHealth.orderCount || 0),
-    returned: orders.length,
-    totalValue: orders.reduce((sum, order) => sum + finiteNumber(order.pricing?.total), 0),
-    itemQuantity: orders.reduce((sum, order) => sum + finiteNumber(order.qty), 0),
-    pendingOutbox: Number(ledgerHealth.pendingOutbox || 0)
+    'Cache-Control': 'private, max-age=0, must-revalidate',
+    'ETag': etag,
+    'Vary': 'X-Staging-Token',
+    'X-Data-Revision': String(snapshot.revision || 0),
+    'X-Data-Updated-At': String(snapshot.updatedAt || ''),
+    'X-Data-Generated-At': String(snapshot.generatedAt || ''),
+    'X-Data-Verified-At': String(snapshot.verifiedAt || '')
   };
 }
 
@@ -117,11 +161,6 @@ function boundedPositiveInteger(value, fallback, maximum) {
   return Math.min(parsed, maximum);
 }
 
-function finiteNumber(value) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
 function methodNotAllowed(methods, requestId) {
   return json({ ok: false, error: 'METHOD_NOT_ALLOWED', requestId }, 405, {
     Allow: methods.join(', ')
@@ -129,18 +168,16 @@ function methodNotAllowed(methods, requestId) {
 }
 
 function json(payload, status = 200, extraHeaders = {}) {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-      'Cache-Control': 'no-store, max-age=0',
-      'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
-      'Cross-Origin-Resource-Policy': 'same-origin',
-      'X-Content-Type-Options': 'nosniff',
-      'Referrer-Policy': 'no-referrer',
-      ...extraHeaders
-    }
+  const headers = new Headers({
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store, max-age=0',
+    'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
+    'Cross-Origin-Resource-Policy': 'same-origin',
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'no-referrer'
   });
+  for (const [key, value] of Object.entries(extraHeaders)) headers.set(key, String(value));
+  return new Response(JSON.stringify(payload), { status, headers });
 }
 
 function routeError(code) {
@@ -148,3 +185,5 @@ function routeError(code) {
   error.code = code;
   return error;
 }
+
+export { adminSummary };
