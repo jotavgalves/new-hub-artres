@@ -2,16 +2,25 @@
   if (window.__CATALOG_VERSIONED_CACHE__) return;
   window.__CATALOG_VERSIONED_CACHE__ = true;
 
-  function loadScript(id, src){
-    if (document.getElementById(id)) return;
+  function loadScript(id, src, parent){
+    if (document.getElementById(id)) return null;
     var script = document.createElement('script');
     script.id = id;
     script.src = src;
-    script.defer = true;
-    document.head.appendChild(script);
+    script.async = false;
+    (parent || document.head).appendChild(script);
+    return script;
   }
 
-  var CACHE_SCHEMA = 'catalog-index-v2-bolinhas';
+  function loadProductionV2(){
+    if (document.getElementById('productionV2Script')) return;
+    var script = loadScript('productionV2Script','/assets/production-v2.js?v=20260731',document.body || document.head);
+    if (script) script.addEventListener('load',function(){
+      loadScript('productionV2CompatScript','/assets/production-v2-compat.js?v=20260731',document.body || document.head);
+    },{once:true});
+  }
+
+  var CACHE_SCHEMA = 'catalog-index-v3-products';
   var META_KEY = 'catalog-meta-version';
   var rawVersion = localStorage.getItem(META_KEY) || 'boot';
   var version = CACHE_SCHEMA + '-' + rawVersion;
@@ -54,6 +63,8 @@
 
   loadScript('catalogRuntimeSafeScript','/assets/catalog-runtime-safe.js?v=1');
   loadMeta();
+  if (document.readyState === 'complete') loadProductionV2();
+  else window.addEventListener('load', loadProductionV2, { once:true });
 
   try {
     var originalGetItem = Storage.prototype.getItem;
@@ -90,7 +101,7 @@
   window.fetch = function(input, init){
     try {
       var url = typeof input === 'string' ? new URL(input, location.origin) : new URL(input.url, location.origin);
-      if (url.pathname === '/api/drive') {
+      if (url.pathname === '/api/drive' || url.pathname === '/api/catalog-v2') {
         url.searchParams.set('cv', version);
         init = Object.assign({}, init || {}, { cache: 'default' });
         input = url.toString();
