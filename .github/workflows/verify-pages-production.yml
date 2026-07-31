@@ -1,0 +1,121 @@
+name: Verificar Pages oficial
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-pages-production.yml'
+      - 'assets/production-v2.js'
+      - 'assets/production-v2-compat.js'
+      - 'assets/catalog-cache-bust.js'
+      - 'assets/admin-products-v2.js'
+      - 'assets/admin-sales-cache-real.js'
+      - 'assets/admin-ui-fix.js'
+      - 'functions/api/catalog-v2.js'
+      - 'functions/api/commercial-config.js'
+      - 'functions/api/orders-v2.js'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-pages-production
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Site, admin e catálogos reais
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Aguardar publicação do Cloudflare Pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://new-hub-artres.pages.dev'
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error --location \
+              --max-time 20 \
+              "$BASE/assets/production-v2.js?v=20260731" \
+              | grep -q "__ARMAZEM_PRODUCTION_V2__"; then
+              echo "Asset produtivo disponível na tentativa $attempt."
+              exit 0
+            fi
+            echo "Aguardando Pages... tentativa $attempt/30"
+            sleep 10
+          done
+          echo 'O asset produtivo não ficou disponível dentro do prazo.' >&2
+          exit 1
+
+      - name: Validar configuração, raízes e catálogos
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://new-hub-artres.pages.dev'
+          curl --fail --silent --show-error --location --max-time 30 \
+            "$BASE/api/commercial-config?_verify=$(date +%s)" -o commercial.json
+          curl --fail --silent --show-error --location --max-time 30 \
+            "$BASE/api/catalog-v2?mode=themes&product=50x50&_verify=$(date +%s)" -o bolinhas.json
+          curl --fail --silent --show-error --location --max-time 30 \
+            "$BASE/api/catalog-v2?mode=themes&product=painel-150&_verify=$(date +%s)" -o painel.json
+          node <<'NODE'
+          const fs = require('node:fs');
+          const commercial = JSON.parse(fs.readFileSync('commercial.json', 'utf8'));
+          const bolinhas = JSON.parse(fs.readFileSync('bolinhas.json', 'utf8'));
+          const painel = JSON.parse(fs.readFileSync('painel.json', 'utf8'));
+          const roots = {
+            '50x50': '193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae',
+            'painel-150': '18x1qthD2RXAxRi2u-d7U3wpJLfpINU7-'
+          };
+          if (commercial.ok !== true) throw new Error('COMMERCIAL_CONFIG_NOT_OK');
+          for (const key of Object.keys(roots)) {
+            const product = commercial.config?.products?.[key];
+            if (!product) throw new Error(`PRODUCT_MISSING_${key}`);
+            if (commercial.config?.protectedRoots?.[key] !== roots[key]) {
+              throw new Error(`ROOT_MISMATCH_${key}`);
+            }
+            if (!(Number(product.unitPrice) > 0)) throw new Error(`PRICE_INVALID_${key}`);
+            if (!(Number(product.quantity?.minimum) > 0)) throw new Error(`MINIMUM_INVALID_${key}`);
+            if (!(Number(product.quantity?.step) > 0)) throw new Error(`STEP_INVALID_${key}`);
+            if (!(Number(product.quantity?.initial) >= Number(product.quantity?.minimum))) {
+              throw new Error(`INITIAL_INVALID_${key}`);
+            }
+          }
+          for (const [key, payload] of [['50x50', bolinhas], ['painel-150', painel]]) {
+            if (payload.ok !== true || payload.product !== key || payload.rootVerified !== true) {
+              throw new Error(`CATALOG_NOT_SCOPED_${key}`);
+            }
+            if (!Array.isArray(payload.folders)) throw new Error(`CATALOG_FOLDERS_INVALID_${key}`);
+            for (const folder of payload.folders) {
+              if (folder.catalogRootDriveId !== roots[key] || folder.productKey !== key || folder.rootVerified !== true) {
+                throw new Error(`CATALOG_ROOT_LEAK_${key}`);
+              }
+            }
+          }
+          console.log(JSON.stringify({
+            commercialVersion: commercial.config.version,
+            bolinhasThemes: bolinhas.folders.length,
+            painelThemes: painel.folders.length
+          }));
+          NODE
+
+      - name: Validar frontend e admin oficiais
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://new-hub-artres.pages.dev'
+          curl --fail --silent --show-error --location --max-time 30 "$BASE/" -o site.html
+          curl --fail --silent --show-error --location --max-time 30 "$BASE/adm/" -o admin.html
+          curl --fail --silent --show-error --location --max-time 30 "$BASE/assets/admin-products-v2.js?v=1" -o admin-products.js
+          curl --fail --silent --show-error --location --max-time 30 "$BASE/assets/admin-sales-cache-real.js?v=1" -o admin-cache.js
+          grep -q '/assets/catalog-cache-bust.js' site.html
+          grep -q '/assets/admin-ui-fix.js' admin.html
+          grep -q 'Painel 150 cm' admin-products.js
+          grep -q 'customers-indexed' admin-cache.js
+          grep -q 'orders-indexed' admin-cache.js
+          if grep -Eqi 'jvgacontato\.workers\.dev|synthetic-staging-only' site.html admin.html admin-products.js; then
+            echo 'Referência técnica de staging encontrada na produção.' >&2
+            exit 1
+          fi
+          echo 'Site e admin oficiais responderam com os assets esperados.'
