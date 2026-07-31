@@ -14,13 +14,26 @@ on:
       - 'functions/api/catalog-v2.js'
       - 'functions/api/commercial-config.js'
       - 'functions/api/orders-v2.js'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-pages-production.yml'
+      - 'assets/production-v2.js'
+      - 'assets/production-v2-compat.js'
+      - 'assets/catalog-cache-bust.js'
+      - 'assets/admin-products-v2.js'
+      - 'assets/admin-sales-cache-real.js'
+      - 'assets/admin-ui-fix.js'
+      - 'functions/api/catalog-v2.js'
+      - 'functions/api/commercial-config.js'
+      - 'functions/api/orders-v2.js'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: verify-pages-production
+  group: verify-pages-production-${{ github.event.pull_request.number || 'main' }}
   cancel-in-progress: true
 
 jobs:
@@ -38,9 +51,11 @@ jobs:
             if curl --fail --silent --show-error --location \
               --max-time 20 \
               "$BASE/assets/production-v2.js?v=20260731" \
-              | grep -q "__ARMAZEM_PRODUCTION_V2__"; then
-              echo "Asset produtivo disponível na tentativa $attempt."
-              exit 0
+              -o production-v2.js; then
+              if grep -q "__ARMAZEM_PRODUCTION_V2__" production-v2.js; then
+                echo "Asset produtivo disponível na tentativa $attempt."
+                exit 0
+              fi
             fi
             echo "Aguardando Pages... tentativa $attempt/30"
             sleep 10
