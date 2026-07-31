@@ -21,6 +21,7 @@ on:
       - 'tests/v2/run-staging-checkout-invalid-rejections-remote-smoke.mjs'
       - 'tests/v2/run-staging-checkout-protection-remote-smoke.mjs'
       - 'tests/v2/run-staging-public-checkout-remote-smoke.mjs'
+      - 'tests/v2/run-staging-admin-cache-remote-smoke.mjs'
       - '.github/workflows/deploy-site-v2-staging.yml'
       - '.github/workflows/catalog-v2-auto-accept.yml'
   workflow_dispatch:
