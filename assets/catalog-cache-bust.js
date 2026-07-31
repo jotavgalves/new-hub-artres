@@ -2,22 +2,22 @@
   if (window.__CATALOG_VERSIONED_CACHE__) return;
   window.__CATALOG_VERSIONED_CACHE__ = true;
 
-  function loadScript(id, src){
-    if (document.getElementById(id)) return;
+  function loadScript(id, src, parent){
+    if (document.getElementById(id)) return null;
     var script = document.createElement('script');
     script.id = id;
     script.src = src;
     script.async = false;
-    document.head.appendChild(script);
+    (parent || document.head).appendChild(script);
+    return script;
   }
 
   function loadProductionV2(){
     if (document.getElementById('productionV2Script')) return;
-    var script = document.createElement('script');
-    script.id = 'productionV2Script';
-    script.src = '/assets/production-v2.js?v=20260731';
-    script.async = false;
-    (document.body || document.head).appendChild(script);
+    var script = loadScript('productionV2Script','/assets/production-v2.js?v=20260731',document.body || document.head);
+    if (script) script.addEventListener('load',function(){
+      loadScript('productionV2CompatScript','/assets/production-v2-compat.js?v=20260731',document.body || document.head);
+    },{once:true});
   }
 
   var CACHE_SCHEMA = 'catalog-index-v3-products';
