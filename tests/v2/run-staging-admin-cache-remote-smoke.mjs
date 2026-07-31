@@ -18,14 +18,13 @@ assert(script.text.includes('/internal/v2/admin/orders/stream'), 'ADMIN_CACHE_ST
 assert(!script.text.includes('localStorage'), 'ADMIN_CACHE_LOCAL_STORAGE_PRESENT');
 
 const initial = await fetchSnapshot('', 'admin-cache-initial');
-assert(initial.response.status === 200, 'ADMIN_CACHE_INITIAL_STATUS_INVALID');
-assert(initial.payload?.ok === true && initial.payload?.readOnly === true, 'ADMIN_CACHE_INITIAL_PAYLOAD_INVALID');
-assert(Number.isInteger(initial.payload?.revision) && initial.payload.revision >= 0, 'ADMIN_CACHE_INITIAL_REVISION_INVALID');
+assertSnapshot(initial, 'ADMIN_CACHE_INITIAL');
 const initialEtag = initial.response.headers.get('etag');
 assert(initialEtag, 'ADMIN_CACHE_ETAG_MISSING');
 
-const notModified = await fetchSnapshot(initialEtag, 'admin-cache-not-modified');
-assert(notModified.response.status === 304, 'ADMIN_CACHE_304_NOT_RETURNED');
+const stable = await waitForStableNotModified(initial, initialEtag);
+const baseline = stable.snapshot;
+const baselineEtag = stable.etag;
 
 const abort = new AbortController();
 const streamResponse = await fetch(new URL('/internal/v2/admin/orders/stream', base), {
@@ -67,30 +66,65 @@ assert(created.payload?.action === 'CREATED', 'ADMIN_CACHE_CREATE_ACTION_INVALID
 
 const revisionEvent = await sse.next(8000);
 assert(revisionEvent.event === 'revision', 'ADMIN_CACHE_REVISION_EVENT_MISSING');
-assert(Number(revisionEvent.data?.revision) > Number(initial.payload.revision), 'ADMIN_CACHE_REVISION_NOT_ADVANCED');
+assert(Number(revisionEvent.data?.revision) > Number(baseline.payload.revision), 'ADMIN_CACHE_REVISION_NOT_ADVANCED');
 abort.abort();
 await sse.close();
 
-const updated = await fetchSnapshot(initialEtag, 'admin-cache-updated');
-assert(updated.response.status === 200, 'ADMIN_CACHE_UPDATED_STATUS_INVALID');
+const updated = await fetchSnapshot(baselineEtag, 'admin-cache-updated');
+assert(updated.response.status === 200, `ADMIN_CACHE_UPDATED_HTTP_${updated.response.status}`);
+assertSnapshot(updated, 'ADMIN_CACHE_UPDATED');
 assert(Number(updated.payload?.revision) >= Number(revisionEvent.data.revision), 'ADMIN_CACHE_UPDATED_REVISION_INVALID');
-assert(updated.payload?.summary?.orderCount >= initial.payload.summary.orderCount + 1, 'ADMIN_CACHE_ORDER_COUNT_NOT_UPDATED');
+assert(updated.payload?.summary?.orderCount >= baseline.payload.summary.orderCount + 1, 'ADMIN_CACHE_ORDER_COUNT_NOT_UPDATED');
 const updatedEtag = updated.response.headers.get('etag');
-assert(updatedEtag && updatedEtag !== initialEtag, 'ADMIN_CACHE_ETAG_NOT_CHANGED');
+assert(updatedEtag && updatedEtag !== baselineEtag, 'ADMIN_CACHE_ETAG_NOT_CHANGED');
 
 const updated304 = await fetchSnapshot(updatedEtag, 'admin-cache-updated-304');
-assert(updated304.response.status === 304, 'ADMIN_CACHE_UPDATED_304_NOT_RETURNED');
+assert(updated304.response.status === 304, `ADMIN_CACHE_UPDATED_304_HTTP_${updated304.response.status}`);
 
 console.log(JSON.stringify({
   ok: true,
-  initialRevision: initial.payload.revision,
+  initialRevision: baseline.payload.revision,
   updatedRevision: updated.payload.revision,
   etagChanged: true,
   notModifiedValidated: true,
+  propagationRevisionsAccepted: stable.propagationRevisions,
   liveEventValidated: true,
   sessionCacheAssetValidated: true,
   productionChanged: false
 }));
+
+async function waitForStableNotModified(startSnapshot, startEtag) {
+  let snapshot = startSnapshot;
+  let etag = startEtag;
+  let propagationRevisions = 0;
+
+  for (let attempt = 1; attempt <= 8; attempt += 1) {
+    const candidate = await fetchSnapshot(etag, `admin-cache-stable-${attempt}`);
+    if (candidate.response.status === 304) {
+      return { snapshot, etag, propagationRevisions };
+    }
+
+    assert(candidate.response.status === 200, `ADMIN_CACHE_STABILIZE_HTTP_${candidate.response.status}`);
+    assertSnapshot(candidate, 'ADMIN_CACHE_STABILIZE');
+    const candidateEtag = candidate.response.headers.get('etag');
+    assert(candidateEtag, 'ADMIN_CACHE_STABILIZE_ETAG_MISSING');
+    assert(Number(candidate.payload.revision) >= Number(snapshot.payload.revision), 'ADMIN_CACHE_STABILIZE_REVISION_REGRESSED');
+
+    snapshot = candidate;
+    etag = candidateEtag;
+    propagationRevisions += 1;
+    await delay(Math.min(1000, attempt * 150));
+  }
+
+  throw smokeError('ADMIN_CACHE_STABLE_304_TIMEOUT');
+}
+
+function assertSnapshot(result, prefix) {
+  assert(result.response.status === 200, `${prefix}_STATUS_INVALID`);
+  assert(result.payload?.ok === true && result.payload?.readOnly === true, `${prefix}_PAYLOAD_INVALID`);
+  assert(Number.isInteger(result.payload?.revision) && result.payload.revision >= 0, `${prefix}_REVISION_INVALID`);
+  assert(result.payload?.summary && Number.isInteger(result.payload.summary.orderCount), `${prefix}_SUMMARY_INVALID`);
+}
 
 async function fetchSnapshot(etag, label) {
   const headers = {};
@@ -193,6 +227,10 @@ async function withTimeout(promise, timeoutMs, code) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+function delay(milliseconds) {
+  return new Promise(resolve => setTimeout(resolve, milliseconds));
 }
 
 function normalizeOrigin(value) {
