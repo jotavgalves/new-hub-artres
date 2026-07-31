@@ -7,6 +7,7 @@ function publicFailureCode(error) {
 try {
   const invocation = encodeURIComponent(String(process.env.GITHUB_RUN_ATTEMPT || Date.now()));
   await import(`./run-staging-commercial-config-remote-smoke.mjs?invocation=${invocation}`);
+  await import(`./run-staging-admin-cache-remote-smoke.mjs?invocation=${invocation}`);
   await import(`./run-staging-synthetic-remote-smoke.mjs?invocation=${invocation}`);
 } catch (error) {
   console.error(publicFailureCode(error));
