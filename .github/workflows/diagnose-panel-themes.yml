@@ -37,6 +37,9 @@ jobs:
             "async function folderWithinRoot",
             "function internalCatalogName",
             "^codex\\s+test(?:e)?",
+            "supportsAllDrives: 'true'",
+            "includeItemsFromAllDrives: 'true'",
+            "if (!Array.isArray(live) || live.length === 0) return indexed;",
             "catalogRootDriveId: rootId",
             "rootVerified: true"
           ];

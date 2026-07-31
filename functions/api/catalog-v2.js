@@ -124,7 +124,7 @@ async function themeFolders(env, config, productKey, rootId) {
   if (productKey !== 'painel-150') return indexed;
 
   const live = await liveThemeFolders(env, config, productKey, rootId);
-  if (live === null) return indexed;
+  if (!Array.isArray(live) || live.length === 0) return indexed;
   sortFolders(live);
   return live;
 }
@@ -148,7 +148,7 @@ async function productFolders(env, input) {
   if (input.productKey !== 'painel-150') return indexed;
 
   const live = await liveFolderChildren(env, input.folderId, input.rootId);
-  if (live === null) return indexed;
+  if (!live || (!live.folders.length && !live.images.length)) return indexed;
 
   const cards = live.folders
     .map(file => folderFromDrive(file, input.config, 'folder', input.productKey, input.rootId, input.folderId))
@@ -205,7 +205,7 @@ async function itemRows(env, input) {
   }
 
   const live = await liveFolderChildren(env, parentId, input.rootId);
-  if (live === null) return indexedItems.sort(sortItems);
+  if (!live || live.images.length === 0) return indexedItems.sort(sortItems);
 
   const indexedById = new Map(indexedItems.map(item => [String(item.id || ''), item]));
   return live.images
@@ -263,7 +263,7 @@ async function searchFolders(env, query, config, productKey, rootId) {
   if (productKey !== 'painel-150') return sortSearchFolders(indexed);
 
   const liveThemes = await liveThemeFolders(env, config, productKey, rootId);
-  if (liveThemes === null) return sortSearchFolders(indexed);
+  if (!Array.isArray(liveThemes) || liveThemes.length === 0) return sortSearchFolders(indexed);
   const needle = norm(query);
   return sortSearchFolders(liveThemes.filter(folder => norm(folder.name).includes(needle)));
 }
@@ -320,6 +320,7 @@ async function getDriveFile(env, fileId) {
   if (!key) return null;
   const params = new URLSearchParams({
     key,
+    supportsAllDrives: 'true',
     fields: 'id,name,mimeType,parents,trashed'
   });
   const response = await fetch(`${DRIVE_API}/${encodeURIComponent(fileId)}?${params}`, {
@@ -338,6 +339,8 @@ async function listDriveChildren(env, folderId) {
   do {
     const params = new URLSearchParams({
       key,
+      supportsAllDrives: 'true',
+      includeItemsFromAllDrives: 'true',
       q: `'${folderId}' in parents and trashed = false`,
       fields: 'nextPageToken,files(id,name,mimeType,webViewLink,modifiedTime,parents,trashed)',
       pageSize: '1000',
