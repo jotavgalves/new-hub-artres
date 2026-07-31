@@ -7,11 +7,20 @@
     var script = document.createElement('script');
     script.id = id;
     script.src = src;
-    script.defer = true;
+    script.async = false;
     document.head.appendChild(script);
   }
 
-  var CACHE_SCHEMA = 'catalog-index-v2-bolinhas';
+  function loadProductionV2(){
+    if (document.getElementById('productionV2Script')) return;
+    var script = document.createElement('script');
+    script.id = 'productionV2Script';
+    script.src = '/assets/production-v2.js?v=20260731';
+    script.async = false;
+    (document.body || document.head).appendChild(script);
+  }
+
+  var CACHE_SCHEMA = 'catalog-index-v3-products';
   var META_KEY = 'catalog-meta-version';
   var rawVersion = localStorage.getItem(META_KEY) || 'boot';
   var version = CACHE_SCHEMA + '-' + rawVersion;
@@ -54,6 +63,8 @@
 
   loadScript('catalogRuntimeSafeScript','/assets/catalog-runtime-safe.js?v=1');
   loadMeta();
+  if (document.readyState === 'complete') loadProductionV2();
+  else window.addEventListener('load', loadProductionV2, { once:true });
 
   try {
     var originalGetItem = Storage.prototype.getItem;
@@ -90,7 +101,7 @@
   window.fetch = function(input, init){
     try {
       var url = typeof input === 'string' ? new URL(input, location.origin) : new URL(input.url, location.origin);
-      if (url.pathname === '/api/drive') {
+      if (url.pathname === '/api/drive' || url.pathname === '/api/catalog-v2') {
         url.searchParams.set('cv', version);
         init = Object.assign({}, init || {}, { cache: 'default' });
         input = url.toString();
