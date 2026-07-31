@@ -1,7 +1,7 @@
 import { orderLedgerShardName } from '../../../src/v2/orders/order-number.mjs';
 import {
   adminSalesCacheStub
-} from './admin-sales-cache-do.js';
+} from './admin-sales-cache-client.js';
 import {
   adminOrderInspectionView,
   adminSalesEtag,
