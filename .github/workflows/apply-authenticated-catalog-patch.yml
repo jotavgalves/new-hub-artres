@@ -1,0 +1,44 @@
+name: Aplicar integração do catálogo autenticado
+
+on:
+  push:
+    branches: [feat/authenticated-drive-indexer]
+    paths:
+      - '.github/workflows/apply-authenticated-catalog-patch.yml'
+      - 'scripts/catalog-v2/apply-authenticated-catalog-patch.py'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/authenticated-drive-indexer
+          fetch-depth: 0
+      - name: Aplicar patch controlado
+        run: python scripts/catalog-v2/apply-authenticated-catalog-patch.py
+      - name: Validar sintaxe e testes novos
+        run: |
+          set -euo pipefail
+          node --check functions/api/catalog-v2.js
+          node --check functions/api/_accepted_catalog.js
+          node --check functions/api/catalog-image.js
+          node --check scripts/catalog-v2/service-account-google-drive.mjs
+          node --check scripts/catalog-v2/private-drive-catalog-indexer.mjs
+          node --check scripts/catalog-v2/publish-private-drive-catalog-v2.mjs
+          node --test tests/catalog-v2/service-account-google-drive.test.mjs tests/catalog-v2/private-drive-catalog-indexer.test.mjs tests/catalog-v2/publish-private-drive-catalog-v2.test.mjs
+      - name: Registrar arquivos corrigidos
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo 'Patch já aplicado.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add functions/api/catalog-v2.js scripts/catalog-v2/service-account-google-drive.mjs
+          git commit -m 'Conecta rota pública ao catálogo autenticado'
+          git push origin HEAD:feat/authenticated-drive-indexer
