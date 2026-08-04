@@ -44,6 +44,36 @@ jobs:
           node -e "const j=JSON.parse(process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON); if(!j.client_email||!j.private_key) process.exit(1)"
           grep -Fq "urn:ietf:params:oauth:grant-type:jwt-bearer" scripts/catalog-v2/service-account-google-drive.mjs
 
+      - name: Verificar acesso às duas raízes
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {
+            createGoogleDriveClient,
+            exchangeServiceAccountToken
+          } from './scripts/catalog-v2/service-account-google-drive.mjs';
+
+          const token = await exchangeServiceAccountToken(process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON);
+          const drive = createGoogleDriveClient({ accessToken: token.accessToken, maxRetries: 0 });
+          const roots = [
+            ['BOLINHAS', '193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae'],
+            ['PAINEL_150', '18x1qthD2RXAxRi2u-d7U3wpJLfpINU7-']
+          ];
+          let failed = false;
+          for (const [label, id] of roots) {
+            try {
+              const file = await drive.getFile(id);
+              console.log(`ROOT_${label}=OK:${file.mimeType}`);
+            } catch (error) {
+              failed = true;
+              const code = String(error?.code || error?.message || 'UNKNOWN').replace(/[^A-Z0-9_]/gi, '_').slice(0, 100);
+              console.log(`ROOT_${label}=ERROR:${code}`);
+            }
+          }
+          if (failed) process.exit(1);
+          NODE
+
       - name: Executar testes do catálogo autenticado
         run: node --test tests/catalog-v2/*.test.mjs tests/v2/catalog-accepted-route.test.mjs
 
