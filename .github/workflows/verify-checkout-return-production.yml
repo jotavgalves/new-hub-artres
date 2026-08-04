@@ -1,0 +1,67 @@
+name: Verificar retorno do checkout no site oficial
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-checkout-return-production.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Confirmar recuperação publicada
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://new-hub-artres.pages.dev'
+          for attempt in $(seq 1 36); do
+            stamp="$(date +%s)"
+            curl --fail --silent --show-error --location --max-time 25 \
+              "$BASE/assets/catalog-cache-bust.js?_verify=$stamp" -o loader.js || true
+            curl --fail --silent --show-error --location --max-time 25 \
+              "$BASE/assets/checkout-v3-recovery.js?v=20260804-2&_verify=$stamp" -o recovery.js || true
+
+            if grep -q 'checkout-v3-recovery.js?v=20260804-2' loader.js 2>/dev/null \
+              && grep -q "__ARMAZEM_CHECKOUT_V3_RECOVERY__='2026-08-04.2'" recovery.js 2>/dev/null \
+              && grep -q "window.open(url,'_blank')" recovery.js 2>/dev/null \
+              && grep -q 'restoreRecentSuccess' recovery.js 2>/dev/null \
+              && grep -q 'checkoutV3Recovered' recovery.js 2>/dev/null \
+              && grep -q 'localStorage.setItem(DURABLE_KEY' recovery.js 2>/dev/null \
+              && ! grep -Eq 'location\.(assign|replace)\(' recovery.js 2>/dev/null; then
+              echo "Recuperação oficial confirmada na tentativa $attempt."
+              break
+            fi
+
+            if [ "$attempt" -eq 36 ]; then
+              echo 'A recuperação corrigida não apareceu no domínio oficial.' >&2
+              exit 1
+            fi
+            sleep 10
+          done
+
+      - name: Confirmar API sem criar pedido
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://new-hub-artres.pages.dev'
+          status="$(curl --silent --show-error --location --max-time 25 \
+            -o response.json -w '%{http_code}' \
+            -X POST "$BASE/api/orders-v2" \
+            -H 'Accept: application/json' \
+            -H 'Content-Type: application/json' \
+            --data '{"items":[]}')"
+          test "$status" = '400'
+          node <<'NODE'
+          const fs = require('node:fs');
+          const payload = JSON.parse(fs.readFileSync('response.json', 'utf8'));
+          if (payload.ok !== false || payload.error !== 'CARRINHO_VAZIO_OU_INVALIDO') {
+            throw new Error('ORDER_API_CONTRACT_UNEXPECTED');
+          }
+          NODE
+          echo 'API oficial respondeu corretamente sem registrar pedido.'
