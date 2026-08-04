@@ -76,7 +76,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Registrar mudança ou falha na issue
-        if: always()
+        if: always() && (steps.publish.outputs.configured != 'false' || steps.publish.outcome != 'success')
         env:
           GITHUB_TOKEN: ${{ github.token }}
           PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
