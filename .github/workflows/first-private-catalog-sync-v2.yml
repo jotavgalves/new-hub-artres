@@ -1,0 +1,62 @@
+name: Primeira sincronização privada corrigida
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/first-private-catalog-sync-v2.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    if: github.head_ref == 'ops/first-private-catalog-sync-v2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: site-v2-staging
+    env:
+      GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON }}
+      SUPABASE_V2_URL: https://kueklnkznwpbobqwugns.supabase.co
+      SUPABASE_V2_STAGING_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_V2_STAGING_SERVICE_ROLE_KEY }}
+      CATALOG_REPORT_FILE: /tmp/catalog-v2-private-drive-report.json
+      CATALOG_INSPECTION_MAX_FOLDERS: '10000'
+      CATALOG_INSPECTION_MAX_ARTWORKS: '250000'
+      CATALOG_INSPECTION_MAX_DEPTH: '30'
+      CATALOG_FORCE_ACCEPT: 'true'
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+
+      - name: Validar segredos e grant type
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON"
+          test -n "$SUPABASE_V2_STAGING_SERVICE_ROLE_KEY"
+          node -e "const j=JSON.parse(process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON); if(!j.client_email||!j.private_key) process.exit(1)"
+          grep -Fq "urn:ietf:params:oauth:grant-type:jwt-bearer" scripts/catalog-v2/service-account-google-drive.mjs
+
+      - name: Executar testes do catálogo autenticado
+        run: node --test tests/catalog-v2/*.test.mjs tests/v2/catalog-accepted-route.test.mjs
+
+      - name: Ler os Drives e publicar versão atômica
+        run: node scripts/catalog-v2/publish-private-drive-catalog-v2.mjs
+
+      - name: Publicar relatório privado
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: first-private-catalog-sync-v2-report
+          path: |
+            ${{ env.CATALOG_REPORT_FILE }}
+            ${{ env.CATALOG_REPORT_FILE }}.details.json
+          retention-days: 3
+          if-no-files-found: ignore
