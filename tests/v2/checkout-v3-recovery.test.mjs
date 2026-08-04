@@ -12,7 +12,16 @@ test('segunda tentativa do checkout é marcada para recuperação no servidor', 
   assert.match(source, /Idempotency-Key/);
   assert.match(source, /count>1/);
   assert.match(source, /X-Checkout-Retry/);
-  assert.doesNotMatch(source, /localStorage/);
+});
+
+test('recuperação local persiste somente confirmação e URL segura, sem dados do cliente', async () => {
+  const source = await read('assets/checkout-v3-recovery.js');
+  assert.match(source, /sessionStorage\.setItem\(SESSION_KEY/);
+  assert.match(source, /localStorage\.setItem\(DURABLE_KEY/);
+  assert.match(source, /orderNumber/);
+  assert.match(source, /validSellerUrl/);
+  assert.doesNotMatch(source, /customerName|customerWhatsapp|CUSTOMER_DRAFT/);
+  assert.doesNotMatch(source, /localStorage\.setItem\([^,]+,\s*(?:name|whatsapp|customer)/);
 });
 
 test('servidor procura pedido já salvo somente em uma repetição identificada', async () => {
@@ -32,7 +41,7 @@ test('carregador inicia a recuperação somente depois do checkout visual', asyn
   const source = await read('assets/catalog-cache-bust.js');
   assert.doesNotThrow(() => new Function(source));
   assert.match(source, /checkout-v3\.js\?v=20260804-1/);
-  assert.match(source, /checkout-v3-recovery\.js\?v=20260804-1/);
+  assert.match(source, /checkout-v3-recovery\.js\?v=20260804-2/);
   assert.match(source, /script\.addEventListener\('load',loadCheckoutRecovery/);
   assert.match(source, /compat\.addEventListener\('load',loadCheckoutV3/);
 });

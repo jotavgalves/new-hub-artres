@@ -17,7 +17,7 @@
   }
 
   function loadCheckoutRecovery(){
-    var script = loadScript('checkoutV3RecoveryScript','/assets/checkout-v3-recovery.js?v=20260804-1',document.body || document.head);
+    var script = loadScript('checkoutV3RecoveryScript','/assets/checkout-v3-recovery.js?v=20260804-2',document.body || document.head);
     if (script) script.addEventListener('load',loadCheckoutUi,{once:true});
     else loadCheckoutUi();
   }
