@@ -10,6 +10,14 @@ const env = {
   SUPABASE_V2_URL: 'https://example.supabase.co',
   SUPABASE_V2_SERVICE_ROLE_KEY: 'x'.repeat(64)
 };
+const commercial = {
+  label: 'Painel 150 cm',
+  unitPrice: 59.9,
+  minimum: 1,
+  step: 1,
+  initial: 2,
+  enabled: true
+};
 
 async function withFetch(handler, callback) {
   const previous = globalThis.fetch;
@@ -17,7 +25,7 @@ async function withFetch(handler, callback) {
   try { return await callback(); } finally { globalThis.fetch = previous; }
 }
 
-test('remove metadados privados das respostas públicas', async () => {
+test('remove metadados privados e aplica o preço administrativo atual', async () => {
   const payload = {
     ok: true,
     mode: 'items',
@@ -38,7 +46,8 @@ test('remove metadados privados das respostas públicas', async () => {
   }), () => tryAcceptedCatalogRequest(env, {
     mode: 'items',
     productKey: 'painel-150',
-    folderId: 'catalog-panel150-product:folder-123'
+    folderId: 'catalog-panel150-product:folder-123',
+    commercial
   }));
 
   assert.equal(result.items.length, 1);
@@ -50,6 +59,41 @@ test('remove metadados privados das respostas públicas', async () => {
   }
   assert.equal(result.items[0].image, '/api/catalog-image?id=public-item');
   assert.equal(result.items[0].rootVerified, true);
+  assert.equal(result.items[0].unitPrice, 59.9);
+  assert.equal(result.items[0].price, 59.9);
+  assert.equal(result.items[0].productName, 'Painel 150 cm');
+  assert.equal(result.items[0].size, '150X150');
+});
+
+test('produto virtual recebe mínimo, incremento e quantidade inicial do admin', async () => {
+  const payload = {
+    ok: true,
+    mode: 'products',
+    folders: [{
+      id: 'catalog-panel150-product:folder-123',
+      kind: 'product',
+      type: 'product',
+      name: 'Painel 150 cm'
+    }]
+  };
+  const result = await withFetch(async () => new Response(JSON.stringify(payload), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' }
+  }), () => tryAcceptedCatalogRequest(env, {
+    mode: 'products',
+    productKey: 'painel-150',
+    folderId: 'folder-123',
+    commercial
+  }));
+
+  const product = result.folders[0];
+  assert.equal(product.unitPrice, 59.9);
+  assert.equal(product.price, 59.9);
+  assert.equal(product.priceLabel, 'R$ 59,90 cada');
+  assert.equal(product.minQty, 1);
+  assert.equal(product.step, 1);
+  assert.equal(product.initialQuantity, 2);
+  assert.equal(product.checkoutEnabled, true);
 });
 
 test('resolvedor de imagem retorna apenas o ID aceito e metadados necessários', async () => {
