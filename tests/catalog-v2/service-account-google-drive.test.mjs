@@ -44,7 +44,7 @@ test('usa o grant type oficial na troca do token', async () => {
       });
     }
   });
-  assert.match(body, /grant_type=urn%3Aietf%3Aparams%3Aoauth2%3Agrant-type%3Ajwt-bearer/);
+  assert.match(body, /grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer/);
   assert.equal(result.accessToken.length, 40);
 });
 
