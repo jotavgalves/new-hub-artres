@@ -1,17 +1,23 @@
 name: Aplicar integração do catálogo autenticado
 
 on:
-  push:
-    branches: [feat/authenticated-drive-indexer]
+  pull_request:
+    branches: [main]
     paths:
       - '.github/workflows/apply-authenticated-catalog-patch.yml'
       - 'scripts/catalog-v2/apply-authenticated-catalog-patch.py'
+      - 'functions/api/_accepted_catalog.js'
+      - 'functions/api/catalog-image.js'
+      - 'scripts/catalog-v2/service-account-google-drive.mjs'
+      - 'scripts/catalog-v2/private-drive-catalog-indexer.mjs'
+      - 'scripts/catalog-v2/publish-private-drive-catalog-v2.mjs'
 
 permissions:
   contents: write
 
 jobs:
   patch:
+    if: github.head_ref == 'feat/authenticated-drive-indexer'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
