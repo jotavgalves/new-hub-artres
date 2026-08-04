@@ -1,3 +1,4 @@
+import { tryAcceptedCatalogRequest } from './_accepted_catalog.js';
 import { loadConfig } from './_config.js';
 import {
   baseIndexParams,
@@ -43,6 +44,16 @@ export async function onRequestGet(context) {
       url.searchParams.get('code') ||
       url.searchParams.get('imageId') || ''
     ).trim();
+
+    const accepted = await tryAcceptedCatalogRequest(context.env, {
+      mode,
+      productKey,
+      folderId,
+      query,
+      limit: 80,
+      commercial
+    });
+    if (accepted) return json(accepted, 200, 15);
 
     if (mode === 'themes') {
       const folders = await themeFolders(context.env, config, productKey, rootId);
@@ -540,7 +551,11 @@ function productConfig(config, productKey) {
 function catalogFolderId(value, fallback) {
   const text = String(value || '').trim();
   if (!text) return fallback;
-  if (text.startsWith('catalog-v2-product:')) return text;
+  if ([
+    'catalog-v2-product:',
+    'catalog-bolinhas-product:',
+    'catalog-panel150-product:'
+  ].some(prefix => text.startsWith(prefix))) return text;
   return /^[A-Za-z0-9_-]{5,200}$/.test(text) ? text : fallback;
 }
 

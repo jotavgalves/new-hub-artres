@@ -4,10 +4,13 @@ import { pathToFileURL } from 'node:url';
 export function buildCatalogAutoAcceptComment(input = {}) {
   const report = sanitizeReport(input.report || {});
   const outcome = sanitizeOutcome(input.outcome);
+  const authenticated = report.source === 'google-drive-service-account';
   const lines = [
     '### Aceitação automática do catálogo V2',
     '',
     `- Resultado do workflow: **${outcome}**`,
+    `- Fonte: **${authenticated ? 'Google Drive autenticado' : 'catálogo legado'}**`,
+    `- Integração configurada: **${report.configured ? 'sim' : 'não'}**`,
     `- Ação: **${report.action || 'FAILED'}**`,
     `- Versão: **${report.catalogVersion}**`,
     `- Aceita no staging: **${report.accepted ? 'sim' : 'não'}**`,
@@ -18,14 +21,22 @@ export function buildCatalogAutoAcceptComment(input = {}) {
     `- Pastas: ${report.folderCount}`,
     `- Produtos virtuais: ${report.productCount}`,
     `- Artes únicas: ${report.artworkCount}`,
+    `- Ocorrências no relatório: ${report.issueCount}`,
     `- Linhas rejeitadas: ${report.rejectedCount}`,
     `- Diferenças de contrato: ${report.differenceCount}`
   ];
+  for (const root of report.roots) {
+    lines.push(`- Produto \`${root.productKey}\`: ${root.themesPublished} tema(s), ${root.foldersPublished} pasta(s), ${root.artworksPublished} arte(s)`);
+  }
+  if (report.issueSummary.length) {
+    lines.push('', 'Principais ocorrências sanitizadas:');
+    for (const item of report.issueSummary.slice(0, 10)) lines.push(`- \`${item.code}\`: ${item.count}`);
+  }
   if (report.error) lines.push('', `- Código de erro sanitizado: \`${report.error}\``);
-  lines.push(
-    '',
-    'A versão anterior permanece ativa quando a validação ou a carga falha. Nenhum ID de arquivo, URL de arte, token ou dado de cliente foi incluído.'
-  );
+  if (report.action === 'NOT_CONFIGURED') {
+    lines.push('', 'A sincronização autenticada está instalada, mas o segredo da conta de serviço ainda não foi cadastrado. A versão anterior permaneceu ativa.');
+  }
+  lines.push('', 'A versão anterior permanece ativa quando a validação ou a carga falha. Nenhum ID de arquivo, URL de arte, token, e-mail de serviço, chave privada ou dado de cliente foi incluído.');
   return lines.join('\n');
 }
 
@@ -67,20 +78,50 @@ export async function postCatalogAutoAcceptStatus(options = {}) {
 
 function sanitizeReport(input) {
   return Object.freeze({
-    action: ['ACCEPTED', 'REPLAY', 'UNCHANGED'].includes(input.action) ? input.action : '',
+    source: input.source === 'google-drive-service-account' ? input.source : 'legacy-public-catalog',
+    configured: input.configured !== false,
+    action: ['ACCEPTED', 'REPLAY', 'UNCHANGED', 'NOT_CONFIGURED'].includes(input.action) ? input.action : '',
     catalogVersion: nonNegativeInteger(input.catalogVersion),
     accepted: input.accepted === true,
     changed: input.changed === true,
     traversalComplete: input.traversalComplete === true,
     routeCount: nonNegativeInteger(input.routeCount),
-    themeCount: nonNegativeInteger(input.themeCount),
+    themeCount: nonNegativeInteger(input.themeCount || rootsTotal(input.roots, 'themesPublished')),
     folderCount: nonNegativeInteger(input.folderCount),
-    productCount: nonNegativeInteger(input.productCount),
+    productCount: nonNegativeInteger(input.productCount || (Array.isArray(input.roots) ? input.roots.length : 0)),
     artworkCount: nonNegativeInteger(input.artworkCount),
+    issueCount: nonNegativeInteger(input.issueCount),
+    issueSummary: sanitizeIssueSummary(input.issueSummary),
+    roots: sanitizeRoots(input.roots),
     rejectedCount: nonNegativeInteger(input.rejectedCount),
     differenceCount: nonNegativeInteger(input.differenceCount),
     error: publicCode(input.error)
   });
+}
+
+function sanitizeIssueSummary(value) {
+  return (Array.isArray(value) ? value : []).slice(0, 20).map(item => ({
+    code: publicCode(item?.code) || 'CATALOG_SCAN_ISSUE',
+    count: nonNegativeInteger(item?.count)
+  })).filter(item => item.count > 0);
+}
+
+function sanitizeRoots(value) {
+  return (Array.isArray(value) ? value : []).slice(0, 10).map(root => ({
+    productKey: safeToken(root?.productKey),
+    themesPublished: nonNegativeInteger(root?.themesPublished),
+    foldersPublished: nonNegativeInteger(root?.foldersPublished),
+    artworksPublished: nonNegativeInteger(root?.artworksPublished)
+  }));
+}
+
+function rootsTotal(roots, field) {
+  return (Array.isArray(roots) ? roots : []).reduce((sum, root) => sum + nonNegativeInteger(root && root[field]), 0);
+}
+
+function safeToken(value) {
+  const text = String(value || '').trim();
+  return /^[A-Za-z0-9._-]{1,160}$/.test(text) ? text : 'produto';
 }
 
 function sanitizeOutcome(value) {

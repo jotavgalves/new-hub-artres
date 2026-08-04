@@ -7,12 +7,16 @@ on:
       - '.github/workflows/diagnose-catalog-images.yml'
       - 'functions/api/catalog-v2.js'
       - 'functions/api/_catalog_index.js'
+      - 'functions/api/_accepted_catalog.js'
+      - 'functions/api/catalog-image.js'
   push:
     branches: [main]
     paths:
       - '.github/workflows/diagnose-catalog-images.yml'
       - 'functions/api/catalog-v2.js'
       - 'functions/api/_catalog_index.js'
+      - 'functions/api/_accepted_catalog.js'
+      - 'functions/api/catalog-image.js'
 
 permissions:
   contents: read
@@ -28,12 +32,46 @@ jobs:
         run: |
           set -euo pipefail
           node --check functions/api/catalog-v2.js
+          node --check functions/api/_accepted_catalog.js
+          node --check functions/api/catalog-image.js
           node <<'NODE'
           const fs = require('node:fs');
           const source = fs.readFileSync('functions/api/catalog-v2.js', 'utf8');
-          if (!source.includes("const folderId = catalogFolderId(url.searchParams.get('folderId'), rootId);")) throw new Error('CATALOG_FOLDER_ID_NOT_PRESERVED');
-          if (!source.includes("if (text.startsWith('catalog-v2-product:')) return text;")) throw new Error('VIRTUAL_PRODUCT_ID_NOT_PRESERVED');
-          if (source.includes("const folderId = cleanLabel(url.searchParams.get('folderId') || rootId);")) throw new Error('OPAQUE_ID_STILL_NORMALIZED_AS_LABEL');
+          if (!source.includes("const folderId = catalogFolderId(url.searchParams.get('folderId'), rootId);")) {
+            throw new Error('CATALOG_FOLDER_ID_NOT_PRESERVED');
+          }
+          for (const prefix of [
+            'catalog-v2-product:',
+            'catalog-bolinhas-product:',
+            'catalog-panel150-product:'
+          ]) {
+            if (!source.includes(`'${prefix}'`)) throw new Error(`VIRTUAL_PREFIX_NOT_PRESERVED_${prefix}`);
+          }
+          if (!source.includes(".some(prefix => text.startsWith(prefix))")) {
+            throw new Error('VIRTUAL_PRODUCT_ID_CHECK_MISSING');
+          }
+          if (source.includes("const folderId = cleanLabel(url.searchParams.get('folderId') || rootId);")) {
+            throw new Error('OPAQUE_ID_STILL_NORMALIZED_AS_LABEL');
+          }
+          const catalogFolderId = (value, fallback) => {
+            const text = String(value || '').trim();
+            if (!text) return fallback;
+            if ([
+              'catalog-v2-product:',
+              'catalog-bolinhas-product:',
+              'catalog-panel150-product:'
+            ].some(prefix => text.startsWith(prefix))) return text;
+            return /^[A-Za-z0-9_-]{5,200}$/.test(text) ? text : fallback;
+          };
+          const values = [
+            '18x1qthD2RXAxRi2u-d7U3wpJLfpINU7-',
+            'catalog-v2-product:1PLFdLh0GMVMfHUd8dCod3tsludtUlhJ2:50x50',
+            'catalog-bolinhas-product:1PLFdLh0GMVMfHUd8dCod3tsludtUlhJ2',
+            'catalog-panel150-product:1PLFdLh0GMVMfHUd8dCod3tsludtUlhJ2'
+          ];
+          for (const value of values) {
+            if (catalogFolderId(value, 'fallback') !== value) throw new Error(`OPAQUE_ID_CHANGED_${value}`);
+          }
           NODE
 
   production:
