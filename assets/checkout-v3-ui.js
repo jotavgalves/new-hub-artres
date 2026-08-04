@@ -5,6 +5,9 @@
 
   var preview=null;
   var scheduled=false;
+  var CTA_TEXT='Enviar para a vendedora';
+  var CTA_LABEL='Enviar pedido para a vendedora';
+  var CTA_NOTE='Se o aplicativo não abrir, toque novamente em “Enviar para a vendedora”. O pedido não será registrado outra vez.';
 
   installStyle();
   applyEnhancements();
@@ -44,11 +47,11 @@
 
   function applyEnhancements(){
     document.querySelectorAll('.checkoutV3OpenWa').forEach(function(link){
-      link.textContent='Enviar para a vendedora';
-      link.setAttribute('aria-label','Enviar pedido para a vendedora');
+      if(link.textContent!==CTA_TEXT)link.textContent=CTA_TEXT;
+      if(link.getAttribute('aria-label')!==CTA_LABEL)link.setAttribute('aria-label',CTA_LABEL);
       var success=link.closest('.checkoutV3Success');
       var note=success&&success.querySelector('.checkoutV3Note');
-      if(note)note.textContent='Se o aplicativo não abrir, toque novamente em “Enviar para a vendedora”. O pedido não será registrado outra vez.';
+      if(note&&note.textContent!==CTA_NOTE)note.textContent=CTA_NOTE;
     });
 
     document.querySelectorAll('.checkoutV3Item').forEach(function(item){
