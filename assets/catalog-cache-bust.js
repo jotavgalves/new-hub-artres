@@ -13,7 +13,7 @@
   }
 
   function loadCheckoutFlow(){
-    loadScript('productionCheckoutFlowScript','/assets/production-checkout-flow.js?v=20260804-1',document.body || document.head);
+    loadScript('productionCheckoutFlowScript','/assets/production-checkout-flow-v2.js?v=20260804-2',document.body || document.head);
   }
 
   function loadProductionV2(){
