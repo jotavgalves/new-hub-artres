@@ -2,6 +2,14 @@ const ROOTS = Object.freeze({
   '50x50': '193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae',
   'painel-150': '18x1qthD2RXAxRi2u-d7U3wpJLfpINU7-'
 });
+const PRIVATE_PAYLOAD_FIELDS = Object.freeze([
+  'sourceDriveFileId',
+  'shortcutTargetId',
+  'driveUrl',
+  'sourceName',
+  'checksum',
+  'thumbnailLink'
+]);
 
 export async function tryAcceptedCatalogRequest(env, input = {}) {
   if (String(env && env.USE_AUTHENTICATED_CATALOG_V2 || '').trim().toLowerCase() !== 'true') return null;
@@ -59,14 +67,11 @@ export async function acceptedImageSource(env, driveFileId) {
   if (!payload || payload.ok !== true || payload.rootVerified !== true) {
     throw new Error('AUTHENTICATED_CATALOG_IMAGE_SOURCE_INVALID');
   }
-  const sourceDriveFileId = driveIdentity(payload.sourceDriveFileId);
   return Object.freeze({
     driveFileId: driveIdentity(payload.driveFileId),
-    sourceDriveFileId,
     mimeType: safeText(payload.mimeType, 300),
     extension: safeText(payload.extension, 20).toLowerCase(),
     modifiedTime: safeText(payload.modifiedTime, 100),
-    checksum: safeText(payload.checksum, 160),
     pdfPreview: payload.pdfPreview === true,
     productKey: canonicalProduct(payload.productKey),
     catalogRootDriveId: driveIdentity(payload.catalogRootDriveId),
@@ -139,15 +144,24 @@ function normalizeAcceptedPayload(payload, productKey) {
   value.rootVerified = true;
   for (const key of ['folders', 'results', 'items']) {
     if (!Array.isArray(value[key])) continue;
-    value[key] = value[key].map(entry => ({
-      ...(entry && typeof entry === 'object' ? entry : {}),
-      product: productKey,
-      productKey,
-      catalogRootDriveId: ROOTS[productKey],
-      rootVerified: true
-    }));
+    value[key] = value[key].map(entry => {
+      const clean = scrubPrivateFields(entry);
+      return {
+        ...clean,
+        product: productKey,
+        productKey,
+        catalogRootDriveId: ROOTS[productKey],
+        rootVerified: true
+      };
+    });
   }
   return value;
+}
+
+function scrubPrivateFields(entry) {
+  const clean = entry && typeof entry === 'object' && !Array.isArray(entry) ? { ...entry } : {};
+  for (const key of PRIVATE_PAYLOAD_FIELDS) delete clean[key];
+  return clean;
 }
 
 function canonicalProduct(value) {
