@@ -78,7 +78,10 @@ begin
     'extension', coalesce(v_item.payload ->> 'extension', ''),
     'modifiedTime', coalesce(v_item.payload ->> 'modifiedTime', ''),
     'checksum', coalesce(v_item.payload ->> 'checksum', ''),
-    'pdfPreview', coalesce((v_item.payload ->> 'pdfPreview')::boolean, false),
+    'pdfPreview', case
+      when lower(coalesce(v_item.payload ->> 'pdfPreview', 'false')) in ('true', '1') then true
+      else false
+    end,
     'productKey', v_item.product_key,
     'catalogRootDriveId', v_root,
     'rootVerified', true
