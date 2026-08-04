@@ -1,0 +1,37 @@
+name: Verificar ajustes do checkout no site oficial
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/verify-checkout-seller-ui-production.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: CTA e conferência clicável publicados
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Aguardar os novos assets no domínio oficial
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://new-hub-artres.pages.dev'
+          for attempt in $(seq 1 72); do
+            loader="$(curl -fsSL --max-time 15 "$base/assets/catalog-cache-bust.js?_verify=$attempt" || true)"
+            ui="$(curl -fsSL --max-time 15 "$base/assets/checkout-v3-ui.js?_verify=$attempt" || true)"
+            if printf '%s' "$loader" | grep -q 'checkoutV3UiScript' \
+              && printf '%s' "$loader" | grep -q 'checkout-v3-ui.js?v=20260804-1' \
+              && printf '%s' "$ui" | grep -q 'Enviar para a vendedora' \
+              && printf '%s' "$ui" | grep -q 'checkoutV3ArtPreview' \
+              && printf '%s' "$ui" | grep -q "setAttribute('tabindex','0')"; then
+              echo 'Checkout atualizado confirmado no domínio oficial.'
+              exit 0
+            fi
+            sleep 5
+          done
+          echo 'Os ajustes do checkout não apareceram no domínio oficial dentro do limite.' >&2
+          exit 1
