@@ -507,8 +507,7 @@ function folderPayload(folder) {
     artworkCount: folder.descendantArtworkCount,
     liveDrive: false,
     authenticatedIndex: true,
-    isShortcut: folder.isShortcut,
-    shortcutTargetId: folder.shortcutTargetId || undefined
+    isShortcut: folder.isShortcut
   });
 }
 
@@ -536,13 +535,11 @@ function productCardPayload(folder) {
 }
 
 function itemPayload(artwork) {
-  const imageVersion = artwork.checksum || artwork.modifiedTime || '1';
+  const imageVersion = artwork.modifiedTime || '1';
   const image = `/api/catalog-image?id=${encodeURIComponent(artwork.id)}&v=${encodeURIComponent(imageVersion)}`;
   return Object.freeze({
     id: artwork.id,
     driveFileId: artwork.id,
-    sourceDriveFileId: artwork.sourceDriveFileId,
-    shortcutTargetId: artwork.shortcutTargetId || undefined,
     isShortcut: artwork.isShortcut,
     code: artwork.code,
     sortId: artwork.sortId,
@@ -557,10 +554,8 @@ function itemPayload(artwork) {
     catalogRootDriveId: artwork.rootDriveId,
     rootVerified: true,
     originalName: artwork.originalName,
-    sourceName: artwork.sourceName,
     mimeType: artwork.mimeType,
     extension: artwork.extension,
-    driveUrl: artwork.webViewLink,
     image,
     thumbnail: image,
     size: artwork.sizeKey,
@@ -568,7 +563,6 @@ function itemPayload(artwork) {
     details: { size: artwork.sizeKey },
     modifiedTime: artwork.modifiedTime,
     sizeBytes: artwork.sizeBytes,
-    checksum: artwork.checksum,
     pdfPreview: artwork.pdfPreview,
     authenticatedIndex: true
   });
