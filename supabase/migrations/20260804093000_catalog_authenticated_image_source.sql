@@ -73,11 +73,9 @@ begin
     'ok', true,
     'catalogVersion', v_version,
     'driveFileId', v_item.drive_file_id,
-    'sourceDriveFileId', coalesce(nullif(v_item.payload ->> 'sourceDriveFileId', ''), v_item.drive_file_id),
     'mimeType', coalesce(v_item.payload ->> 'mimeType', ''),
     'extension', coalesce(v_item.payload ->> 'extension', ''),
     'modifiedTime', coalesce(v_item.payload ->> 'modifiedTime', ''),
-    'checksum', coalesce(v_item.payload ->> 'checksum', ''),
     'pdfPreview', case
       when lower(coalesce(v_item.payload ->> 'pdfPreview', 'false')) in ('true', '1') then true
       else false
