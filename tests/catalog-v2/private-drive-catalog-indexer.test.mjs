@@ -8,6 +8,14 @@ import {
 
 const FOLDER = 'application/vnd.google-apps.folder';
 const SHORTCUT = 'application/vnd.google-apps.shortcut';
+const PRIVATE_FIELDS = [
+  'sourceDriveFileId',
+  'shortcutTargetId',
+  'driveUrl',
+  'sourceName',
+  'checksum',
+  'thumbnailLink'
+];
 
 function file(id, name, mimeType, extra = {}) {
   return {
@@ -87,10 +95,14 @@ test('varre recursivamente, resolve atalhos e remove temas vazios', async () => 
   const themeNames = result.folders.filter(row => row.depth === 1).map(row => row.name).sort();
   assert.deepEqual(themeNames, ['ANA CASTELA', 'FESTA']);
   assert.equal(result.items.length, 5);
-  assert.ok(result.items.some(row => row.driveFileId === 'shortcut-art' && row.payload.sourceDriveFileId === 'target-art'));
+  const shortcut = result.items.find(row => row.driveFileId === 'shortcut-art');
+  assert.equal(shortcut?.payload.isShortcut, true);
   assert.ok(result.items.some(row => row.driveFileId === 'target-nested-art'));
   assert.ok(result.items.every(row => row.payload.image.startsWith('/api/catalog-image?id=')));
   assert.ok(result.items.every(row => row.payload.rootVerified === true));
+  for (const row of [...result.folders, ...result.items]) {
+    for (const field of PRIVATE_FIELDS) assert.equal(Object.hasOwn(row.payload, field), false, `${field} leaked`);
+  }
   assert.ok(result.report.issueSummary.some(item => item.code === 'EMPTY_THEME_NOT_PUBLISHED'));
   assert.ok(result.report.issueSummary.some(item => item.code === 'DESIGN_SOURCE_NOT_PUBLICABLE'));
   assert.ok(result.report.issueSummary.some(item => item.code === 'INTERNAL_TEST_ENTRY_SKIPPED'));
