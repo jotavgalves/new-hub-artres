@@ -12,8 +12,14 @@
     return script;
   }
 
+  function loadCheckoutUi(){
+    loadScript('checkoutV3UiScript','/assets/checkout-v3-ui.js?v=20260804-1',document.body || document.head);
+  }
+
   function loadCheckoutRecovery(){
-    loadScript('checkoutV3RecoveryScript','/assets/checkout-v3-recovery.js?v=20260804-1',document.body || document.head);
+    var script = loadScript('checkoutV3RecoveryScript','/assets/checkout-v3-recovery.js?v=20260804-1',document.body || document.head);
+    if (script) script.addEventListener('load',loadCheckoutUi,{once:true});
+    else loadCheckoutUi();
   }
 
   function loadCheckoutV3(){
