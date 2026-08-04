@@ -12,11 +12,17 @@
     return script;
   }
 
+  function loadCheckoutFlow(){
+    loadScript('productionCheckoutFlowScript','/assets/production-checkout-flow.js?v=20260804-1',document.body || document.head);
+  }
+
   function loadProductionV2(){
     if (document.getElementById('productionV2Script')) return;
     var script = loadScript('productionV2Script','/assets/production-v2.js?v=20260731',document.body || document.head);
     if (script) script.addEventListener('load',function(){
-      loadScript('productionV2CompatScript','/assets/production-v2-compat.js?v=20260731-2',document.body || document.head);
+      var compat = loadScript('productionV2CompatScript','/assets/production-v2-compat.js?v=20260731-2',document.body || document.head);
+      if (compat) compat.addEventListener('load',loadCheckoutFlow,{once:true});
+      else loadCheckoutFlow();
     },{once:true});
   }
 
