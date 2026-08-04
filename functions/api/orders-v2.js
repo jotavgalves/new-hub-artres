@@ -1,5 +1,6 @@
 import { json, loadConfig } from './_config.js';
 import { baseIndexParams, readIndex } from './_catalog_index.js';
+import { orderFromRow, supabaseReady, supabaseRequest } from './_supabase.js';
 import { onRequestPost as createLegacyOrder } from './orders.js';
 
 const ROOTS = Object.freeze({
@@ -7,6 +8,8 @@ const ROOTS = Object.freeze({
   'painel-150': '18x1qthD2RXAxRi2u-d7U3wpJLfpINU7-'
 });
 const IDEMPOTENCY_PREFIX = 'ORDER_V2_IDEMPOTENCY:';
+const ORDER_PREFIX = 'ORDER:';
+const MAX_RECOVERY_ORDERS = 500;
 
 export async function onRequestPost(context) {
   try {
@@ -17,7 +20,22 @@ export async function onRequestPost(context) {
     const idempotencyKey = cleanIdempotency(context.request.headers.get('Idempotency-Key'));
     if (idempotencyKey && context.env.CONFIG_KV) {
       const replay = await context.env.CONFIG_KV.get(IDEMPOTENCY_PREFIX + idempotencyKey, 'json').catch(() => null);
-      if (replay && replay.ok && replay.order) return json({ ...replay, action: 'REPLAY' }, 200);
+      if (replay && replay.ok && replay.orderNumber) return json({ ...replay, action: 'REPLAY' }, 200);
+    }
+
+    if (idempotencyKey) {
+      const recoveredOrder = await findOrderByCheckoutReference(context.env, idempotencyKey);
+      if (recoveredOrder) {
+        const recovered = acceptedFromOrder(recoveredOrder, 'REPLAY', true);
+        if (context.env.CONFIG_KV) {
+          await context.env.CONFIG_KV.put(
+            IDEMPOTENCY_PREFIX + idempotencyKey,
+            JSON.stringify(recovered),
+            { expirationTtl: 86400 }
+          ).catch(() => {});
+        }
+        return json(recovered, 200);
+      }
     }
 
     const { config } = await loadConfig(context.env);
@@ -64,9 +82,12 @@ export async function onRequestPost(context) {
     const seller = normalizeSeller(body.seller);
     if (!seller.id || !seller.label) return json({ ok: false, error: 'VENDEDORA_OBRIGATORIA' }, 400);
 
+    const storedCustomer = idempotencyKey
+      ? { ...customer, checkoutReference: idempotencyKey }
+      : customer;
     const payload = {
       seller,
-      customer,
+      customer: storedCustomer,
       items: orderItems,
       qty: orderItems.reduce((sum, item) => sum + item.qty, 0),
       totals: {
@@ -93,15 +114,10 @@ export async function onRequestPost(context) {
       return json({ ok: false, error: result.error || 'ORDER_SAVE_FAILED' }, response.status || 500);
     }
 
-    const accepted = {
-      ok: true,
-      saved: true,
-      action: 'CREATED',
-      orderNumber: result.order.orderNumber || result.order.id,
-      order: result.order,
-      totals: payload.totals,
-      commercialVersion: commercial.version
-    };
+    const accepted = acceptedFromOrder({
+      ...result.order,
+      customer
+    }, 'CREATED', false, commercial.version, payload.totals);
     if (idempotencyKey && context.env.CONFIG_KV) {
       await context.env.CONFIG_KV.put(
         IDEMPOTENCY_PREFIX + idempotencyKey,
@@ -113,10 +129,53 @@ export async function onRequestPost(context) {
   } catch (error) {
     return json({
       ok: false,
-      error: 'ORDER_V2_FAILED',
-      detail: String(error && error.message || error || '').slice(0, 220)
+      error: 'ORDER_V2_FAILED'
     }, 500);
   }
+}
+
+async function findOrderByCheckoutReference(env, reference) {
+  const wanted = cleanIdempotency(reference);
+  if (!wanted) return null;
+
+  if (supabaseReady(env)) {
+    try {
+      const rows = await supabaseRequest(
+        env,
+        `/orders?select=*,order_items(*)&deleted_at=is.null&raw->customer->>checkoutReference=eq.${encodeURIComponent(wanted)}&order=created_at.desc&limit=1`
+      );
+      if (Array.isArray(rows) && rows[0]) return orderFromRow(rows[0]);
+    } catch (_) {}
+  }
+
+  if (!env.CONFIG_KV) return null;
+  try {
+    const listed = await env.CONFIG_KV.list({ prefix: ORDER_PREFIX, limit: MAX_RECOVERY_ORDERS });
+    for (const entry of listed.keys || []) {
+      const order = await env.CONFIG_KV.get(entry.name, 'json').catch(() => null);
+      if (cleanIdempotency(order?.customer?.checkoutReference) === wanted) return order;
+    }
+  } catch (_) {}
+  return null;
+}
+
+function acceptedFromOrder(order, action, recovered = false, commercialVersion, authoritativeTotals) {
+  const orderNumber = String(order?.orderNumber || order?.orderCode || order?.displayId || order?.id || '').trim();
+  const customer = normalizeCustomer(order?.customer);
+  const publicOrder = {
+    ...order,
+    customer
+  };
+  return {
+    ok: true,
+    saved: true,
+    action,
+    recovered,
+    orderNumber,
+    order: publicOrder,
+    totals: authoritativeTotals || order?.totals || {},
+    commercialVersion: positive(commercialVersion, order?.checkoutIntegrity?.snapshotVersion, 1)
+  };
 }
 
 async function catalogRows(env, ids) {
