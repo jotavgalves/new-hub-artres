@@ -2,12 +2,47 @@ from pathlib import Path
 
 service = Path('scripts/catalog-v2/service-account-google-drive.mjs')
 text = service.read_text(encoding='utf-8')
-wrong = "grant_type: 'urn:ietf:params:oauth-type:jwt-bearer'.replace('oauth-type', 'oauth-grant-type'),"
-right = "grant_type: 'urn:ietf:params:oauth2:grant-type:jwt-bearer',"
-if wrong in text:
-    text = text.replace(wrong, right, 1)
-elif right not in text:
-    raise SystemExit('SERVICE_ACCOUNT_GRANT_TYPE_TARGET_NOT_FOUND')
+
+replacements = [
+    (
+        "const clientEmail = String(parsed.client_email || '').trim();",
+        "const clientEmail = String(parsed.client_email || parsed.clientEmail || '').trim();",
+        'service account email aliases',
+    ),
+    (
+        "const privateKey = String(parsed.private_key || '').replace(/\\\\n/g, '\\n').trim();",
+        "const privateKey = String(parsed.private_key || parsed.privateKey || '').replace(/\\\\n/g, '\\n').trim();",
+        'service account private key aliases',
+    ),
+    (
+        "const tokenUri = String(parsed.token_uri || GOOGLE_TOKEN_URL).trim();",
+        "const tokenUri = String(parsed.token_uri || parsed.tokenUri || GOOGLE_TOKEN_URL).trim();",
+        'service account token URI aliases',
+    ),
+    (
+        "projectId: safeText(parsed.project_id, 200),",
+        "projectId: safeText(parsed.project_id || parsed.projectId, 200),",
+        'service account project aliases',
+    ),
+    (
+        "privateKeyId: safeText(parsed.private_key_id, 200)",
+        "privateKeyId: safeText(parsed.private_key_id || parsed.privateKeyId, 200)",
+        'service account key ID aliases',
+    ),
+    (
+        "grant_type: 'urn:ietf:params:oauth-type:jwt-bearer'.replace('oauth-type', 'oauth-grant-type'),",
+        "grant_type: 'urn:ietf:params:oauth2:grant-type:jwt-bearer',",
+        'OAuth JWT grant type',
+    ),
+]
+
+for old, new, label in replacements:
+    if new in text:
+        continue
+    if old not in text:
+        raise SystemExit(f'SERVICE_ACCOUNT_PATCH_TARGET_NOT_FOUND: {label}')
+    text = text.replace(old, new, 1)
+
 service.write_text(text, encoding='utf-8')
 
 route = Path('functions/api/catalog-v2.js')
