@@ -1,0 +1,46 @@
+name: Remover metadados privados do índice
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/apply-private-payload-hardening.yml'
+      - 'scripts/catalog-v2/apply-private-payload-hardening.py'
+      - 'scripts/catalog-v2/private-drive-catalog-indexer.mjs'
+      - 'tests/catalog-v2/private-drive-catalog-indexer.test.mjs'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.head_ref == 'feat/authenticated-drive-indexer'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/authenticated-drive-indexer
+          fetch-depth: 0
+      - name: Aplicar saneamento do payload
+        run: python scripts/catalog-v2/apply-private-payload-hardening.py
+      - name: Validar saneamento e testes
+        run: |
+          set -euo pipefail
+          node --check scripts/catalog-v2/private-drive-catalog-indexer.mjs
+          node --test tests/catalog-v2/private-drive-catalog-indexer.test.mjs
+          if grep -A45 'function itemPayload' scripts/catalog-v2/private-drive-catalog-indexer.mjs | grep -Eq 'sourceDriveFileId|shortcutTargetId|driveUrl|sourceName|checksum|thumbnailLink'; then
+            echo 'Metadado privado ainda presente no itemPayload.' >&2
+            exit 1
+          fi
+      - name: Registrar saneamento
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo 'Saneamento já aplicado.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add scripts/catalog-v2/private-drive-catalog-indexer.mjs
+          git commit -m 'Remove metadados privados do payload aceito'
+          git push origin HEAD:feat/authenticated-drive-indexer
