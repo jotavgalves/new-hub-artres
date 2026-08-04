@@ -34,7 +34,7 @@ export async function tryAcceptedCatalogRequest(env, input = {}) {
           p_product_key: productKey,
           p_root_drive_id: ROOTS[productKey]
         };
-    return normalizeAcceptedPayload(await rpc(config, name, body), productKey);
+    return normalizeAcceptedPayload(await rpc(config, name, body), productKey, input.commercial);
   }
 
   if (['search', 'globalSearch', 'folderSearch'].includes(mode)) {
@@ -54,7 +54,7 @@ export async function tryAcceptedCatalogRequest(env, input = {}) {
           p_product_key: productKey,
           p_root_drive_id: ROOTS[productKey]
         };
-    return normalizeAcceptedPayload(await rpc(config, name, body), productKey);
+    return normalizeAcceptedPayload(await rpc(config, name, body), productKey, input.commercial);
   }
   return null;
 }
@@ -135,7 +135,7 @@ async function rpc(config, name, body) {
   }
 }
 
-function normalizeAcceptedPayload(payload, productKey) {
+function normalizeAcceptedPayload(payload, productKey, commercial) {
   const value = payload && typeof payload === 'object' && !Array.isArray(payload) ? structuredClone(payload) : {};
   value.ok = value.ok !== false;
   value.product = productKey;
@@ -145,7 +145,7 @@ function normalizeAcceptedPayload(payload, productKey) {
   for (const key of ['folders', 'results', 'items']) {
     if (!Array.isArray(value[key])) continue;
     value[key] = value[key].map(entry => {
-      const clean = scrubPrivateFields(entry);
+      const clean = enrichCommercial(scrubPrivateFields(entry), key, commercial, productKey);
       return {
         ...clean,
         product: productKey,
@@ -162,6 +162,64 @@ function scrubPrivateFields(entry) {
   const clean = entry && typeof entry === 'object' && !Array.isArray(entry) ? { ...entry } : {};
   for (const key of PRIVATE_PAYLOAD_FIELDS) delete clean[key];
   return clean;
+}
+
+function enrichCommercial(entry, collectionKey, commercial, productKey) {
+  const config = normalizeCommercial(commercial, productKey);
+  const clean = { ...entry };
+  clean.productName = config.label;
+  clean.productLabel = config.label;
+  if (collectionKey === 'items') {
+    clean.unitPrice = config.unitPrice;
+    clean.price = config.unitPrice;
+    clean.size = config.sizeKey;
+    clean.sizeKey = config.sizeKey;
+    clean.details = { ...(clean.details && typeof clean.details === 'object' ? clean.details : {}), size: config.sizeKey };
+  }
+  if (clean.kind === 'product' || clean.type === 'product') {
+    clean.name = config.label;
+    clean.rawName = config.label;
+    clean.label = config.label;
+    clean.unitPrice = config.unitPrice;
+    clean.price = config.unitPrice;
+    clean.priceLabel = `${moneyBR(config.unitPrice)} cada`;
+    clean.minQty = config.minimum;
+    clean.step = config.step;
+    clean.initialQuantity = config.initial;
+    clean.checkoutEnabled = config.enabled;
+  }
+  return clean;
+}
+
+function normalizeCommercial(value, productKey) {
+  const raw = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const defaults = productKey === '50x50'
+    ? { label: 'Bolinhas 50x50', unitPrice: 0, minimum: 6, step: 2, initial: 6, enabled: false, sizeKey: '50X50' }
+    : { label: 'Painel 150 cm', unitPrice: 0, minimum: 1, step: 1, initial: 1, enabled: false, sizeKey: '150X150' };
+  const unitPrice = nonNegativeNumber(raw.unitPrice, defaults.unitPrice);
+  return {
+    label: safeText(raw.label, 200) || defaults.label,
+    unitPrice,
+    minimum: positiveNumber(raw.minimum, defaults.minimum),
+    step: positiveNumber(raw.step, defaults.step),
+    initial: positiveNumber(raw.initial, defaults.initial),
+    enabled: raw.enabled !== false && unitPrice > 0,
+    sizeKey: defaults.sizeKey
+  };
+}
+
+function moneyBR(value) {
+  return Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function positiveNumber(value, fallback) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function nonNegativeNumber(value, fallback) {
+  const parsed = Number(String(value ?? '').replace(',', '.'));
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed * 100) / 100 : fallback;
 }
 
 function canonicalProduct(value) {

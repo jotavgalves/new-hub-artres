@@ -50,7 +50,8 @@ export async function onRequestGet(context) {
       productKey,
       folderId,
       query,
-      limit: 80
+      limit: 80,
+      commercial
     });
     if (accepted) return json(accepted, 200, 15);
 
