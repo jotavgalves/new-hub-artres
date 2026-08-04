@@ -1,0 +1,108 @@
+name: Verificar catálogo autenticado em produção
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-authenticated-catalog-production.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    if: github.head_ref == 'ops/verify-authenticated-catalog-production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Validar catálogo e miniatura no domínio oficial
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          const base = 'https://new-hub-artres.pages.dev';
+          const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+          async function catalog(params) {
+            const url = new URL('/api/catalog-v2', base);
+            for (const [key, value] of Object.entries(params)) {
+              if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, String(value));
+            }
+            url.searchParams.set('_verify', String(Date.now()));
+            const response = await fetch(url, { headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' } });
+            const text = await response.text();
+            let payload = {};
+            try { payload = text ? JSON.parse(text) : {}; } catch (_) {}
+            if (!response.ok || payload.ok === false) {
+              throw new Error(`CATALOG_HTTP_${response.status}_${String(payload.error || payload.detail || 'FAILED').replace(/[^A-Z0-9_]/gi, '_').slice(0, 80)}`);
+            }
+            return payload;
+          }
+
+          async function findFirstItem(theme) {
+            const queue = [{ id: theme.id, name: theme.name, depth: 0 }];
+            const visited = new Set();
+            while (queue.length) {
+              const current = queue.shift();
+              if (!current || visited.has(current.id) || current.depth > 8) continue;
+              visited.add(current.id);
+              const products = await catalog({
+                mode: 'products',
+                product: 'painel-150',
+                folderId: current.id,
+                theme: theme.name
+              });
+              for (const entry of Array.isArray(products.folders) ? products.folders : []) {
+                if (entry && entry.kind === 'folder') {
+                  queue.push({ id: entry.id, name: entry.name, depth: current.depth + 1 });
+                  continue;
+                }
+                const items = await catalog({
+                  mode: 'items',
+                  product: 'painel-150',
+                  folderId: entry.id,
+                  theme: theme.name,
+                  productName: entry.rawName || entry.name || entry.productName || ''
+                });
+                if (Array.isArray(items.items) && items.items.length) return items.items[0];
+              }
+            }
+            return null;
+          }
+
+          let lastError = null;
+          for (let attempt = 1; attempt <= 30; attempt += 1) {
+            try {
+              const themes = await catalog({ mode: 'themes', product: 'painel-150' });
+              const folders = Array.isArray(themes.folders) ? themes.folders : [];
+              const names = folders.map(item => String(item && item.name || ''));
+              if (names.some(name => /CODEX\s+TESTE/i.test(name))) throw new Error('CODEX_TEST_THEME_STILL_VISIBLE');
+              const ana = folders.find(item => /ANA\s+CASTELA/i.test(String(item && item.name || '')));
+              if (!ana) throw new Error(`ANA_CASTELA_NOT_VISIBLE_ATTEMPT_${attempt}`);
+              const item = await findFirstItem(ana);
+              if (!item || !item.image) throw new Error('ANA_CASTELA_ITEM_NOT_FOUND');
+              const imageUrl = new URL(String(item.image), base);
+              const image = await fetch(imageUrl, { headers: { Accept: 'image/avif,image/webp,image/png,image/jpeg,*/*', 'Cache-Control': 'no-cache' } });
+              const type = String(image.headers.get('content-type') || '').toLowerCase();
+              if (!image.ok || !type.startsWith('image/')) throw new Error(`ANA_CASTELA_IMAGE_${image.status}_${type || 'NO_TYPE'}`);
+              const bytes = new Uint8Array(await image.arrayBuffer());
+              if (bytes.byteLength < 100) throw new Error('ANA_CASTELA_IMAGE_TOO_SMALL');
+              console.log(JSON.stringify({
+                ok: true,
+                themeCount: folders.length,
+                anaCastela: ana.name,
+                artworkCode: item.code || '',
+                imageStatus: image.status,
+                imageType: type,
+                imageBytes: bytes.byteLength,
+                catalogVersion: themes.catalogVersion || themes.version || null,
+                rootVerified: themes.rootVerified === true
+              }));
+              process.exit(0);
+            } catch (error) {
+              lastError = error;
+              console.log(`attempt=${attempt} status=${String(error && error.message || error).replace(/[^A-Z0-9_\-]/gi, '_').slice(0, 140)}`);
+              if (attempt < 30) await wait(10000);
+            }
+          }
+          throw lastError || new Error('PRODUCTION_VERIFICATION_FAILED');
+          NODE
