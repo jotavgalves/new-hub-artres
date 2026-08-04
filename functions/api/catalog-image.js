@@ -3,6 +3,8 @@ import { acceptedCatalogEnabled, acceptedImageSource } from './_accepted_catalog
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
 const DRIVE_FILES = 'https://www.googleapis.com/drive/v3/files';
+const FOLDER_MIME = 'application/vnd.google-apps.folder';
+const SHORTCUT_MIME = 'application/vnd.google-apps.shortcut';
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 let tokenCache = null;
 
@@ -21,8 +23,9 @@ export async function onRequestGet(context) {
     }
 
     const accessToken = await serviceAccountAccessToken(context.env);
-    const response = await fetchDriveImage(source, accessToken);
-    const output = await safeImageResponse(response, source);
+    const media = await resolveDriveMedia(source.driveFileId, accessToken);
+    const response = await fetchDriveImage(source, media, accessToken);
+    const output = await safeImageResponse(response, source, media);
     if (cache) context.waitUntil(cache.put(cacheKey, output.clone()));
     return output;
   } catch (error) {
@@ -34,32 +37,62 @@ export async function onRequestGet(context) {
   }
 }
 
-async function fetchDriveImage(source, accessToken) {
-  if (needsRenderedThumbnail(source)) {
-    const params = new URLSearchParams({
-      supportsAllDrives: 'true',
-      fields: 'id,mimeType,thumbnailLink,modifiedTime,size'
-    });
-    const metadata = await googleJson(`${DRIVE_FILES}/${encodeURIComponent(source.sourceDriveFileId)}?${params}`, accessToken);
-    const thumbnailLink = String(metadata.thumbnailLink || '').trim();
+async function resolveDriveMedia(catalogDriveFileId, accessToken) {
+  const entry = await getDriveMetadata(catalogDriveFileId, accessToken);
+  if (entry.mimeType !== SHORTCUT_MIME) {
+    if (entry.mimeType === FOLDER_MIME) throw imageError('CATALOG_IMAGE_TARGET_IS_FOLDER');
+    return entry;
+  }
+  const targetId = driveIdentity(entry.shortcutDetails && entry.shortcutDetails.targetId);
+  const target = await getDriveMetadata(targetId, accessToken);
+  if (target.mimeType === FOLDER_MIME || target.mimeType === SHORTCUT_MIME) {
+    throw imageError('CATALOG_IMAGE_SHORTCUT_TARGET_INVALID');
+  }
+  return target;
+}
+
+async function getDriveMetadata(fileId, accessToken) {
+  const params = new URLSearchParams({
+    supportsAllDrives: 'true',
+    fields: 'id,mimeType,thumbnailLink,modifiedTime,size,md5Checksum,shortcutDetails(targetId,targetMimeType)'
+  });
+  const payload = await googleJson(`${DRIVE_FILES}/${encodeURIComponent(fileId)}?${params}`, accessToken);
+  return {
+    id: driveIdentity(payload.id),
+    mimeType: safeText(payload.mimeType, 300),
+    thumbnailLink: safeHttpsUrl(payload.thumbnailLink),
+    modifiedTime: safeText(payload.modifiedTime, 100),
+    size: nonNegativeInteger(payload.size),
+    md5Checksum: safeHex(payload.md5Checksum),
+    shortcutDetails: payload.shortcutDetails && typeof payload.shortcutDetails === 'object'
+      ? {
+          targetId: String(payload.shortcutDetails.targetId || '').trim(),
+          targetMimeType: safeText(payload.shortcutDetails.targetMimeType, 300)
+        }
+      : null
+  };
+}
+
+async function fetchDriveImage(source, media, accessToken) {
+  if (needsRenderedThumbnail(source, media)) {
+    const thumbnailLink = String(media.thumbnailLink || '').trim();
     if (!thumbnailLink.startsWith('https://')) throw imageError('CATALOG_IMAGE_THUMBNAIL_UNAVAILABLE');
     const rendered = thumbnailLink.replace(/=s\d+(?:-[a-z])?$/i, '=s1600');
-    return googleFetch(rendered, accessToken);
+    return googleFetch(rendered, accessToken, 'image/avif,image/webp,image/png,image/jpeg,*/*');
   }
   const params = new URLSearchParams({ alt: 'media', supportsAllDrives: 'true' });
-  return googleFetch(`${DRIVE_FILES}/${encodeURIComponent(source.sourceDriveFileId)}?${params}`, accessToken);
+  return googleFetch(`${DRIVE_FILES}/${encodeURIComponent(media.id)}?${params}`, accessToken, 'image/avif,image/webp,image/png,image/jpeg,*/*');
 }
 
 async function googleJson(url, accessToken) {
-  const response = await googleFetch(url, accessToken);
+  const response = await googleFetch(url, accessToken, 'application/json');
   const text = await response.text();
   let payload;
   try { payload = text ? JSON.parse(text) : {}; } catch (_) { throw imageError('GOOGLE_DRIVE_METADATA_JSON_INVALID'); }
-  if (!response.ok) throw imageError(googleError(payload, `GOOGLE_DRIVE_METADATA_${response.status}`));
   return payload;
 }
 
-async function googleFetch(url, accessToken) {
+async function googleFetch(url, accessToken, accept) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 20000);
   try {
@@ -69,7 +102,7 @@ async function googleFetch(url, accessToken) {
       redirect: 'follow',
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        Accept: 'image/avif,image/webp,image/png,image/jpeg,*/*'
+        Accept: accept || '*/*'
       }
     });
     if (!response.ok) {
@@ -86,15 +119,15 @@ async function googleFetch(url, accessToken) {
   }
 }
 
-async function safeImageResponse(response, source) {
+async function safeImageResponse(response, source, media) {
   const declared = Number.parseInt(response.headers.get('content-length') || '', 10);
   if (Number.isFinite(declared) && declared > MAX_IMAGE_BYTES) throw imageError('CATALOG_IMAGE_TOO_LARGE');
   const bytes = await response.arrayBuffer();
   if (bytes.byteLength < 1 || bytes.byteLength > MAX_IMAGE_BYTES) throw imageError('CATALOG_IMAGE_SIZE_INVALID');
   const sourceType = String(response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
-  const contentType = safeContentType(sourceType, source);
-  const etag = source.checksum
-    ? `"${source.checksum}"`
+  const contentType = safeContentType(sourceType, source, media);
+  const etag = media.md5Checksum
+    ? `"${media.md5Checksum}"`
     : `W/"catalog-${source.catalogVersion}-${source.driveFileId}-${bytes.byteLength}"`;
   return new Response(bytes, {
     status: 200,
@@ -190,16 +223,16 @@ function parseCredentials(value) {
   };
 }
 
-function needsRenderedThumbnail(source) {
+function needsRenderedThumbnail(source, media) {
   return source.pdfPreview === true ||
-    source.mimeType === 'application/pdf' ||
-    source.mimeType === 'image/tiff' ||
+    media.mimeType === 'application/pdf' ||
+    media.mimeType === 'image/tiff' ||
     ['pdf', 'tif', 'tiff'].includes(source.extension);
 }
 
-function safeContentType(value, source) {
+function safeContentType(value, source, media) {
   if (['image/jpeg', 'image/png', 'image/webp', 'image/avif'].includes(value)) return value;
-  if (needsRenderedThumbnail(source)) return 'image/jpeg';
+  if (needsRenderedThumbnail(source, media)) return 'image/jpeg';
   if (source.extension === 'png') return 'image/png';
   if (source.extension === 'webp') return 'image/webp';
   return 'image/jpeg';
@@ -208,7 +241,7 @@ function safeContentType(value, source) {
 function canonicalCacheUrl(url, source) {
   const cacheUrl = new URL(url.origin + url.pathname);
   cacheUrl.searchParams.set('id', source.driveFileId);
-  cacheUrl.searchParams.set('v', source.checksum || source.modifiedTime || String(source.catalogVersion));
+  cacheUrl.searchParams.set('v', source.modifiedTime || String(source.catalogVersion));
   return cacheUrl.href;
 }
 
@@ -234,6 +267,31 @@ function driveIdentity(value) {
   const text = String(value || '').trim();
   if (!/^[A-Za-z0-9_-]{5,500}$/.test(text)) throw imageError('CATALOG_IMAGE_ID_INVALID');
   return text;
+}
+
+function safeText(value, max) {
+  return String(value || '').trim().slice(0, max);
+}
+
+function safeHex(value) {
+  const text = String(value || '').trim().toLowerCase();
+  return /^[a-f0-9]{16,128}$/.test(text) ? text : '';
+}
+
+function safeHttpsUrl(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  try {
+    const url = new URL(text);
+    return url.protocol === 'https:' && !url.username && !url.password ? url.href : '';
+  } catch (_) {
+    return '';
+  }
+}
+
+function nonNegativeInteger(value) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
 }
 
 function googleError(payload, fallback) {
