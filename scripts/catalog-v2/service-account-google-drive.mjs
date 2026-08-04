@@ -21,9 +21,9 @@ export function parseServiceAccountCredentials(value) {
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw serviceError('GOOGLE_SERVICE_ACCOUNT_JSON_INVALID');
   }
-  const clientEmail = String(parsed.client_email || '').trim();
-  const privateKey = String(parsed.private_key || '').replace(/\\n/g, '\n').trim();
-  const tokenUri = String(parsed.token_uri || GOOGLE_TOKEN_URL).trim();
+  const clientEmail = String(parsed.client_email || parsed.clientEmail || '').trim();
+  const privateKey = String(parsed.private_key || parsed.privateKey || '').replace(/\\n/g, '\n').trim();
+  const tokenUri = String(parsed.token_uri || parsed.tokenUri || GOOGLE_TOKEN_URL).trim();
   if (!/^[^\s@]+@[^\s@]+\.gserviceaccount\.com$/i.test(clientEmail)) {
     throw serviceError('GOOGLE_SERVICE_ACCOUNT_EMAIL_INVALID');
   }
@@ -43,8 +43,8 @@ export function parseServiceAccountCredentials(value) {
     clientEmail,
     privateKey,
     tokenUri: tokenUrl.href,
-    projectId: safeText(parsed.project_id, 200),
-    privateKeyId: safeText(parsed.private_key_id, 200)
+    projectId: safeText(parsed.project_id || parsed.projectId, 200),
+    privateKeyId: safeText(parsed.private_key_id || parsed.privateKeyId, 200)
   });
 }
 
@@ -89,7 +89,7 @@ export async function exchangeServiceAccountToken(credentials, options = {}) {
         'Content-Type': 'application/x-www-form-urlencoded'
       },
       body: new URLSearchParams({
-        grant_type: 'urn:ietf:params:oauth-type:jwt-bearer'.replace('oauth-type', 'oauth-grant-type'),
+        grant_type: 'urn:ietf:params:oauth2:grant-type:jwt-bearer',
         assertion
       })
     }]);
