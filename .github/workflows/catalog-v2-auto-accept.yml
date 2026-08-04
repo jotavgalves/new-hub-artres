@@ -1,12 +1,12 @@
-name: Aceitar Versões do Catálogo V2
+name: Sincronizar Catálogo Privado V2
 
 on:
   schedule:
-    - cron: '17 */6 * * *'
+    - cron: '17 * * * *'
   workflow_dispatch:
     inputs:
       forcar_validacao:
-        description: 'Executar a validação completa mesmo quando a versão não mudou'
+        description: 'Publicar uma nova versão mesmo quando o conteúdo não mudou'
         required: false
         default: false
         type: boolean
@@ -16,25 +16,24 @@ permissions:
   issues: write
 
 concurrency:
-  group: catalog-v2-auto-accept
+  group: catalog-v2-private-drive-sync
   cancel-in-progress: false
 
 jobs:
   validate-and-accept:
-    name: Validar e promover versão compatível
+    name: Ler Drives privados e publicar versão atômica
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     environment: site-v2-staging
 
     env:
-      CATALOG_LEGACY_BASE_URL: https://new-hub-artres.pages.dev
-      CATALOG_V2_ROOT_DRIVE_ID: 193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae
+      GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON }}
       SUPABASE_V2_URL: https://kueklnkznwpbobqwugns.supabase.co
       SUPABASE_V2_STAGING_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_V2_STAGING_SERVICE_ROLE_KEY }}
-      CATALOG_REPORT_FILE: /tmp/catalog-v2-auto-accept-report.json
-      CATALOG_INSPECTION_MAX_REQUESTS: '2000'
-      CATALOG_INSPECTION_MAX_FOLDERS: '2000'
-      CATALOG_INSPECTION_MAX_ARTWORKS: '100000'
+      CATALOG_REPORT_FILE: /tmp/catalog-v2-private-drive-report.json
+      CATALOG_INSPECTION_MAX_FOLDERS: '10000'
+      CATALOG_INSPECTION_MAX_ARTWORKS: '250000'
+      CATALOG_INSPECTION_MAX_DEPTH: '30'
       CATALOG_FORCE_ACCEPT: ${{ inputs.forcar_validacao || false }}
       TRACKING_ISSUE_NUMBER: '16'
 
@@ -49,28 +48,31 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Validar segredo exclusivo do staging
-        run: |
-          set -euo pipefail
-          if [ -z "$SUPABASE_V2_STAGING_SERVICE_ROLE_KEY" ]; then
-            echo "Segredo obrigatório ausente: SUPABASE_V2_STAGING_SERVICE_ROLE_KEY"
-            exit 1
-          fi
-
       - name: Executar testes defensivos do catálogo
         run: node --test tests/catalog-v2/*.test.mjs tests/v2/catalog-accepted-route.test.mjs
 
-      - name: Validar, carregar e aceitar versão nova
-        id: publish
-        run: node scripts/catalog-v2/publish-accepted-catalog-v2.mjs
+      - name: Validar sintaxe dos módulos autenticados
+        run: |
+          set -euo pipefail
+          node --check scripts/catalog-v2/service-account-google-drive.mjs
+          node --check scripts/catalog-v2/private-drive-catalog-indexer.mjs
+          node --check scripts/catalog-v2/publish-private-drive-catalog-v2.mjs
+          node --check functions/api/_accepted_catalog.js
+          node --check functions/api/catalog-image.js
 
-      - name: Anexar relatório sanitizado
+      - name: Ler, validar e publicar catálogo privado
+        id: publish
+        run: node scripts/catalog-v2/publish-private-drive-catalog-v2.mjs
+
+      - name: Anexar relatório detalhado privado
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: catalog-v2-auto-accept-report
-          path: ${{ env.CATALOG_REPORT_FILE }}
-          retention-days: 1
+          name: catalog-v2-private-drive-report
+          path: |
+            ${{ env.CATALOG_REPORT_FILE }}
+            ${{ env.CATALOG_REPORT_FILE }}.details.json
+          retention-days: 3
           if-no-files-found: ignore
 
       - name: Registrar mudança ou falha na issue
@@ -80,6 +82,6 @@ jobs:
           PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
         run: node scripts/catalog-v2/post-catalog-auto-accept-status.mjs
 
-      - name: Remover relatório temporário
+      - name: Remover relatórios temporários
         if: always()
-        run: rm -f "$CATALOG_REPORT_FILE"
+        run: rm -f "$CATALOG_REPORT_FILE" "$CATALOG_REPORT_FILE.details.json"
