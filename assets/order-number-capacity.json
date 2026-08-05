@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 2,
+  "format": "PED{YY}{00001..10000}{A..Z,AA..ZZ,AAA...}",
+  "sequenceModel": "unbounded-alphabetic-blocks-within-safe-integer",
+  "legacyNumbersPreserved": true,
+  "transitions": {
+    "260000": "PED2610000Z",
+    "260001": "PED2600001AA",
+    "270001": "PED2600001AB",
+    "7020001": "PED2600001AAA"
+  },
+  "maximumSafeSequence": 9007199254740991,
+  "yearlyCounter": true,
+  "publishedAt": "2026-08-05T10:45:00Z"
+}
