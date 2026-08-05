@@ -1,0 +1,45 @@
+name: Verificar capacidade PED oficial
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Confirmar marcador no domínio oficial
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://new-hub-artres.pages.dev'
+          for attempt in $(seq 1 36); do
+            if curl --fail --silent --show-error --location --max-time 20 \
+              "$BASE/assets/order-number-capacity.json?_verify=$(date +%s)" \
+              -o capacity.json; then
+              if node <<'NODE'
+          const fs = require('node:fs');
+          const data = JSON.parse(fs.readFileSync('capacity.json', 'utf8'));
+          if (data.schemaVersion !== 2) process.exit(1);
+          if (data.legacyNumbersPreserved !== true) process.exit(1);
+          if (data.maximumSafeSequence !== 9007199254740991) process.exit(1);
+          if (data.transitions?.['260000'] !== 'PED2610000Z') process.exit(1);
+          if (data.transitions?.['260001'] !== 'PED2600001AA') process.exit(1);
+          if (data.transitions?.['270001'] !== 'PED2600001AB') process.exit(1);
+          if (data.transitions?.['7020001'] !== 'PED2600001AAA') process.exit(1);
+          console.log(JSON.stringify({ ok: true, maximumSafeSequence: data.maximumSafeSequence, transitions: data.transitions }));
+          NODE
+              then
+                echo "Capacidade PED publicada no domínio oficial na tentativa $attempt."
+                exit 0
+              fi
+            fi
+            echo "Aguardando propagação oficial... tentativa $attempt/36"
+            sleep 10
+          done
+          echo 'O marcador da capacidade PED não foi propagado no domínio oficial.' >&2
+          exit 1
