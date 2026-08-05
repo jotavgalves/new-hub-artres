@@ -33,7 +33,7 @@ create table if not exists armazem_v2_private.orders (
   created_at timestamptz not null,
   updated_at timestamptz not null,
   projected_at timestamptz not null default now(),
-  constraint armazem_v2_orders_number_format check (order_number ~ '^PED[0-9]{7}[A-Z]$'),
+  constraint armazem_v2_orders_number_format check (order_number ~ '^PED[0-9]{7}[A-Z]+$'),
   constraint armazem_v2_orders_code_required check (length(order_code) between 1 and 80),
   constraint armazem_v2_orders_display_required check (length(display_id) between 1 and 80),
   constraint armazem_v2_orders_schema_v2 check (schema_version = 2),
@@ -225,7 +225,7 @@ begin
   if v_fingerprint !~ '^[a-f0-9]{64}$' then
     raise exception using errcode = '22023', message = 'ARMAZEM_V2_FINGERPRINT_INVALID';
   end if;
-  if v_order_number !~ '^PED[0-9]{7}[A-Z]$' then
+  if v_order_number !~ '^PED[0-9]{7}[A-Z]+$' then
     raise exception using errcode = '22023', message = 'ARMAZEM_V2_ORDER_NUMBER_INVALID';
   end if;
   if length(v_event_id) < 1 or length(v_event_id) > 160 then

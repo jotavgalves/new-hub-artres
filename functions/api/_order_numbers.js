@@ -1,7 +1,7 @@
 const COUNTER_PREFIX = "ORDER_COUNTER:";
 const BLOCK_SIZE = 10000;
 const RANDOM_SUFFIX_BYTES = 6;
-const CODE_RE = /^PED(\d{2})(\d{5})([A-Z])(?:-([A-F0-9]{12}))?$/;
+const CODE_RE = /^PED(\d{2})(\d{5})([A-Z]+)(?:-([A-F0-9]{12}))?$/;
 
 export function yearCode(value) {
   const d = value ? new Date(value) : new Date();
@@ -10,20 +10,23 @@ export function yearCode(value) {
 }
 
 export function formatOrderNumber(yy, sequence) {
-  const seq = Math.max(1, Number(sequence) || 1);
+  const seq = positiveSafeInteger(sequence);
+  if (!seq) throw new Error("ORDER_SEQUENCE_INVALID");
   const block = Math.floor((seq - 1) / BLOCK_SIZE);
   const number = ((seq - 1) % BLOCK_SIZE) + 1;
-  const letter = block < 26 ? String.fromCharCode(65 + block) : "Z";
-  return `PED${yy}${String(number).padStart(5, "0")}${letter}`;
+  return `PED${String(yy).slice(-2)}${String(number).padStart(5, "0")}${encodeBlock(block)}`;
 }
 
 export function parseOrderNumber(value) {
   const normalized = String(value || "").trim().toUpperCase();
   const m = normalized.match(CODE_RE);
   if (!m) return null;
+  const block = decodeBlock(m[3]);
+  const sequence = block * BLOCK_SIZE + parseInt(m[2], 10);
+  if (!Number.isSafeInteger(sequence) || sequence < 1) return null;
   return {
     yy: m[1],
-    sequence: (m[3].charCodeAt(0) - 65) * BLOCK_SIZE + parseInt(m[2], 10),
+    sequence,
     suffix: m[4] || "",
     normalized
   };
@@ -67,14 +70,42 @@ export async function nextOrderNumber(env, createdAt) {
 
   if (env && env.CONFIG_KV) {
     const raw = await env.CONFIG_KV.get(counterKey);
-    const parsed = parseInt(raw || "", 10);
-    if (Number.isFinite(parsed) && parsed > 0) next = parsed;
+    const parsed = Number.parseInt(raw || "", 10);
+    if (Number.isSafeInteger(parsed) && parsed > 0) next = parsed;
     await env.CONFIG_KV.put(counterKey, String(next + 1));
   }
 
   // Cloudflare KV não fornece incremento atômico. O sufixo criptográfico
   // impede que duas leituras concorrentes do mesmo contador gerem o mesmo PED.
   return `${formatOrderNumber(yy, next)}-${randomSuffix()}`;
+}
+
+function encodeBlock(block) {
+  let value = Number(block) + 1;
+  if (!Number.isSafeInteger(value) || value < 1) throw new Error("ORDER_BLOCK_INVALID");
+  let label = "";
+  while (value > 0) {
+    value -= 1;
+    label = String.fromCharCode(65 + (value % 26)) + label;
+    value = Math.floor(value / 26);
+  }
+  return label;
+}
+
+function decodeBlock(label) {
+  let value = 0;
+  for (const char of String(label || "")) {
+    const digit = char.charCodeAt(0) - 64;
+    if (digit < 1 || digit > 26) return -1;
+    value = value * 26 + digit;
+    if (!Number.isSafeInteger(value)) return -1;
+  }
+  return value - 1;
+}
+
+function positiveSafeInteger(value) {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 function randomSuffix() {

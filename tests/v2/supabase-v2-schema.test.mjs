@@ -124,7 +124,7 @@ test('contrato JSON corresponde ao pedido canônico V2', () => {
   assert.equal(contract.properties.fingerprint.pattern, '^[a-f0-9]{64}$');
   assert.equal(contract.properties.eventType.const, 'order.created.v2');
   assert.equal(contract.$defs.order.properties.schemaVersion.const, 2);
-  assert.equal(contract.$defs.order.properties.orderNumber.pattern, '^PED[0-9]{7}[A-Z]$');
+  assert.equal(contract.$defs.order.properties.orderNumber.pattern, '^PED[0-9]{7}[A-Z]+$');
   assert.equal(contract.$defs.order.properties.pricing.$ref, '#/$defs/pricing');
   assert.equal(contract.$defs.pricing.properties.currency.const, 'BRL');
   assert.equal(contract.$defs.order.properties.items.minItems, 1);

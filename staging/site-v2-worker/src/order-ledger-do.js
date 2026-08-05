@@ -464,7 +464,7 @@ function parseJson(value, code) {
 
 function normalizeOrderNumber(value) {
   const normalized = String(value ?? '').trim().toUpperCase();
-  return /^PED\d{2}\d{5}[A-Z]$/.test(normalized) ? normalized : '';
+  return /^PED\d{2}\d{5}[A-Z]+$/.test(normalized) ? normalized : '';
 }
 
 function safeRequestId(value) {
