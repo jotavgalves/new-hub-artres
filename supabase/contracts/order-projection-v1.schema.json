@@ -70,7 +70,7 @@
         "schemaVersion": { "const": 2 },
         "orderNumber": {
           "type": "string",
-          "pattern": "^PED[0-9]{7}[A-Z]$"
+          "pattern": "^PED[0-9]{7}[A-Z]+$"
         },
         "orderCode": {
           "type": "string",
