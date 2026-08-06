@@ -23,9 +23,15 @@
   }
 
   function loadCheckoutV3(){
-    var script = loadScript('checkoutV3Script','/assets/checkout-v3.js?v=20260804-1',document.body || document.head);
+    var script = loadScript('checkoutV3Script','/assets/checkout-v3.js?v=20260806-2',document.body || document.head);
     if (script) script.addEventListener('load',loadCheckoutRecovery,{once:true});
     else loadCheckoutRecovery();
+  }
+
+  function loadCartReconcile(){
+    var script = loadScript('cartReconcileV1Script','/assets/cart-reconcile-v1.js?v=20260806-1',document.body || document.head);
+    if (script) script.addEventListener('load',loadCheckoutV3,{once:true});
+    else loadCheckoutV3();
   }
 
   function loadProductionV2(){
@@ -33,8 +39,8 @@
     var script = loadScript('productionV2Script','/assets/production-v2.js?v=20260731',document.body || document.head);
     if (script) script.addEventListener('load',function(){
       var compat = loadScript('productionV2CompatScript','/assets/production-v2-compat.js?v=20260731-2',document.body || document.head);
-      if (compat) compat.addEventListener('load',loadCheckoutV3,{once:true});
-      else loadCheckoutV3();
+      if (compat) compat.addEventListener('load',loadCartReconcile,{once:true});
+      else loadCartReconcile();
     },{once:true});
   }
 
