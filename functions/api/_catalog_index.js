@@ -2,6 +2,8 @@ const DEFAULT_LIMIT = 80;
 const BOLINHAS_ROOT_FOLDER_ID = '193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae';
 const BOLINHAS_PRODUCT_KEY = '50x50';
 const BOLINHAS_PRODUCT_LABEL = 'Bolinhas 50x50';
+const DRIVE_API = 'https://www.googleapis.com/drive/v3/files';
+const DRIVE_FOLDER_MIME = 'application/vnd.google-apps.folder';
 
 export function envConfig(env){
   const base = restBase(env && (env.ARTS_SUPABASE_URL || env.SUPABASE_ARTS_URL || env.ARTWORKS_SUPABASE_URL || env.SUPABASE_REST_URL));
@@ -26,7 +28,57 @@ export async function supabaseRows(env, table, params){
 }
 
 export async function readIndex(env, params){
-  return supabaseRows(env, 'catalog_index', params);
+  const rows = await supabaseRows(env, 'catalog_index', params);
+  return filterFoldersAgainstDrive(env, params, rows);
+}
+
+async function filterFoldersAgainstDrive(env, params, rows){
+  if(!Array.isArray(rows) || !rows.length || params.get('type') !== 'eq.folder') return rows;
+
+  const parentFilter = String(params.get('parent_drive_id') || '');
+  const depthFilter = String(params.get('depth') || '');
+  let parentId = parentFilter.startsWith('eq.') ? parentFilter.slice(3) : '';
+
+  if(!parentId && depthFilter === 'eq.1'){
+    parentId = String(rows.find(row => row && row.root_drive_id)?.root_drive_id || BOLINHAS_ROOT_FOLDER_ID);
+  }
+  if(!parentId) return rows;
+
+  const apiKey = String(env && (env.GOOGLE_API_KEY || env.GOOGLE_DRIVE_API_KEY || env.DRIVE_API_KEY) || '').trim();
+  if(!apiKey) return rows;
+
+  try{
+    const liveIds = await listLiveFolderIds(parentId, apiKey);
+    return rows.filter(row => liveIds.has(String(row && row.drive_id || '')));
+  }catch(error){
+    console.warn('CATALOG_DRIVE_FOLDER_VALIDATION_FAILED', String(error && error.message || error));
+    return rows;
+  }
+}
+
+async function listLiveFolderIds(parentId, apiKey){
+  const ids = new Set();
+  let pageToken = '';
+  do{
+    const query = `'${String(parentId).replace(/'/g, "\\'")}' in parents and trashed = false and mimeType = '${DRIVE_FOLDER_MIME}'`;
+    const url = new URL(DRIVE_API);
+    url.searchParams.set('key', apiKey);
+    url.searchParams.set('q', query);
+    url.searchParams.set('fields', 'nextPageToken,files(id)');
+    url.searchParams.set('pageSize', '1000');
+    url.searchParams.set('supportsAllDrives', 'true');
+    url.searchParams.set('includeItemsFromAllDrives', 'true');
+    if(pageToken) url.searchParams.set('pageToken', pageToken);
+
+    const response = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
+    if(!response.ok) throw new Error('GOOGLE_DRIVE_' + response.status);
+    const data = await response.json();
+    for(const file of Array.isArray(data.files) ? data.files : []){
+      if(file && file.id) ids.add(String(file.id));
+    }
+    pageToken = String(data.nextPageToken || '');
+  }while(pageToken);
+  return ids;
 }
 
 export function baseIndexParams(limit){
