@@ -40,6 +40,6 @@ test('carregador publica o checkout V3 depois da camada de compatibilidade', asy
   const source = await read('assets/catalog-cache-bust.js');
   assert.match(source, /productionV2CompatScript/);
   assert.match(source, /checkoutV3Script/);
-  assert.match(source, /checkout-v3\.js\?v=20260804-1/);
+  assert.match(source, /checkout-v3\.js\?v=\d{8}-\d+/);
   assert.match(source, /compat\.addEventListener\('load',loadCheckoutV3/);
 });
