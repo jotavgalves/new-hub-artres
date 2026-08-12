@@ -29,7 +29,7 @@
   }
 
   function loadCartReconcile(){
-    var script = loadScript('cartReconcileV1Script','/assets/cart-reconcile-v1.js?v=20260806-2',document.body || document.head);
+    var script = loadScript('cartReconcileV1Script','/assets/cart-reconcile-v1.js?v=20260812-1',document.body || document.head);
     if (script) script.addEventListener('load',loadCheckoutV3,{once:true});
     else loadCheckoutV3();
   }
