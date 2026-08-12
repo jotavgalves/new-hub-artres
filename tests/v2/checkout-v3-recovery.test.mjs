@@ -44,8 +44,10 @@ test('servidor recupera pedido por referência direta somente em repetição ide
 test('carregador inicia a recuperação somente depois do checkout visual', async () => {
   const source = await read('assets/catalog-cache-bust.js');
   assert.doesNotThrow(() => new Function(source));
+  assert.match(source, /cart-reconcile-v1\.js\?v=\d{8}-\d+/);
   assert.match(source, /checkout-v3\.js\?v=\d{8}-\d+/);
   assert.match(source, /checkout-v3-recovery\.js\?v=\d{8}-\d+/);
+  assert.match(source, /compat\.addEventListener\('load',loadCartReconcile/);
+  assert.match(source, /script\.addEventListener\('load',loadCheckoutV3/);
   assert.match(source, /script\.addEventListener\('load',loadCheckoutRecovery/);
-  assert.match(source, /compat\.addEventListener\('load',loadCheckoutV3/);
 });
