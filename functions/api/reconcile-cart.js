@@ -10,11 +10,12 @@ export async function onRequestPost(context) {
   try {
     const body = await context.request.json().catch(() => ({}));
     const items = Array.isArray(body.items) ? body.items.slice(0, 200).map(normalizeItem).filter(Boolean) : [];
-    if (!items.length) return json({ ok: true, items: [], migrations: [] }, 200);
+    if (!items.length) return json({ ok: true, items: [], migrations: [], removed: [] }, 200);
 
     const exactRows = await rowsByIds(context.env, items.map(item => item.driveFileId));
     const exactById = new Map(exactRows.map(row => [String(row.drive_id || ''), row]));
     const migrations = [];
+    const removed = [];
     const resolved = [];
 
     for (const item of items) {
@@ -26,7 +27,8 @@ export async function onRequestPost(context) {
 
       const candidate = await uniqueReplacement(context.env, item);
       if (!candidate) {
-        return json({ ok: false, error: 'ARTE_NAO_ENCONTRADA', missing: safeMissing(item) }, 422);
+        removed.push(safeMissing(item));
+        continue;
       }
 
       resolved.push(toResolved(item, candidate));
@@ -41,7 +43,13 @@ export async function onRequestPost(context) {
       });
     }
 
-    return json({ ok: true, items: resolved, migrations }, 200);
+    return json({
+      ok: true,
+      items: resolved,
+      migrations,
+      removed,
+      changed: Boolean(migrations.length || removed.length)
+    }, 200);
   } catch (_) {
     return json({ ok: false, error: 'CART_RECONCILE_FAILED' }, 500);
   }
