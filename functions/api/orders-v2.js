@@ -8,8 +8,8 @@ const ROOTS = Object.freeze({
   'painel-150': '18x1qthD2RXAxRi2u-d7U3wpJLfpINU7-'
 });
 const IDEMPOTENCY_PREFIX = 'ORDER_V2_IDEMPOTENCY:';
+const CHECKOUT_REF_PREFIX = 'ORDER_CHECKOUT_REF:';
 const ORDER_PREFIX = 'ORDER:';
-const MAX_RECOVERY_ORDERS = 500;
 
 export async function onRequestPost(context) {
   try {
@@ -25,7 +25,7 @@ export async function onRequestPost(context) {
     }
 
     if (idempotencyKey && recoveryRequested) {
-      const recoveredOrder = await findOrderByCheckoutReference(context.env, idempotencyKey, true);
+      const recoveredOrder = await findOrderByCheckoutReference(context.env, idempotencyKey);
       if (recoveredOrder) {
         const recovered = acceptedFromOrder(recoveredOrder, 'REPLAY', true);
         if (context.env.CONFIG_KV) {
@@ -109,7 +109,7 @@ export async function onRequestPost(context) {
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(payload)
     });
-    const response = await createLegacyOrder({ ...context, request: nextRequest });
+    const response = await createLegacyOrder({ ...context, request: nextRequest, checkoutConfig: config });
     const result = await response.json().catch(() => ({}));
     if (!response.ok || result.ok !== true || !result.order) {
       return json({ ok: false, error: result.error || 'ORDER_SAVE_FAILED' }, response.status || 500);
@@ -129,7 +129,7 @@ export async function onRequestPost(context) {
   }
 }
 
-async function findOrderByCheckoutReference(env, reference, scanKv) {
+async function findOrderByCheckoutReference(env, reference) {
   const wanted = cleanIdempotency(reference);
   if (!wanted) return null;
 
@@ -143,14 +143,15 @@ async function findOrderByCheckoutReference(env, reference, scanKv) {
     } catch (_) {}
   }
 
-  if (!scanKv || !env.CONFIG_KV) return null;
-  try {
-    const listed = await env.CONFIG_KV.list({ prefix: ORDER_PREFIX, limit: MAX_RECOVERY_ORDERS });
-    for (const entry of listed.keys || []) {
-      const order = await env.CONFIG_KV.get(entry.name, 'json').catch(() => null);
-      if (cleanIdempotency(order?.customer?.checkoutReference) === wanted) return order;
-    }
-  } catch (_) {}
+  if (env.CONFIG_KV) {
+    try {
+      const indexedOrderNumber = clean(await env.CONFIG_KV.get(CHECKOUT_REF_PREFIX + wanted));
+      if (indexedOrderNumber) {
+        const order = await env.CONFIG_KV.get(ORDER_PREFIX + indexedOrderNumber, 'json').catch(() => null);
+        if (order) return order;
+      }
+    } catch (_) {}
+  }
   return null;
 }
 

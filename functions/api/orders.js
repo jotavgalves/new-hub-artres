@@ -5,6 +5,7 @@ import { nextOrderNumberFromSupabase } from "./_supabase_counter.js";
 import { listOrdersFromSupabase, saveOrderToSupabase, softDeleteOrderInSupabase, supabaseReady, updateOrderStatusInSupabase } from "./_supabase.js";
 
 const ORDER_PREFIX = "ORDER:";
+const CHECKOUT_REF_PREFIX = "ORDER_CHECKOUT_REF:";
 const DELETED_ORDER_PREFIX = "ORDER_DELETED:";
 
 export async function onRequestGet(context) {
@@ -53,27 +54,31 @@ export async function onRequestGet(context) {
 
 export async function onRequestPost(context) {
   const hasKv = Boolean(context.env.CONFIG_KV);
-  const { config } = await loadConfig(context.env);
+  const config = context.checkoutConfig && typeof context.checkoutConfig === "object"
+    ? context.checkoutConfig
+    : (await loadConfig(context.env)).config;
   if (config.orderSettings && config.orderSettings.saveOrders === false) return json({ ok: true, saved: false, disabled: true });
 
   const body = await context.request.json().catch(() => ({}));
   const order = await normalizeOrder(body, config, context.env);
   if (!order.items.length) return json({ ok: false, saved: false, error: "CARRINHO_VAZIO_OU_INVALIDO" }, 400);
 
-  let supabaseSaved = false;
-  let supabaseError = "";
-  let kvSaved = false;
-  let kvError = "";
+  const checkoutReference = cleanCheckoutReference(order.customer && order.customer.checkoutReference);
+  const supabaseTask = supabaseReady(context.env)
+    ? saveOrderToSupabase(context.env, order)
+        .then(() => ({ saved: true, error: "" }))
+        .catch(error => ({ saved: false, error: errorMessage(error) }))
+    : Promise.resolve({ saved: false, error: "" });
+  const kvTask = hasKv
+    ? saveOrderToKv(context.env, order, checkoutReference)
+        .catch(error => ({ saved: false, error: errorMessage(error) }))
+    : Promise.resolve({ saved: false, error: "" });
 
-  if (supabaseReady(context.env)) {
-    try { await saveOrderToSupabase(context.env, order); supabaseSaved = true; }
-    catch (error) { supabaseError = errorMessage(error); }
-  }
-
-  if (hasKv) {
-    try { await context.env.CONFIG_KV.put(`${ORDER_PREFIX}${order.id}`, JSON.stringify(order, null, 2)); kvSaved = true; }
-    catch (error) { kvError = errorMessage(error); }
-  }
+  const [supabaseResult, kvResult] = await Promise.all([supabaseTask, kvTask]);
+  const supabaseSaved = supabaseResult.saved;
+  const supabaseError = supabaseResult.error;
+  const kvSaved = kvResult.saved;
+  const kvError = kvResult.error;
 
   if (!supabaseSaved && !kvSaved) return json({ ok: false, saved: false, error: "ORDER_SAVE_FAILED", supabaseError, kvError }, 500);
   return json({ ok: true, saved: true, storage: supabaseSaved && kvSaved ? "supabase+kv" : (supabaseSaved ? "supabase" : "kv"), supabaseSaved, supabaseError, kvSaved, kvError, order });
@@ -152,6 +157,26 @@ export async function onRequestDelete(context) {
   await context.env.CONFIG_KV.put(`${DELETED_ORDER_PREFIX}${id}`, JSON.stringify(order, null, 2));
   await context.env.CONFIG_KV.delete(key);
   return json({ ok: true, source: "kv", deleted: true, id });
+}
+
+async function saveOrderToKv(env, order, checkoutReference) {
+  const writes = [
+    env.CONFIG_KV.put(`${ORDER_PREFIX}${order.id}`, JSON.stringify(order, null, 2))
+  ];
+  if (checkoutReference) {
+    writes.push(env.CONFIG_KV.put(
+      `${CHECKOUT_REF_PREFIX}${checkoutReference}`,
+      String(order.id),
+      { expirationTtl: 86400 }
+    ));
+  }
+
+  const results = await Promise.allSettled(writes);
+  if (results[0].status === "rejected") throw results[0].reason;
+  const indexError = results[1] && results[1].status === "rejected"
+    ? errorMessage(results[1].reason)
+    : "";
+  return { saved: true, error: indexError };
 }
 
 async function loadOrdersFromKv(env, auth, limit) {
@@ -261,6 +286,10 @@ function normalizeOrderItems(rawItems) {
 function itemKey(item) { return [item.code, item.theme, item.product, item.productName].map(v => String(v || "").toLowerCase()).join("|"); }
 function cleanCode(value) { return String(value || "").replace(/^#/, "").replace(/\s+/g, " ").trim().slice(0, 80); }
 function clean(value) { return String(value || "").replace(/\s+/g, " ").trim().slice(0, 200); }
+function cleanCheckoutReference(value) {
+  const text = String(value || "").trim();
+  return /^[A-Za-z0-9._:-]{16,160}$/.test(text) ? text : "";
+}
 function contextSafe(value) { return value == null ? "" : value; }
 function parseStoredOrder(raw) {
   try {
