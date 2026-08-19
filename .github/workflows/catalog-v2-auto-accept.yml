@@ -2,7 +2,14 @@ name: Sincronizar Catálogo Privado V2
 
 on:
   schedule:
-    - cron: '17 * * * *'
+    - cron: '7,17,27,37,47,57 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/catalog-v2-auto-accept.yml'
+      - 'scripts/catalog-v2/private-drive-catalog-indexer.mjs'
+      - 'scripts/catalog-v2/publish-private-drive-catalog-v2.mjs'
+      - 'scripts/catalog-v2/service-account-google-drive.mjs'
   workflow_dispatch:
     inputs:
       forcar_validacao:
