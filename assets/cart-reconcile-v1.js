@@ -1,7 +1,7 @@
 (function(){
   'use strict';
   if(window.__ARMAZEM_CART_RECONCILE_V1__)return;
-  window.__ARMAZEM_CART_RECONCILE_V1__='2026-08-12.1';
+  window.__ARMAZEM_CART_RECONCILE_V1__='2026-08-19.1';
 
   var originalFetch=window.fetch;
 
@@ -11,8 +11,8 @@
     if(url.pathname!=='/api/orders-v2'||!init||String(init.method||'GET').toUpperCase()!=='POST')return originalFetch.apply(this,arguments);
 
     var body;
-    try{body=JSON.parse(String(init.body||'{}'));}catch(_){return originalFetch.apply(this,arguments);}
-    if(!body||!Array.isArray(body.items)||!body.items.length)return originalFetch.apply(this,arguments);
+    try{body=JSON.parse(String(init.body||'{}'));}catch(_){return sendOrderAndRepair(this,input,init);}
+    if(!body||!Array.isArray(body.items)||!body.items.length)return sendOrderAndRepair(this,input,init);
 
     var enriched=enrichItems(body.items);
     try{
@@ -26,11 +26,21 @@
         body.items=reconcile.items;
         init=Object.assign({},init,{body:JSON.stringify(body)});
         repairLocalCart(reconcile.migrations,reconcile.removed);
-        return originalFetch.call(this,input,init);
       }
     }catch(_){ }
-    return originalFetch.call(this,input,init);
+
+    return sendOrderAndRepair(this,input,init);
   };
+
+  async function sendOrderAndRepair(receiver,input,init){
+    var response=await originalFetch.call(receiver,input,init);
+    try{
+      var data=await response.clone().json();
+      var repair=data&&data.cartRepair;
+      if(repair&&typeof repair==='object')repairLocalCart(repair.migrations,repair.removed);
+    }catch(_){ }
+    return response;
+  }
 
   function enrichItems(items){
     var local=safeCart();
