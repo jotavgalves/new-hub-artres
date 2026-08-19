@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'armazem-pwa-v1';
+const CACHE_VERSION = 'armazem-pwa-v2';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const PAGE_CACHE = `${CACHE_VERSION}-pages`;
 const APP_SHELL = [
@@ -8,6 +8,16 @@ const APP_SHELL = [
   '/assets/pwa-icon-192.png',
   '/assets/pwa-icon-512.png'
 ];
+const CRITICAL_ASSETS = new Set([
+  '/assets/catalog-cache-bust.js',
+  '/assets/cart-reconcile-v1.js',
+  '/assets/checkout-v3.js',
+  '/assets/checkout-v3-recovery.js',
+  '/assets/checkout-v3-ui.js',
+  '/assets/customer-checkout.js',
+  '/assets/production-v2.js',
+  '/assets/production-v2-compat.js'
+]);
 
 self.addEventListener('install', event => {
   event.waitUntil(
@@ -53,6 +63,11 @@ self.addEventListener('fetch', event => {
     return;
   }
 
+  if (CRITICAL_ASSETS.has(url.pathname)) {
+    event.respondWith(networkFirstAsset(request));
+    return;
+  }
+
   if (
     url.pathname.startsWith('/assets/') ||
     url.pathname === '/manifest.webmanifest'
@@ -77,6 +92,17 @@ async function networkFirstPage(request) {
       (await cache.match('/')) ||
       (await caches.match('/')) ||
       Response.error();
+  }
+}
+
+async function networkFirstAsset(request) {
+  const cache = await caches.open(STATIC_CACHE);
+  try {
+    const response = await fetch(request);
+    if (response.ok) await cache.put(request, response.clone());
+    return response;
+  } catch (error) {
+    return (await cache.match(request)) || Response.error();
   }
 }
 
