@@ -2,6 +2,7 @@ import { json, loadConfig } from './_config.js';
 import { baseIndexParams, readIndex } from './_catalog_index.js';
 import { orderFromRow, supabaseReady, supabaseRequest } from './_supabase.js';
 import { onRequestPost as createLegacyOrder } from './orders.js';
+import { reconcileCartItems } from './reconcile-cart.js';
 
 const ROOTS = Object.freeze({
   '50x50': '193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae',
@@ -12,6 +13,7 @@ const CHECKOUT_REF_PREFIX = 'ORDER_CHECKOUT_REF:';
 const ORDER_PREFIX = 'ORDER:';
 
 export async function onRequestPost(context) {
+  let cartRepair = emptyCartRepair();
   try {
     const body = await context.request.json().catch(() => ({}));
     const rawItems = Array.isArray(body.items) ? body.items.slice(0, 200) : [];
@@ -39,24 +41,39 @@ export async function onRequestPost(context) {
       }
     }
 
+    const requested = normalizeRequestedItems(rawItems);
+    if (!requested.length) return json({ ok: false, error: 'CARRINHO_VAZIO_OU_INVALIDO' }, 400);
+
+    const reconciliation = await reconcileCartItems(context.env, rawItems);
+    cartRepair = normalizeCartRepair(reconciliation);
+    const normalized = normalizeRequestedItems(reconciliation.items);
+    if (!normalized.length) {
+      return json({
+        ok: false,
+        error: 'CARRINHO_ATUALIZADO_SEM_ITENS',
+        detail: 'As artes antigas deste carrinho não estão mais disponíveis. O carrinho foi atualizado; escolha novas artes e tente novamente.',
+        cartRepair
+      }, 409);
+    }
+
     const { config } = await loadConfig(context.env);
     const commercial = commercialConfig(config);
-    const normalized = normalizeRequestedItems(rawItems);
-    if (!normalized.length) return json({ ok: false, error: 'CARRINHO_VAZIO_OU_INVALIDO' }, 400);
-
     const rows = await catalogRows(context.env, normalized.map(item => item.driveFileId));
     const rowById = new Map(rows.map(row => [String(row.drive_id || ''), row]));
     const orderItems = [];
 
     for (const item of normalized) {
       const row = rowById.get(item.driveFileId);
-      if (!row) return json({ ok: false, error: 'ARTE_NAO_ENCONTRADA' }, 422);
+      if (!row) {
+        addRemoved(cartRepair, item);
+        continue;
+      }
       const expectedRoot = ROOTS[item.productKey];
       if (!expectedRoot || String(row.root_drive_id || '') !== expectedRoot) {
-        return json({ ok: false, error: 'ARTE_PRODUTO_INCOMPATIVEL' }, 422);
+        return json({ ok: false, error: 'ARTE_PRODUTO_INCOMPATIVEL', cartRepair }, 422);
       }
       const product = commercial.products[item.productKey];
-      if (!product || !product.enabled) return json({ ok: false, error: 'PRODUTO_INDISPONIVEL' }, 422);
+      if (!product || !product.enabled) return json({ ok: false, error: 'PRODUTO_INDISPONIVEL', cartRepair }, 422);
       orderItems.push({
         driveFileId: item.driveFileId,
         code: clean(row.code || row.name).replace(/^#/, ''),
@@ -71,17 +88,26 @@ export async function onRequestPost(context) {
       });
     }
 
+    if (!orderItems.length) {
+      return json({
+        ok: false,
+        error: 'CARRINHO_ATUALIZADO_SEM_ITENS',
+        detail: 'As artes deste carrinho deixaram de estar disponíveis durante a confirmação. O carrinho foi atualizado; escolha novas artes e tente novamente.',
+        cartRepair
+      }, 409);
+    }
+
     const quantityError = validateQuantities(orderItems, commercial.products);
-    if (quantityError) return json({ ok: false, error: quantityError }, 422);
+    if (quantityError) return json({ ok: false, error: quantityError, cartRepair }, 422);
 
     const gross = round(orderItems.reduce((sum, item) => sum + item.qty * commercial.products[item.product].unitPrice, 0));
     const discount = round(gross * commercial.discountPercent / 100);
     const net = round(Math.max(0, gross - discount));
     const customer = normalizeCustomer(body.customer);
-    if (!customer.name) return json({ ok: false, error: 'NOME_CLIENTE_OBRIGATORIO' }, 400);
-    if (customer.whatsapp.length < 10) return json({ ok: false, error: 'WHATSAPP_CLIENTE_INVALIDO' }, 400);
+    if (!customer.name) return json({ ok: false, error: 'NOME_CLIENTE_OBRIGATORIO', cartRepair }, 400);
+    if (customer.whatsapp.length < 10) return json({ ok: false, error: 'WHATSAPP_CLIENTE_INVALIDO', cartRepair }, 400);
     const seller = normalizeSeller(body.seller);
-    if (!seller.id || !seller.label) return json({ ok: false, error: 'VENDEDORA_OBRIGATORIA' }, 400);
+    if (!seller.id || !seller.label) return json({ ok: false, error: 'VENDEDORA_OBRIGATORIA', cartRepair }, 400);
 
     const storedCustomer = idempotencyKey
       ? { ...customer, checkoutReference: idempotencyKey }
@@ -112,10 +138,17 @@ export async function onRequestPost(context) {
     const response = await createLegacyOrder({ ...context, request: nextRequest, checkoutConfig: config });
     const result = await response.json().catch(() => ({}));
     if (!response.ok || result.ok !== true || !result.order) {
-      return json({ ok: false, error: result.error || 'ORDER_SAVE_FAILED' }, response.status || 500);
+      return json({ ok: false, error: result.error || 'ORDER_SAVE_FAILED', cartRepair }, response.status || 500);
     }
 
-    const accepted = acceptedFromOrder({ ...result.order, customer }, 'CREATED', false, commercial.version, payload.totals);
+    const accepted = acceptedFromOrder(
+      { ...result.order, customer },
+      'CREATED',
+      false,
+      commercial.version,
+      payload.totals,
+      cartRepair
+    );
     if (idempotencyKey && context.env.CONFIG_KV) {
       await context.env.CONFIG_KV.put(
         IDEMPOTENCY_PREFIX + idempotencyKey,
@@ -125,7 +158,7 @@ export async function onRequestPost(context) {
     }
     return json(accepted, 201);
   } catch (_) {
-    return json({ ok: false, error: 'ORDER_V2_FAILED' }, 500);
+    return json({ ok: false, error: 'ORDER_V2_FAILED', cartRepair }, 500);
   }
 }
 
@@ -155,7 +188,7 @@ async function findOrderByCheckoutReference(env, reference) {
   return null;
 }
 
-function acceptedFromOrder(order, action, recovered = false, commercialVersion, authoritativeTotals) {
+function acceptedFromOrder(order, action, recovered = false, commercialVersion, authoritativeTotals, repair) {
   const orderNumber = String(order?.orderNumber || order?.orderCode || order?.displayId || order?.id || '').trim();
   const customer = normalizeCustomer(order?.customer);
   return {
@@ -166,7 +199,8 @@ function acceptedFromOrder(order, action, recovered = false, commercialVersion, 
     orderNumber,
     order: { ...order, customer },
     totals: authoritativeTotals || order?.totals || {},
-    commercialVersion: positive(commercialVersion, order?.checkoutIntegrity?.snapshotVersion, 1)
+    commercialVersion: positive(commercialVersion, order?.checkoutIntegrity?.snapshotVersion, 1),
+    cartRepair: normalizeCartRepair(repair)
   };
 }
 
@@ -233,6 +267,42 @@ function product(input, defaults) {
     initial: positive(raw.initialQty, raw.initial, defaults.initial),
     enabled: raw.enabled !== false && (defaults.enabled || unitPrice > 0)
   };
+}
+
+function emptyCartRepair() {
+  return { changed: false, migrations: [], removed: [] };
+}
+function normalizeCartRepair(value) {
+  const raw = value && typeof value === 'object' ? value : {};
+  const migrations = Array.isArray(raw.migrations) ? raw.migrations.slice(0, 200).map(migration => ({
+    oldDriveFileId: cleanDriveId(migration && migration.oldDriveFileId),
+    driveFileId: cleanDriveId(migration && migration.driveFileId),
+    code: clean(migration && migration.code).slice(0, 120),
+    theme: clean(migration && migration.theme).slice(0, 240),
+    originalName: clean(migration && migration.originalName).slice(0, 400),
+    productKey: canonicalProduct(migration && migration.productKey),
+    image: String(migration && migration.image || '').slice(0, 1000)
+  })).filter(migration => migration.oldDriveFileId && migration.driveFileId) : [];
+  const removed = Array.isArray(raw.removed) ? raw.removed.slice(0, 200).map(item => ({
+    driveFileId: cleanDriveId(item && (item.driveFileId || item.id)),
+    productKey: canonicalProduct(item && (item.productKey || item.product)),
+    code: clean(item && item.code).replace(/^#/, '').slice(0, 120),
+    theme: clean(item && item.theme).slice(0, 240)
+  })).filter(item => item.driveFileId) : [];
+  return { changed: Boolean(raw.changed || migrations.length || removed.length), migrations, removed };
+}
+function addRemoved(repair, item) {
+  const driveFileId = cleanDriveId(item && (item.driveFileId || item.id));
+  if (!driveFileId) return;
+  if (!repair.removed.some(entry => entry.driveFileId === driveFileId)) {
+    repair.removed.push({
+      driveFileId,
+      productKey: canonicalProduct(item && (item.productKey || item.product)),
+      code: clean(item && item.code).replace(/^#/, '').slice(0, 120),
+      theme: clean(item && item.theme).slice(0, 240)
+    });
+  }
+  repair.changed = true;
 }
 
 function normalizeCustomer(value) {
