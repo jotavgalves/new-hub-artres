@@ -9,50 +9,54 @@ const ROOTS = Object.freeze({
 export async function onRequestPost(context) {
   try {
     const body = await context.request.json().catch(() => ({}));
-    const items = Array.isArray(body.items) ? body.items.slice(0, 200).map(normalizeItem).filter(Boolean) : [];
-    if (!items.length) return json({ ok: true, items: [], migrations: [], removed: [] }, 200);
-
-    const exactRows = await rowsByIds(context.env, items.map(item => item.driveFileId));
-    const exactById = new Map(exactRows.map(row => [String(row.drive_id || ''), row]));
-    const migrations = [];
-    const removed = [];
-    const resolved = [];
-
-    for (const item of items) {
-      const exact = exactById.get(item.driveFileId);
-      if (validForProduct(exact, item.productKey)) {
-        resolved.push(toResolved(item, exact));
-        continue;
-      }
-
-      const candidate = await uniqueReplacement(context.env, item);
-      if (!candidate) {
-        removed.push(safeMissing(item));
-        continue;
-      }
-
-      resolved.push(toResolved(item, candidate));
-      migrations.push({
-        oldDriveFileId: item.driveFileId,
-        driveFileId: String(candidate.drive_id || ''),
-        code: clean(candidate.code || candidate.name).replace(/^#/, ''),
-        theme: clean(candidate.theme || item.theme || 'Sem tema'),
-        originalName: clean(candidate.name || item.originalName || ''),
-        productKey: item.productKey,
-        image: String(candidate.thumbnail_url || '').slice(0, 1000)
-      });
-    }
-
-    return json({
-      ok: true,
-      items: resolved,
-      migrations,
-      removed,
-      changed: Boolean(migrations.length || removed.length)
-    }, 200);
+    const reconciliation = await reconcileCartItems(context.env, body.items);
+    return json({ ok: true, ...reconciliation }, 200);
   } catch (_) {
     return json({ ok: false, error: 'CART_RECONCILE_FAILED' }, 500);
   }
+}
+
+export async function reconcileCartItems(env, rawItems) {
+  const items = Array.isArray(rawItems) ? rawItems.slice(0, 200).map(normalizeItem).filter(Boolean) : [];
+  if (!items.length) return { items: [], migrations: [], removed: [], changed: false };
+
+  const exactRows = await rowsByIds(env, items.map(item => item.driveFileId));
+  const exactById = new Map(exactRows.map(row => [String(row.drive_id || ''), row]));
+  const migrations = [];
+  const removed = [];
+  const resolved = [];
+
+  for (const item of items) {
+    const exact = exactById.get(item.driveFileId);
+    if (validForProduct(exact, item.productKey)) {
+      resolved.push(toResolved(item, exact));
+      continue;
+    }
+
+    const candidate = await uniqueReplacement(env, item);
+    if (!candidate) {
+      removed.push(safeMissing(item));
+      continue;
+    }
+
+    resolved.push(toResolved(item, candidate));
+    migrations.push({
+      oldDriveFileId: item.driveFileId,
+      driveFileId: String(candidate.drive_id || ''),
+      code: clean(candidate.code || candidate.name).replace(/^#/, ''),
+      theme: clean(candidate.theme || item.theme || 'Sem tema'),
+      originalName: clean(candidate.name || item.originalName || ''),
+      productKey: item.productKey,
+      image: String(candidate.thumbnail_url || '').slice(0, 1000)
+    });
+  }
+
+  return {
+    items: resolved,
+    migrations,
+    removed,
+    changed: Boolean(migrations.length || removed.length)
+  };
 }
 
 async function uniqueReplacement(env, item) {
