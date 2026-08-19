@@ -1,10 +1,17 @@
 name: Reindex Drive Catalog
 
 on:
+  schedule:
+    - cron: '2,12,22,32,42,52 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/reindex-drive-catalog.yml'
+      - 'scripts/reindex-drive-catalog.mjs'
   workflow_dispatch:
     inputs:
       root_folder_id:
-        description: "ID da pasta raiz do catálogo no Google Drive. Vazio usa o secret DRIVE_ROOT_FOLDER_ID."
+        description: "ID de uma pasta raiz específica. Vazio sincroniza as duas raízes de produção."
         required: false
         type: string
       dry_run:
@@ -17,6 +24,13 @@ on:
         required: true
         default: "30"
         type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: drive-catalog-reindex
+  cancel-in-progress: false
 
 jobs:
   reindex:
@@ -34,13 +48,30 @@ jobs:
       - name: Reindex catalog
         env:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-          DRIVE_ROOT_FOLDER_ID: ${{ github.event.inputs.root_folder_id || secrets.DRIVE_ROOT_FOLDER_ID }}
           ARTS_SUPABASE_URL: ${{ secrets.ARTS_SUPABASE_URL }}
           ARTS_SUPABASE_SERVICE_KEY: ${{ secrets.ARTS_SUPABASE_SERVICE_KEY }}
-          CATALOG_INDEX_MAX_DEPTH: ${{ github.event.inputs.max_depth }}
+          MANUAL_ROOT_FOLDER_ID: ${{ inputs.root_folder_id || '' }}
+          CATALOG_INDEX_MAX_DEPTH: ${{ inputs.max_depth || '30' }}
+          CATALOG_INDEX_DRY_RUN: ${{ inputs.dry_run == true && 'true' || 'false' }}
+        shell: bash
         run: |
-          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
-            node scripts/reindex-drive-catalog.mjs --dry-run --max-depth="${{ github.event.inputs.max_depth }}"
+          set -euo pipefail
+
+          roots=()
+          if [ -n "$MANUAL_ROOT_FOLDER_ID" ]; then
+            roots+=("$MANUAL_ROOT_FOLDER_ID")
           else
-            node scripts/reindex-drive-catalog.mjs --max-depth="${{ github.event.inputs.max_depth }}"
+            roots+=(
+              "193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae"
+              "18x1qthD2RXAxRi2u-d7U3wpJLfpINU7-"
+            )
           fi
+
+          for root in "${roots[@]}"; do
+            echo "Sincronizando raiz $root"
+            args=(--root="$root" --max-depth="$CATALOG_INDEX_MAX_DEPTH")
+            if [ "$CATALOG_INDEX_DRY_RUN" = "true" ]; then
+              args+=(--dry-run)
+            fi
+            node scripts/reindex-drive-catalog.mjs "${args[@]}"
+          done
