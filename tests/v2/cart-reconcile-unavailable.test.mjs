@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { onRequestPost } from '../../functions/api/reconcile-cart.js';
+import { onRequestPost, reconcileCartItems } from '../../functions/api/reconcile-cart.js';
 
 const ROOT = new URL('../../', import.meta.url);
 const read = path => readFile(new URL(path, ROOT), 'utf8');
@@ -14,10 +14,14 @@ function contextFor(items) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ items })
     }),
-    env: {
-      ARTS_SUPABASE_URL: 'https://catalog.example.test',
-      ARTS_SUPABASE_SERVICE_KEY: 'test-service-key'
-    }
+    env: catalogEnv()
+  };
+}
+
+function catalogEnv() {
+  return {
+    ARTS_SUPABASE_URL: 'https://catalog.example.test',
+    ARTS_SUPABASE_SERVICE_KEY: 'test-service-key'
   };
 }
 
@@ -33,7 +37,7 @@ function artwork(driveId, code) {
   };
 }
 
-test('uma arte ausente é removida e as demais seguem para o checkout', async () => {
+function installCatalogMock() {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async input => {
     const url = new URL(String(input));
@@ -50,12 +54,18 @@ test('uma arte ausente é removida e as demais seguem para o checkout', async ()
     }
     return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
   };
+  return () => { globalThis.fetch = originalFetch; };
+}
 
+const staleCart = () => [
+  { driveFileId: 'drive-valid', productKey: '50x50', quantity: 2, code: '100', theme: 'FESTA' },
+  { driveFileId: 'drive-missing', productKey: '50x50', quantity: 2, code: '999', theme: 'FESTA' }
+];
+
+test('uma arte ausente é removida e as demais seguem para o checkout', async () => {
+  const restoreFetch = installCatalogMock();
   try {
-    const response = await onRequestPost(contextFor([
-      { driveFileId: 'drive-valid', productKey: '50x50', quantity: 2, code: '100', theme: 'FESTA' },
-      { driveFileId: 'drive-missing', productKey: '50x50', quantity: 2, code: '999', theme: 'FESTA' }
-    ]));
+    const response = await onRequestPost(contextFor(staleCart()));
     const data = await response.json();
 
     assert.equal(response.status, 200);
@@ -67,24 +77,49 @@ test('uma arte ausente é removida e as demais seguem para o checkout', async ()
     assert.equal(data.removed[0].code, '999');
     assert.equal(data.changed, true);
   } finally {
-    globalThis.fetch = originalFetch;
+    restoreFetch();
   }
 });
 
-test('reconciliação não bloqueia o lote inteiro com ARTE_NAO_ENCONTRADA', async () => {
+test('a mesma reconciliação pode ser executada dentro do endpoint de pedidos', async () => {
+  const restoreFetch = installCatalogMock();
+  try {
+    const data = await reconcileCartItems(catalogEnv(), staleCart());
+    assert.equal(data.items.length, 1);
+    assert.equal(data.items[0].driveFileId, 'drive-valid');
+    assert.equal(data.removed.length, 1);
+    assert.equal(data.removed[0].driveFileId, 'drive-missing');
+    assert.equal(data.changed, true);
+  } finally {
+    restoreFetch();
+  }
+});
+
+test('reconciliação não depende mais apenas do navegador', async () => {
   const server = await read('functions/api/reconcile-cart.js');
+  const orders = await read('functions/api/orders-v2.js');
   const client = await read('assets/cart-reconcile-v1.js');
   const loader = await read('assets/catalog-cache-bust.js');
+  const middleware = await read('functions/[[path]].js');
+  const serviceWorker = await read('service-worker.js');
 
-  assert.doesNotMatch(server, /return json\(\{ ok: false, error: 'ARTE_NAO_ENCONTRADA'/);
+  assert.match(server, /export async function reconcileCartItems/);
   assert.match(server, /removed\.push\(safeMissing\(item\)\)/);
   assert.match(server, /items: resolved/);
-  assert.match(server, /removed,/);
 
-  assert.match(client, /repairLocalCart\(reconcile\.migrations,reconcile\.removed\)/);
+  assert.match(orders, /import \{ reconcileCartItems \} from '\.\/reconcile-cart\.js'/);
+  assert.match(orders, /reconcileCartItems\(context\.env, rawItems\)/);
+  assert.match(orders, /cartRepair/);
+  assert.doesNotMatch(orders, /if \(!row\) return json\(\{ ok: false, error: 'ARTE_NAO_ENCONTRADA'/);
+
+  assert.match(client, /sendOrderAndRepair/);
+  assert.match(client, /response\.clone\(\)\.json\(\)/);
+  assert.match(client, /repairLocalCart\(repair\.migrations,repair\.removed\)/);
   assert.match(client, /cart\.splice\(index,1\)/);
-  assert.match(client, /removedIds\.has\(oldId\)/);
-  assert.match(client, /repairLocalCart\(reconcile\.migrations,reconcile\.removed\);\s*return originalFetch/);
 
-  assert.match(loader, /cart-reconcile-v1\.js\?v=20260812-1/);
+  assert.match(loader, /cart-reconcile-v1\.js\?v=20260819-1/);
+  assert.match(middleware, /catalog-cache-bust\.js\?v=10/);
+  assert.match(serviceWorker, /armazem-pwa-v2/);
+  assert.match(serviceWorker, /CRITICAL_ASSETS/);
+  assert.match(serviceWorker, /networkFirstAsset/);
 });
