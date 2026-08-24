@@ -8,6 +8,7 @@ on:
     paths:
       - '.github/workflows/reindex-drive-catalog.yml'
       - 'scripts/reindex-drive-catalog.mjs'
+      - 'functions/api/drive.js'
   workflow_dispatch:
     inputs:
       root_folder_id:
