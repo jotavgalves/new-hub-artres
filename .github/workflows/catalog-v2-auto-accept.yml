@@ -2,7 +2,7 @@ name: Sincronizar Catálogo Privado V2
 
 on:
   schedule:
-    - cron: '7,17,27,37,47,57 * * * *'
+    - cron: '*/5 * * * *'
   push:
     branches: [main]
     paths:
@@ -69,7 +69,20 @@ jobs:
 
       - name: Ler, validar e publicar catálogo privado
         id: publish
-        run: node scripts/catalog-v2/publish-private-drive-catalog-v2.mjs
+        shell: bash
+        run: |
+          set -uo pipefail
+          for attempt in 1 2 3; do
+            echo "Tentativa $attempt/3 de sincronização do catálogo V2"
+            if node scripts/catalog-v2/publish-private-drive-catalog-v2.mjs; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              sleep $((attempt * 15))
+            fi
+          done
+          echo 'A sincronização falhou após 3 tentativas completas.' >&2
+          exit 1
 
       - name: Anexar relatório detalhado privado
         if: always()
