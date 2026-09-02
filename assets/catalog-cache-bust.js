@@ -127,7 +127,10 @@
       var url = typeof input === 'string' ? new URL(input, location.origin) : new URL(input.url, location.origin);
       if (url.pathname === '/api/drive' || url.pathname === '/api/catalog-v2') {
         url.searchParams.set('cv', version);
-        init = Object.assign({}, init || {}, { cache: 'default' });
+        init = Object.assign({}, init || {}, {
+          cache: 'no-store',
+          headers: Object.assign({}, init && init.headers || {}, { 'Cache-Control':'no-store' })
+        });
         input = url.toString();
       }
     } catch (_) {}
