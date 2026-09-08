@@ -117,7 +117,8 @@ async function artworkRowsByParent(env, parentId){
    return [];
   })
  ]);
- return dedupeRows(indexedRows.concat(liveRows));
+ // Live Drive data must win over stale index rows for the same file.
+ return dedupeRows(liveRows.concat(indexedRows));
 }
 
 async function liveArtworkRowsByParent(env, parentId){
@@ -255,24 +256,27 @@ async function searchItems(env, query, config, bolinhas, limit){
  const q = cleanLabel(query);
  const normalized = cleanLike(q);
  const digits = q.replace(/\D/g, "");
- const out = [];
+ const indexedExactRows = [];
+ const liveExactRows = [];
+ const otherIndexedRows = [];
 
  if(digits.length >= 2){
-  out.push(...await limitedRows(env, params => {
+  indexedExactRows.push(...await limitedRows(env, params => {
    params.set("type", "eq.artwork");
    params.set("code", "eq." + digits);
   }, limit));
-  if(!out.some(row => String(row&&row.code||"") === digits)){
-   const liveRows = await liveArtworkRowsByCode(env, digits, limit).catch(error => {
-    console.warn("CATALOG_LIVE_CODE_SEARCH_FAILED", String(error&&error.message||error));
-    return [];
-   });
-   out.push(...liveRows);
-  }
+
+  // Always reconcile an exact numeric search with Drive. Previously this only
+  // happened when the index had no exact row, so a stale indexed record could
+  // suppress a newer/replaced file such as artwork 4501.
+  liveExactRows.push(...await liveArtworkRowsByCode(env, digits, limit).catch(error => {
+   console.warn("CATALOG_LIVE_CODE_SEARCH_FAILED", String(error&&error.message||error));
+   return [];
+  }));
  }
 
  if(normalized.length >= 2){
-  out.push(...await limitedRows(env, params => {
+  otherIndexedRows.push(...await limitedRows(env, params => {
    params.set("type", "eq.artwork");
    params.set("search_text", "ilike.*" + normalized + "*");
   }, limit));
@@ -283,11 +287,12 @@ async function searchItems(env, query, config, bolinhas, limit){
     params.set("type", "eq.artwork");
     params.set("search_text", "ilike.*" + tokens[0] + "*");
    }, limit * 2);
-   out.push(...tokenRows.filter(row => tokens.every(token => String(row.search_text||"").includes(token))));
+   otherIndexedRows.push(...tokenRows.filter(row => tokens.every(token => String(row.search_text||"").includes(token))));
   }
  }
 
- return dedupeRows(out)
+ // Put live exact rows first so deduplication keeps current Drive metadata.
+ return dedupeRows(liveExactRows.concat(indexedExactRows, otherIndexedRows))
   .map(row => itemFromRow(row, config, "", bolinhas))
   .filter(Boolean)
   .sort((a,b) => scoreRow(b, q) - scoreRow(a, q) || (Number(b.sortId)||0) - (Number(a.sortId)||0))
