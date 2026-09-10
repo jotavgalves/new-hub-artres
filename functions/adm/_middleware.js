@@ -1,4 +1,5 @@
 const PEDIDOS_SIDEBAR_SCRIPT = '<script id="adminPedidosSidebarScript" src="/assets/pedidos-sidebar.js?v=3" defer></script>';
+const PAINEL_ROMANO_ADMIN_SCRIPT = '<script id="adminPainelRomanoScript" src="/assets/admin-painel-romano.js?v=1" defer></script>';
 
 export async function onRequest(context) {
   const response = await context.next();
@@ -6,9 +7,10 @@ export async function onRequest(context) {
   if (!contentType.includes('text/html')) return response;
 
   let html = await response.text();
-  if (!html.includes('/assets/pedidos-sidebar.js')) {
-    html = html.replace('</body>', `${PEDIDOS_SIDEBAR_SCRIPT}</body>`);
-  }
+  const scripts = [];
+  if (!html.includes('/assets/pedidos-sidebar.js')) scripts.push(PEDIDOS_SIDEBAR_SCRIPT);
+  if (!html.includes('/assets/admin-painel-romano.js')) scripts.push(PAINEL_ROMANO_ADMIN_SCRIPT);
+  if (scripts.length) html = html.replace('</body>', `${scripts.join('')}</body>`);
 
   const headers = new Headers(response.headers);
   headers.delete('content-length');
