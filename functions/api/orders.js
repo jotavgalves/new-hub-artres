@@ -3,6 +3,7 @@ import { canAccessOrder, requireAdmin } from "./admin/_auth.js";
 import { hydrateOrderNumbers, nextOrderNumber } from "./_order_numbers.js";
 import { nextOrderNumberFromSupabase } from "./_supabase_counter.js";
 import { listOrdersFromSupabase, saveOrderToSupabase, softDeleteOrderInSupabase, supabaseReady, updateOrderStatusInSupabase } from "./_supabase.js";
+import { enrichOrder, enrichOrderItem } from "./_order_product.js";
 
 const ORDER_PREFIX = "ORDER:";
 const CHECKOUT_REF_PREFIX = "ORDER_CHECKOUT_REF:";
@@ -261,14 +262,18 @@ async function normalizeOrder(body, config, env) {
 function normalizeOrderItems(rawItems) {
   const map = new Map();
   for (const raw of Array.isArray(rawItems) ? rawItems : []) {
-    const item = {
+    const item = enrichOrderItem({
       code: cleanCode(raw && raw.code),
       theme: clean(raw && raw.theme),
       product: clean(raw && raw.product),
+      productKey: clean(raw && (raw.productKey || raw.product)),
       productName: clean(raw && raw.productName || raw && raw.product_name),
+      sizeKey: clean(raw && raw.sizeKey),
+      size: clean(raw && (raw.size || raw.dimension)),
+      details: raw && raw.details && typeof raw.details === "object" && !Array.isArray(raw.details) ? raw.details : {},
       qty: Math.max(1, Math.min(999, Number(raw && (raw.qty || raw.quantity) || 1) || 1)),
       image: String(raw && (raw.image || raw.thumbnail) || "").slice(0, 1000)
-    };
+    });
     if (!item.code) continue;
     const key = itemKey(item);
     if (!key) continue;
@@ -283,7 +288,7 @@ function normalizeOrderItems(rawItems) {
   return [...map.values()];
 }
 
-function itemKey(item) { return [item.code, item.theme, item.product, item.productName].map(v => String(v || "").toLowerCase()).join("|"); }
+function itemKey(item) { return [item.code, item.theme, item.productKey || item.product, item.productName].map(v => String(v || "").toLowerCase()).join("|"); }
 function cleanCode(value) { return String(value || "").replace(/^#/, "").replace(/\s+/g, " ").trim().slice(0, 80); }
 function clean(value) { return String(value || "").replace(/\s+/g, " ").trim().slice(0, 200); }
 function cleanCheckoutReference(value) {
@@ -294,7 +299,7 @@ function contextSafe(value) { return value == null ? "" : value; }
 function parseStoredOrder(raw) {
   try {
     const order = JSON.parse(raw);
-    return isOrderObject(order) ? order : null;
+    return isOrderObject(order) ? enrichOrder(order) : null;
   } catch (_) {
     return null;
   }
