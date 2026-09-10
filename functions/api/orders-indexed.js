@@ -2,6 +2,7 @@ import { json } from "./_config.js";
 import { canAccessOrder, requireAdmin } from "./admin/_auth.js";
 import { formatOrderNumber, hydrateOrderNumbers } from "./_order_numbers.js";
 import { listOrdersFromSupabase, supabaseReady } from "./_supabase.js";
+import { enrichOrder } from "./_order_product.js";
 
 const ORDER_PREFIX = "ORDER:";
 const COUNTER_PREFIX = "ORDER_COUNTER:";
@@ -102,7 +103,7 @@ function sourceName(supabaseOrders, kvOrders) {
 function parseOrder(raw) {
   try {
     const order = JSON.parse(raw);
-    return order && typeof order === "object" && !Array.isArray(order) ? order : null;
+    return order && typeof order === "object" && !Array.isArray(order) ? enrichOrder(order) : null;
   } catch (_) { return null; }
 }
 function safeCanAccessOrder(auth, order) {
