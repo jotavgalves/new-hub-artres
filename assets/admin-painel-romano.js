@@ -12,7 +12,7 @@
   function num(v,fallback){var n=Number(String(v==null?'':v).replace(',','.'));return Number.isFinite(n)?n:fallback}
   function money(v){return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
   function clone(v){return JSON.parse(JSON.stringify(v&&typeof v==='object'?v:{}))}
-  function active(){return document.body.dataset.userRole!=='vendedora'&&document.body.dataset.adminTab==='productsView'}
+  function active(){var view=$('productsView');return document.body.dataset.userRole!=='vendedora'&&(document.body.dataset.adminTab==='productsView'||!!(view&&!view.classList.contains('hidden')))}
   function api(url,opts){
     opts=opts||{};
     return fetch(url,{credentials:'include',cache:'no-store',headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts}).then(async function(r){
@@ -29,8 +29,7 @@
     return {
       label:clean(p.label||'Painel Romano 1x2'),
       unitPrice:price,
-      enabled:p.enabled===true||(p.enabled!==false&&price>0),
-      neverConfigured:!products.painelRomano&&!products[KEY]
+      enabled:p.enabled===true||(p.enabled!==false&&price>0)
     };
   }
   function status(msg,tone){var el=$('romanAdminStatus');if(!el)return;el.textContent=msg||'';el.dataset.tone=tone||''}
@@ -120,7 +119,6 @@
     if(state.loading)return;
     state.loading=true;
     try{
-      /* Também dispara a migração aditiva da configuração comercial, se ainda não existir. */
       await fetch('/api/commercial-config?romanAdmin='+Date.now(),{cache:'no-store',credentials:'include'}).catch(function(){});
       var d=await api('/api/admin/config?roman='+Date.now());
       state.config=clone(d.config||{});
