@@ -2,7 +2,8 @@ import { json, loadConfig, saveConfig } from './_config.js';
 
 const ROOTS = Object.freeze({
   '50x50': '193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae',
-  'painel-150': '18x1qthD2RXAxRi2u-d7U3wpJLfpINU7-'
+  'painel-150': '18x1qthD2RXAxRi2u-d7U3wpJLfpINU7-',
+  'painel-romano': '15f6Ge0jZCHSIWMhmEUOs4bfXy9y5U3wk'
 });
 
 export async function onRequestGet(context) {
@@ -25,6 +26,7 @@ async function ensureProductionProducts(env, source, storageReady) {
   const config = clone(source || {});
   config.products = record(config.products);
   const currentPanel = config.products.panel150 || config.products['painel-150'];
+  const currentRoman = config.products.painelRomano || config.products['painel-romano'];
   let changed = false;
 
   if (!currentPanel || typeof currentPanel !== 'object') {
@@ -36,6 +38,15 @@ async function ensureProductionProducts(env, source, storageReady) {
     config.products['painel-150'] = clone(config.products.panel150);
   }
 
+  if (!currentRoman || typeof currentRoman !== 'object') {
+    config.products.painelRomano = panelRomanDefaults();
+    config.products['painel-romano'] = clone(config.products.painelRomano);
+    changed = true;
+  } else {
+    config.products.painelRomano = { ...panelRomanDefaults(), ...currentRoman, productKey: 'painel-romano' };
+    config.products['painel-romano'] = clone(config.products.painelRomano);
+  }
+
   config.productCatalog = Array.isArray(config.productCatalog) ? config.productCatalog : [];
   if (!config.productCatalog.some(item => item && item.productKey === 'painel-150')) {
     config.productCatalog.push({
@@ -43,6 +54,16 @@ async function ensureProductionProducts(env, source, storageReady) {
       label: config.products.panel150.label,
       productKey: 'painel-150',
       active: config.products.panel150.enabled !== false,
+      editable: true
+    });
+    changed = true;
+  }
+  if (!config.productCatalog.some(item => item && item.productKey === 'painel-romano')) {
+    config.productCatalog.push({
+      id: 'painel-romano',
+      label: config.products.painelRomano.label,
+      productKey: 'painel-romano',
+      active: config.products.painelRomano.enabled !== false,
       editable: true
     });
     changed = true;
@@ -59,6 +80,22 @@ async function ensureProductionProducts(env, source, storageReady) {
       active: true,
       type: 'painel-150',
       productKey: 'painel-150',
+      structure: 'theme-or-subtheme-images',
+      filenamePattern: 'ID_TEMA_PRODUTO_DIMENSAO'
+    });
+    changed = true;
+  }
+
+  const romanDrive = config.drives.find(item => item && item.productKey === 'painel-romano');
+  if (!romanDrive || romanDrive.folderId !== ROOTS['painel-romano']) {
+    config.drives = config.drives.filter(item => !item || item.productKey !== 'painel-romano');
+    config.drives.push({
+      id: 'painel-romano',
+      name: 'Drive Painel Romano 1x2',
+      folderId: ROOTS['painel-romano'],
+      active: true,
+      type: 'painel-romano',
+      productKey: 'painel-romano',
       structure: 'theme-or-subtheme-images',
       filenamePattern: 'ID_TEMA_PRODUTO_DIMENSAO'
     });
@@ -109,6 +146,15 @@ function publicCommercialConfig(config) {
     initial: 1,
     scope: 'item'
   });
+  const roman = normalizeProduct(products.painelRomano || products['painel-romano'], {
+    key: 'painel-romano',
+    label: 'Painel Romano 1x2',
+    unitPrice: 0,
+    minimum: 1,
+    step: 1,
+    initial: 1,
+    scope: 'item'
+  });
   const discount = percentage(
     config && config.ui && config.ui.discountPercent,
     config && config.campaign && config.campaign.discountPercent,
@@ -128,7 +174,8 @@ function publicCommercialConfig(config) {
     updatedAt: validDate(config && config.commercialUpdatedAt),
     products: {
       '50x50': bolinhas,
-      'painel-150': panel
+      'painel-150': panel,
+      'painel-romano': roman
     },
     protectedRoots: ROOTS
   };
@@ -146,6 +193,23 @@ function panelDefaults() {
     initialQty: 1,
     disableCustomization: true,
     skipProductsStep: true
+  };
+}
+
+function panelRomanDefaults() {
+  return {
+    label: 'Painel Romano 1x2',
+    productKey: 'painel-romano',
+    enabled: false,
+    unitPrice: 0,
+    priceLabel: 'Preço não definido',
+    minQty: 1,
+    step: 1,
+    initialQty: 1,
+    disableCustomization: true,
+    skipProductsStep: true,
+    fixedSize: '1X2',
+    sizeKey: '100x200'
   };
 }
 
