@@ -1,3 +1,5 @@
+import { enrichOrder, enrichOrderItem } from './_order_product.js';
+
 function envValue(env, names) {
   for (const name of names) {
     const value = String(env && env[name] || '').trim();
@@ -164,15 +166,19 @@ async function upsertCustomer(env, customer) {
 
 export function orderFromRow(row) {
   const raw = row.raw && typeof row.raw === 'object' ? row.raw : {};
-  const items = Array.isArray(row.order_items) ? row.order_items.map(item => ({
-    code: item.code || '',
-    theme: item.theme || '',
-    product: item.product || '',
-    productName: item.product_name || '',
-    qty: Number(item.qty || 1),
-    image: item.image || ''
-  })) : (Array.isArray(raw.items) ? raw.items : []);
-  return {
+  const items = Array.isArray(row.order_items) ? row.order_items.map(item => {
+    const itemRaw = item && item.raw && typeof item.raw === 'object' && !Array.isArray(item.raw) ? item.raw : {};
+    return enrichOrderItem({
+      ...itemRaw,
+      code: item.code || itemRaw.code || '',
+      theme: item.theme || itemRaw.theme || '',
+      product: item.product || itemRaw.product || '',
+      productName: item.product_name || itemRaw.productName || itemRaw.product_name || '',
+      qty: Number(item.qty || itemRaw.qty || itemRaw.quantity || 1),
+      image: item.image || itemRaw.image || itemRaw.thumbnail || ''
+    });
+  }) : (Array.isArray(raw.items) ? raw.items.map(enrichOrderItem) : []);
+  return enrichOrder({
     ...raw,
     id: row.id,
     orderNumber: row.order_number,
@@ -190,7 +196,7 @@ export function orderFromRow(row) {
     source: row.source || raw.source || 'catalog',
     userAgent: row.user_agent || raw.userAgent || '',
     items
-  };
+  });
 }
 
 function normalizeItems(items) { return Array.isArray(items) ? items.slice(0, 200) : []; }
