@@ -34,8 +34,18 @@ export async function onRequestGet(context){
 
   if(mode === "items"){
    const product = cleanLabel(url.searchParams.get("product") || "");
+   const panel150 = isPanel150Request(folderId, product);
    const items = await itemRows(context.env, { folderId, theme, product, config, bolinhas });
-   return json({ ok:true, mode, source:"catalog_index+drive_live", theme:displayTheme(theme, config), product:bolinhas.productKey, productName:bolinhas.label, total:items.length, items }, 200, 15);
+   return json({
+    ok:true,
+    mode,
+    source:panel150 ? "catalog_index+panel150_root" : "catalog_index+drive_live",
+    theme:displayTheme(theme, config),
+    product:panel150 ? "painel-150" : bolinhas.productKey,
+    productName:panel150 ? "Painel 150x150" : bolinhas.label,
+    total:items.length,
+    items
+   }, 200, 15);
   }
 
   if(mode === "globalSearch"){
@@ -96,14 +106,41 @@ async function productFolders(env, { folderId, theme, config, bolinhas }){
  return folderCards.concat(productCards);
 }
 
-async function itemRows(env, { folderId, theme, config, bolinhas }){
+async function itemRows(env, { folderId, theme, config, bolinhas, product }){
  const parsed = parseVirtualProductId(folderId);
  const parentId = parsed ? parsed.parentId : folderId;
- const rows = await artworkRowsByParent(env, parentId);
+ const panel150 = isPanel150Request(parentId, product || (parsed && parsed.productKey) || "");
+ const rows = panel150
+  ? await artworkRowsByRoot(env, SECONDARY_ROOT_FOLDER_ID)
+  : await artworkRowsByParent(env, parentId);
  return rows
   .map(row => itemFromRow(row, config, theme, bolinhas))
   .filter(Boolean)
+  .map(item => panel150 ? asPanel150(item) : item)
   .sort((a,b) => (Number(b.sortId)||0) - (Number(a.sortId)||0));
+}
+
+function isPanel150Request(folderId, product){
+ const p = normalizeText(product || "");
+ return String(folderId || "") === SECONDARY_ROOT_FOLDER_ID || (p.includes("painel") && p.includes("150"));
+}
+
+function asPanel150(item){
+ item.product = "painel-150";
+ item.productName = "Painel 150x150";
+ item.productLabel = "Painel 150x150";
+ item.size = "150X150";
+ item.sizeKey = "150X150";
+ item.details = { ...(item.details || {}), size:"150X150" };
+ return item;
+}
+
+async function artworkRowsByRoot(env, rootId){
+ const rows = await allIndexRows(env, params => {
+  params.set("type", "eq.artwork");
+  params.set("root_drive_id", "eq." + rootId);
+ });
+ return dedupeRows(rows);
 }
 
 async function artworkRowsByParent(env, parentId){
@@ -117,7 +154,6 @@ async function artworkRowsByParent(env, parentId){
    return [];
   })
  ]);
- // Live Drive data must win over stale index rows for the same file.
  return dedupeRows(liveRows.concat(indexedRows));
 }
 
@@ -266,9 +302,6 @@ async function searchItems(env, query, config, bolinhas, limit){
    params.set("code", "eq." + digits);
   }, limit));
 
-  // Always reconcile an exact numeric search with Drive. Previously this only
-  // happened when the index had no exact row, so a stale indexed record could
-  // suppress a newer/replaced file such as artwork 4501.
   liveExactRows.push(...await liveArtworkRowsByCode(env, digits, limit).catch(error => {
    console.warn("CATALOG_LIVE_CODE_SEARCH_FAILED", String(error&&error.message||error));
    return [];
@@ -291,7 +324,6 @@ async function searchItems(env, query, config, bolinhas, limit){
   }
  }
 
- // Put live exact rows first so deduplication keeps current Drive metadata.
  return dedupeRows(liveExactRows.concat(indexedExactRows, otherIndexedRows))
   .map(row => itemFromRow(row, config, "", bolinhas))
   .filter(Boolean)
