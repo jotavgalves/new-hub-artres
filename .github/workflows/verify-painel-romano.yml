@@ -1,0 +1,112 @@
+name: Verificar Painel Romano
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-painel-romano.yml'
+      - 'assets/painel-romano-runtime.js'
+      - 'assets/catalog-cache-bust.js'
+      - 'assets/admin-painel-romano.js'
+      - 'functions/index.js'
+      - 'functions/adm/_middleware.js'
+      - 'functions/api/painel-romano.js'
+      - 'functions/api/orders-unified.js'
+      - 'functions/api/commercial-config.js'
+      - 'functions/api/_order_product.js'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-painel-romano-main
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Aguardar versão nova no Pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://new-hub-artres.pages.dev'
+          ok=0
+          for attempt in $(seq 1 30); do
+            curl --fail --silent --show-error --location --max-time 25 "$BASE/?_roman_verify=$(date +%s)" -o home.html || true
+            curl --fail --silent --show-error --location --max-time 25 "$BASE/assets/painel-romano-runtime.js?v=3&_roman_verify=$(date +%s)" -o roman.js || true
+            curl --fail --silent --show-error --location --max-time 25 "$BASE/assets/catalog-cache-bust.js?v=10&_roman_verify=$(date +%s)" -o loader.js || true
+            if grep -q 'catalog-cache-bust.js?v=10' home.html 2>/dev/null \
+              && grep -q "__ARMAZEM_PAINEL_ROMANO_RUNTIME__='3'" roman.js 2>/dev/null \
+              && grep -q 'productionV2RomanTab' roman.js 2>/dev/null \
+              && grep -q 'painel-romano-runtime.js?v=3' loader.js 2>/dev/null; then
+              ok=1
+              echo "Versão do Painel Romano publicada na tentativa $attempt."
+              break
+            fi
+            echo "Aguardando Pages... tentativa $attempt/30"
+            sleep 10
+          done
+          test "$ok" = 1
+
+      - name: Validar configuração e Drive do Romano
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://new-hub-artres.pages.dev'
+          curl --fail --silent --show-error --location --max-time 30 "$BASE/api/commercial-config?_roman_verify=$(date +%s)" -o commercial.json
+          curl --fail --silent --show-error --location --max-time 45 "$BASE/api/painel-romano?mode=themes&_roman_verify=$(date +%s)" -o roman-themes.json
+          node <<'NODE'
+          const fs=require('node:fs');
+          const commercial=JSON.parse(fs.readFileSync('commercial.json','utf8'));
+          const themes=JSON.parse(fs.readFileSync('roman-themes.json','utf8'));
+          const root='15f6Ge0jZCHSIWMhmEUOs4bfXy9y5U3wk';
+          if(commercial.ok!==true) throw new Error('COMMERCIAL_NOT_OK');
+          const p=commercial.config?.products?.['painel-romano'];
+          if(!p) throw new Error('PAINEL_ROMANO_MISSING');
+          if(commercial.config?.protectedRoots?.['painel-romano']!==root) throw new Error('PAINEL_ROMANO_ROOT_MISMATCH');
+          if(String(p.label||'').toLowerCase().indexOf('romano')<0) throw new Error('PAINEL_ROMANO_LABEL_INVALID');
+          if(Number(p.quantity?.minimum)!==1 || Number(p.quantity?.step)!==1) throw new Error('PAINEL_ROMANO_QUANTITY_INVALID');
+          if(themes.ok!==true) throw new Error('ROMAN_THEMES_NOT_OK');
+          if(themes.rootFolderId!==root) throw new Error('ROMAN_THEMES_ROOT_MISMATCH');
+          if(!Array.isArray(themes.folders)) throw new Error('ROMAN_THEMES_INVALID');
+          for(const theme of themes.folders){
+            if(theme.productKey!=='painel-romano') throw new Error('ROMAN_THEME_PRODUCT_LEAK');
+          }
+          console.log(JSON.stringify({price:p.unitPrice,enabled:p.enabled,romanThemes:themes.folders.length,root}));
+          NODE
+
+      - name: Validar endpoint de pedidos sem criar pedido
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://new-hub-artres.pages.dev'
+          code=$(curl --silent --show-error --location --max-time 30 -o unified.json -w '%{http_code}' \
+            -X POST "$BASE/api/orders-unified" \
+            -H 'Content-Type: application/json' \
+            --data '{"items":[]}')
+          test "$code" = '400'
+          node <<'NODE'
+          const fs=require('node:fs');
+          const body=JSON.parse(fs.readFileSync('unified.json','utf8'));
+          if(body.error!=='CARRINHO_VAZIO_OU_INVALIDO') throw new Error('UNIFIED_ENDPOINT_INVALID');
+          NODE
+
+      - name: Validar aba renderizada no navegador
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://new-hub-artres.pages.dev'
+          CHROME=$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)
+          if [ -z "$CHROME" ]; then
+            echo 'Chrome/Chromium não disponível no runner.' >&2
+            exit 1
+          fi
+          "$CHROME" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage \
+            --virtual-time-budget=12000 --dump-dom "$BASE/?produto=painel-romano&_roman_verify=$(date +%s)" > dom.html
+          grep -q 'id="productionV2RomanTab"' dom.html
+          grep -q 'Painel Romano' dom.html
+          grep -q 'Painel Romano 1x2' dom.html
+          echo 'Aba Painel Romano foi renderizada pelo JavaScript no domínio oficial.'
