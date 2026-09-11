@@ -30,9 +30,10 @@ export async function onRequestGet(context) {
         kind: 'theme',
         product: PRODUCT_KEY,
         productKey: PRODUCT_KEY,
-        productName: commercial.label
+        productName: commercial.label,
+        synthetic: !!t.synthetic
       }));
-      return json({ ok:true, mode, rootFolderId:ROOT_FOLDER_ID, folders, total:folders.length, product:commercial });
+      return json({ ok:true, mode, rootFolderId:ROOT_FOLDER_ID, folders, total:folders.length, artworkTotal:catalog.artworks.length, product:commercial });
     }
 
     if (mode === 'search') {
@@ -211,16 +212,39 @@ function asItem(row, commercial) {
 
 function uniqueThemes(catalog) {
   const map = new Map();
+
   for (const folder of catalog.themeFolders || []) {
     const key = norm(folder.name);
-    if (key && !map.has(key)) map.set(key, folder);
+    if (key && !map.has(key)) map.set(key, { id:folder.id, name:folder.name, synthetic:false });
   }
+
+  for (const row of catalog.artworks || []) {
+    const name = clean(row.theme || '');
+    const key = norm(name);
+    if (key && !map.has(key)) {
+      map.set(key, {
+        id:row.themeFolderId || `derived-${key}`,
+        name,
+        synthetic:!row.themeFolderId
+      });
+    }
+  }
+
+  if (!map.size && Array.isArray(catalog.artworks) && catalog.artworks.length) {
+    map.set('__all__', {
+      id:ROOT_FOLDER_ID,
+      name:'Todos os Romanos',
+      synthetic:true
+    });
+  }
+
   return [...map.values()].sort((a,b) => a.name.localeCompare(b.name, 'pt-BR', { numeric:true }));
 }
 
 function themeMatches(row, wantedTheme) {
   const wanted = norm(wantedTheme);
   if (!wanted) return true;
+  if (wanted === 'todos os romanos' || wanted === 'todos' || wanted === 'painel romano' || wanted === 'painel romano 1x2') return true;
   const candidates = [row.theme, ...(row.pathParts || [])].map(norm).filter(Boolean);
   return candidates.some(value => value === wanted || value.includes(wanted) || wanted.includes(value));
 }
