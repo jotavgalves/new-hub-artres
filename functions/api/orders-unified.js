@@ -6,10 +6,11 @@ import { onRequestPost as createLegacyOrder } from './orders.js';
 const ROOTS = Object.freeze({
   '50x50': '193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae',
   'painel-150': '18x1qthD2RXAxRi2u-d7U3wpJLfpINU7-',
-  'painel-romano': '15f6Ge0jZCHSIWMhmEUOs4bfXy9y5U3wk'
+  'painel-romano': '15f6Ge0jZCHSIWMhmEUOs4bfXy9y5U3wk',
+  'retangular-1x2': '1r4BdVOZasdtlE16K7TKIVkHCfVSHLRML'
 });
 const IDEMPOTENCY_PREFIX = 'ORDER_UNIFIED_IDEMPOTENCY:';
-const PREPARED_PRODUCTS = new Set(['painel-romano', 'retangular-1x2']);
+const BYPASS_RECONCILE = new Set(['painel-romano', 'retangular-1x2']);
 
 export async function onRequestPost(context) {
   let cartRepair = { changed:false, migrations:[], removed:[] };
@@ -24,8 +25,8 @@ export async function onRequestPost(context) {
       if (replay && replay.ok && replay.orderNumber) return json({ ...replay, action:'REPLAY' }, 200);
     }
 
-    const preparedRaw = rawItems.filter(item => PREPARED_PRODUCTS.has(canonicalProduct(item && (item.productKey || item.product))));
-    const standardRaw = rawItems.filter(item => !PREPARED_PRODUCTS.has(canonicalProduct(item && (item.productKey || item.product))));
+    const preparedRaw = rawItems.filter(item => BYPASS_RECONCILE.has(canonicalProduct(item && (item.productKey || item.product))));
+    const standardRaw = rawItems.filter(item => !BYPASS_RECONCILE.has(canonicalProduct(item && (item.productKey || item.product))));
 
     let standardItems = [];
     if (standardRaw.length) {
@@ -39,8 +40,8 @@ export async function onRequestPost(context) {
 
     const { config } = await loadConfig(context.env);
     const commercial = commercialConfig(config);
-    const standardIds = requested.filter(item => !PREPARED_PRODUCTS.has(item.productKey)).map(item => item.driveFileId);
-    const rows = await catalogRows(context.env, standardIds);
+    const indexedIds = requested.filter(item => item.productKey !== 'painel-romano').map(item => item.driveFileId);
+    const rows = await catalogRows(context.env, indexedIds);
     const byId = new Map(rows.map(row => [String(row.drive_id || ''), row]));
     const orderItems = [];
 
@@ -76,6 +77,8 @@ export async function onRequestPost(context) {
       if (!row || !expectedRoot || String(row.root_drive_id || '') !== expectedRoot) {
         return json({ ok:false, error:'ARTE_PRODUTO_INCOMPATIVEL', productKey:item.productKey, cartRepair }, 422);
       }
+      const isRetangular = item.productKey === 'retangular-1x2';
+      const isPanel150 = item.productKey === 'painel-150';
       orderItems.push({
         driveFileId:item.driveFileId,
         code:clean(row.code || row.name).replace(/^#/, ''),
@@ -87,9 +90,9 @@ export async function onRequestPost(context) {
         image:String(row.thumbnail_url || '').slice(0, 1000),
         catalogRootDriveId:expectedRoot,
         rootVerified:true,
-        size:item.productKey === 'painel-150' ? '150X150' : '50X50',
-        sizeKey:item.productKey === 'painel-150' ? '150x150' : '50x50',
-        details:item.details || {}
+        size:isRetangular ? '1X2' : (isPanel150 ? '150X150' : '50X50'),
+        sizeKey:isRetangular ? '100x200' : (isPanel150 ? '150x150' : '50x50'),
+        details:isRetangular ? { ...(item.details || {}), size:'1X2', sizeKey:'100x200', width:100, height:200, unit:'cm', fixed:true } : (item.details || {})
       });
     }
 
@@ -129,17 +132,7 @@ export async function onRequestPost(context) {
     }
 
     const orderNumber = String(result.order.orderNumber || result.order.orderCode || result.order.displayId || result.order.id || '').trim();
-    const accepted = {
-      ok:true,
-      saved:true,
-      action:'CREATED',
-      recovered:false,
-      orderNumber,
-      order:result.order,
-      totals,
-      commercialVersion:commercial.version,
-      cartRepair
-    };
+    const accepted = { ok:true, saved:true, action:'CREATED', recovered:false, orderNumber, order:result.order, totals, commercialVersion:commercial.version, cartRepair };
     if (idempotencyKey && context.env.CONFIG_KV) {
       await context.env.CONFIG_KV.put(IDEMPOTENCY_PREFIX + idempotencyKey, JSON.stringify(accepted), { expirationTtl:86400 }).catch(() => {});
     }
@@ -176,11 +169,7 @@ async function romanArtwork(env, fileId) {
   }
   if (!verified) return null;
   const name = clean(file.name || 'Sem nome');
-  return {
-    code:extractCode(name) || clean(file.id).slice(0, 80),
-    theme:path[0] || 'Sem tema',
-    image:`https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w1200`
-  };
+  return { code:extractCode(name) || clean(file.id).slice(0, 80), theme:path[0] || 'Sem tema', image:`https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w1200` };
 }
 
 async function driveFile(apiKey, fileId) {
@@ -205,7 +194,7 @@ function commercialConfig(config) {
       '50x50':product(products.bolinhas, { label:'Bolinhas 50x50', unitPrice:9.9, minimum:6, step:2, initial:6 }),
       'painel-150':product(products.panel150 || products['painel-150'], { label:'Painel 150 cm', unitPrice:59.9, minimum:1, step:1, initial:1 }),
       'painel-romano':product(products.painelRomano || products['painel-romano'], { label:'Painel Romano 1x2', unitPrice:0, minimum:1, step:1, initial:1 }),
-      'retangular-1x2':{ ...product(products.retangular1x2 || products['retangular-1x2'], { label:'Retangular 1x2', unitPrice:0, minimum:1, step:1, initial:1 }), enabled:false }
+      'retangular-1x2':product(products.retangular1x2 || products['retangular-1x2'], { label:'Painel Retangular 1x2', unitPrice:0, minimum:1, step:1, initial:1 })
     }
   };
 }
@@ -213,14 +202,7 @@ function commercialConfig(config) {
 function product(input, defaults) {
   const raw = input && typeof input === 'object' ? input : {};
   const unitPrice = money(raw.unitPrice, defaults.unitPrice);
-  return {
-    label:clean(raw.label || defaults.label),
-    unitPrice,
-    minimum:positive(raw.minQty, raw.minimum, defaults.minimum),
-    step:positive(raw.step, defaults.step),
-    initial:positive(raw.initialQty, raw.initial, defaults.initial),
-    enabled:raw.enabled !== false && unitPrice > 0
-  };
+  return { label:clean(raw.label || defaults.label), unitPrice, minimum:positive(raw.minQty, raw.minimum, defaults.minimum), step:positive(raw.step, defaults.step), initial:positive(raw.initialQty, raw.initial, defaults.initial), enabled:raw.enabled !== false && unitPrice > 0 };
 }
 
 function validateQuantities(items, products) {
@@ -249,13 +231,7 @@ function normalizeItems(items) {
     const productKey = canonicalProduct(raw && (raw.productKey || raw.product));
     const quantity = Math.min(999, Math.max(1, Number.parseInt(raw && (raw.quantity || raw.qty), 10) || 0));
     if (!driveFileId || !productKey || !quantity) continue;
-    out.push({
-      driveFileId,
-      productKey,
-      quantity,
-      sizeKey:clean(raw && (raw.sizeKey || raw.size)).slice(0, 120),
-      details:raw && raw.details && typeof raw.details === 'object' && !Array.isArray(raw.details) ? raw.details : {}
-    });
+    out.push({ driveFileId, productKey, quantity, sizeKey:clean(raw && (raw.sizeKey || raw.size)).slice(0, 120), details:raw && raw.details && typeof raw.details === 'object' && !Array.isArray(raw.details) ? raw.details : {} });
   }
   return out;
 }
@@ -272,11 +248,7 @@ function mergeItems(items) {
 
 function normalizeRepair(value) {
   const raw = value && typeof value === 'object' ? value : {};
-  return {
-    changed:Boolean(raw.changed),
-    migrations:Array.isArray(raw.migrations) ? raw.migrations.slice(0, 200) : [],
-    removed:Array.isArray(raw.removed) ? raw.removed.slice(0, 200) : []
-  };
+  return { changed:Boolean(raw.changed), migrations:Array.isArray(raw.migrations) ? raw.migrations.slice(0, 200) : [], removed:Array.isArray(raw.removed) ? raw.removed.slice(0, 200) : [] };
 }
 
 function canonicalProduct(value) {
@@ -284,23 +256,12 @@ function canonicalProduct(value) {
   if (text === '50x50' || text === 'bolinhas' || text === 'bolinha') return '50x50';
   if (text === 'painel-150' || text === 'painel150' || text === 'painel') return 'painel-150';
   if (text === 'painel-romano' || text === 'painel romano' || text === 'painel-romano-1x2') return 'painel-romano';
-  if (text === 'retangular-1x2' || text === 'retangular 1x2' || text === 'retangular 1 x 2' || text === 'painel retangular 1x2') return 'retangular-1x2';
+  if (text === 'retangular-1x2' || text === 'retangular 1x2' || text === 'retangular 1 x 2' || text === 'painel retangular 1x2' || text === 'painel retangular 1 x 2') return 'retangular-1x2';
   return '';
 }
-function normalizeCustomer(value) {
-  const raw = value && typeof value === 'object' ? value : {};
-  const whatsapp = digits(raw.whatsapp || raw.phone).slice(0, 20);
-  return { name:clean(raw.name).slice(0, 160), whatsapp, phone:whatsapp };
-}
-function normalizeSeller(value) {
-  const raw = value && typeof value === 'object' ? value : {};
-  return { id:clean(raw.id).slice(0, 80), label:clean(raw.label).slice(0, 120) };
-}
-function extractCode(name) {
-  const base = clean(name).replace(/\.[a-z0-9]{2,5}$/i, '');
-  const match = base.match(/(?:^|[^0-9])#?([0-9]{2,7})(?:[^0-9]|$)/);
-  return match ? match[1] : '';
-}
+function normalizeCustomer(value) { const raw = value && typeof value === 'object' ? value : {}; const whatsapp = digits(raw.whatsapp || raw.phone).slice(0, 20); return { name:clean(raw.name).slice(0, 160), whatsapp, phone:whatsapp }; }
+function normalizeSeller(value) { const raw = value && typeof value === 'object' ? value : {}; return { id:clean(raw.id).slice(0, 80), label:clean(raw.label).slice(0, 120) }; }
+function extractCode(name) { const base = clean(name).replace(/\.[a-z0-9]{2,5}$/i, ''); const match = base.match(/(?:^|[^0-9])#?([0-9]{2,7})(?:[^0-9]|$)/); return match ? match[1] : ''; }
 function driveApiKey(env) { return String(env && (env.GOOGLE_API_KEY || env.GOOGLE_DRIVE_API_KEY || env.DRIVE_API_KEY) || '').trim(); }
 function cleanDriveId(value) { const text=String(value || '').trim(); return /^[A-Za-z0-9_-]{5,200}$/.test(text) ? text : ''; }
 function cleanIdempotency(value) { const text=String(value || '').trim(); return /^[A-Za-z0-9._:-]{16,160}$/.test(text) ? text : ''; }
