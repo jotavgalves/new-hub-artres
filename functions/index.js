@@ -1,4 +1,4 @@
-const CACHE_BUST_SCRIPT = '<script src="/assets/catalog-cache-bust.js?v=12"></script>';
+const CACHE_BUST_SCRIPT = '<script src="/assets/catalog-cache-bust.js?v=13"></script>';
 const CUSTOMER_CHECKOUT_SCRIPT = '<script src="/assets/customer-checkout.js?v=6" defer></script>';
 const SITE_TEXTS_SCRIPT = '<script src="/assets/site-texts-runtime.js?v=1" defer></script>';
 const CATALOG_NAV_UX_SCRIPT = '<script src="/assets/catalog-navigation-ux.js?v=3" defer></script>';
