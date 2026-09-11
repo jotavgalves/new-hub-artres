@@ -9,6 +9,7 @@ const ROOTS = Object.freeze({
   'painel-romano': '15f6Ge0jZCHSIWMhmEUOs4bfXy9y5U3wk'
 });
 const IDEMPOTENCY_PREFIX = 'ORDER_UNIFIED_IDEMPOTENCY:';
+const PREPARED_PRODUCTS = new Set(['painel-romano', 'retangular-1x2']);
 
 export async function onRequestPost(context) {
   let cartRepair = { changed:false, migrations:[], removed:[] };
@@ -23,8 +24,8 @@ export async function onRequestPost(context) {
       if (replay && replay.ok && replay.orderNumber) return json({ ...replay, action:'REPLAY' }, 200);
     }
 
-    const romanRaw = rawItems.filter(item => canonicalProduct(item && (item.productKey || item.product)) === 'painel-romano');
-    const standardRaw = rawItems.filter(item => canonicalProduct(item && (item.productKey || item.product)) !== 'painel-romano');
+    const preparedRaw = rawItems.filter(item => PREPARED_PRODUCTS.has(canonicalProduct(item && (item.productKey || item.product))));
+    const standardRaw = rawItems.filter(item => !PREPARED_PRODUCTS.has(canonicalProduct(item && (item.productKey || item.product))));
 
     let standardItems = [];
     if (standardRaw.length) {
@@ -32,13 +33,13 @@ export async function onRequestPost(context) {
       cartRepair = normalizeRepair(reconciliation);
       standardItems = normalizeItems(reconciliation.items);
     }
-    const romanItems = normalizeItems(romanRaw);
-    const requested = mergeItems(standardItems.concat(romanItems));
+    const preparedItems = normalizeItems(preparedRaw);
+    const requested = mergeItems(standardItems.concat(preparedItems));
     if (!requested.length) return json({ ok:false, error:'CARRINHO_ATUALIZADO_SEM_ITENS', cartRepair }, 409);
 
     const { config } = await loadConfig(context.env);
     const commercial = commercialConfig(config);
-    const standardIds = requested.filter(item => item.productKey !== 'painel-romano').map(item => item.driveFileId);
+    const standardIds = requested.filter(item => !PREPARED_PRODUCTS.has(item.productKey)).map(item => item.driveFileId);
     const rows = await catalogRows(context.env, standardIds);
     const byId = new Map(rows.map(row => [String(row.drive_id || ''), row]));
     const orderItems = [];
@@ -203,7 +204,8 @@ function commercialConfig(config) {
     products:{
       '50x50':product(products.bolinhas, { label:'Bolinhas 50x50', unitPrice:9.9, minimum:6, step:2, initial:6 }),
       'painel-150':product(products.panel150 || products['painel-150'], { label:'Painel 150 cm', unitPrice:59.9, minimum:1, step:1, initial:1 }),
-      'painel-romano':product(products.painelRomano || products['painel-romano'], { label:'Painel Romano 1x2', unitPrice:0, minimum:1, step:1, initial:1 })
+      'painel-romano':product(products.painelRomano || products['painel-romano'], { label:'Painel Romano 1x2', unitPrice:0, minimum:1, step:1, initial:1 }),
+      'retangular-1x2':{ ...product(products.retangular1x2 || products['retangular-1x2'], { label:'Retangular 1x2', unitPrice:0, minimum:1, step:1, initial:1 }), enabled:false }
     }
   };
 }
@@ -227,11 +229,13 @@ function validateQuantities(items, products) {
     const rule = products['50x50'];
     if (bolinhas < rule.minimum || (bolinhas - rule.minimum) % rule.step !== 0) return 'QUANTIDADE_BOLINHAS_INVALIDA';
   }
-  for (const key of ['painel-150', 'painel-romano']) {
+  for (const key of ['painel-150', 'painel-romano', 'retangular-1x2']) {
     const rule = products[key];
     for (const item of items.filter(entry => entry.product === key)) {
       if (item.qty < rule.minimum || (item.qty - rule.minimum) % rule.step !== 0) {
-        return key === 'painel-romano' ? 'QUANTIDADE_PAINEL_ROMANO_INVALIDA' : 'QUANTIDADE_PAINEL_150_INVALIDA';
+        if (key === 'painel-romano') return 'QUANTIDADE_PAINEL_ROMANO_INVALIDA';
+        if (key === 'retangular-1x2') return 'QUANTIDADE_RETANGULAR_1X2_INVALIDA';
+        return 'QUANTIDADE_PAINEL_150_INVALIDA';
       }
     }
   }
@@ -280,6 +284,7 @@ function canonicalProduct(value) {
   if (text === '50x50' || text === 'bolinhas' || text === 'bolinha') return '50x50';
   if (text === 'painel-150' || text === 'painel150' || text === 'painel') return 'painel-150';
   if (text === 'painel-romano' || text === 'painel romano' || text === 'painel-romano-1x2') return 'painel-romano';
+  if (text === 'retangular-1x2' || text === 'retangular 1x2' || text === 'retangular 1 x 2' || text === 'painel retangular 1x2') return 'retangular-1x2';
   return '';
 }
 function normalizeCustomer(value) {
