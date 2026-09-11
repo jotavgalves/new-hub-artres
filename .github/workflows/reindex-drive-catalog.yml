@@ -9,10 +9,11 @@ on:
       - '.github/workflows/reindex-drive-catalog.yml'
       - 'scripts/reindex-drive-catalog.mjs'
       - 'functions/api/drive.js'
+      - 'functions/api/painel-romano.js'
   workflow_dispatch:
     inputs:
       root_folder_id:
-        description: "ID de uma pasta raiz específica. Vazio sincroniza as duas raízes de produção."
+        description: "ID de uma pasta raiz específica. Vazio sincroniza as raízes de produção."
         required: false
         type: string
       dry_run:
@@ -65,6 +66,7 @@ jobs:
             roots+=(
               "193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae"
               "18x1qthD2RXAxRi2u-d7U3wpJLfpINU7-"
+              "15f6Ge0jZCHSIWMhmEUOs4bfXy9y5U3wk"
             )
           fi
 
