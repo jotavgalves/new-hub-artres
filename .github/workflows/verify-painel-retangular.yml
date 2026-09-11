@@ -52,28 +52,22 @@ jobs:
           done
           test "$ok" = 1
 
-      - name: Aguardar catálogo indexado e validar API
+      - name: Validar configuração e API do catálogo
         shell: bash
         run: |
           set -euo pipefail
           BASE='https://new-hub-artres.pages.dev'
           ROOT='1r4BdVOZasdtlE16K7TKIVkHCfVSHLRML'
-          ok=0
-          for attempt in $(seq 1 36); do
-            curl --fail --silent --show-error --location --max-time 45 "$BASE/api/painel-retangular?mode=themes&_ret_verify=$(date +%s)" -o rect-themes.json || true
-            if node <<'NODE'
+          curl --fail --silent --show-error --location --max-time 45 "$BASE/api/painel-retangular?mode=themes&_ret_verify=$(date +%s)" -o rect-themes.json
+          node <<'NODE'
           const fs=require('node:fs');
-          let d={};try{d=JSON.parse(fs.readFileSync('rect-themes.json','utf8'))}catch(_){process.exit(1)}
-          if(d.ok!==true || d.rootFolderId!=='1r4BdVOZasdtlE16K7TKIVkHCfVSHLRML') process.exit(1);
-          if(!Array.isArray(d.folders) || !(Number(d.artworkTotal)>0)) process.exit(1);
-          if(d.folders.some(x=>x.productKey!=='retangular-1x2')) process.exit(1);
-          console.log(JSON.stringify({themes:d.folders.length,artworks:d.artworkTotal,source:d.source}));
+          const d=JSON.parse(fs.readFileSync('rect-themes.json','utf8'));
+          if(d.ok!==true || d.rootFolderId!=='1r4BdVOZasdtlE16K7TKIVkHCfVSHLRML') throw new Error('RETANGULAR_API_ROOT_INVALID');
+          if(!Array.isArray(d.folders)) throw new Error('RETANGULAR_THEMES_INVALID');
+          if(d.folders.some(x=>x.productKey!=='retangular-1x2')) throw new Error('RETANGULAR_THEME_PRODUCT_LEAK');
+          if(String(d.product?.label||'').toLowerCase()!=='painel retangular') throw new Error('RETANGULAR_API_LABEL_INVALID:'+d.product?.label);
+          console.log(JSON.stringify({themes:d.folders.length,artworks:Number(d.artworkTotal||0),source:d.source,root:d.rootFolderId}));
           NODE
-            then ok=1; break; fi
-            echo "Aguardando índice do Retangular... tentativa $attempt/36"
-            sleep 10
-          done
-          test "$ok" = 1
 
           curl --fail --silent --show-error --location --max-time 30 "$BASE/api/commercial-config?_ret_verify=$(date +%s)" -o commercial.json
           node <<'NODE'
@@ -84,13 +78,14 @@ jobs:
           const p=d.config?.products?.['retangular-1x2'];
           if(!p) throw new Error('RETANGULAR_MISSING');
           if(d.config?.protectedRoots?.['retangular-1x2']!==root) throw new Error('RETANGULAR_ROOT_MISMATCH');
-          if(String(p.label||'').toLowerCase()!=='painel retangular 1x2') throw new Error('RETANGULAR_LABEL_INVALID:'+p.label);
+          if(String(p.label||'').toLowerCase()!=='painel retangular') throw new Error('RETANGULAR_LABEL_INVALID:'+p.label);
           if(p.catalogReady!==true) throw new Error('RETANGULAR_CATALOG_NOT_READY');
+          if(p.size!=='1X2'||p.sizeKey!=='100x200') throw new Error('RETANGULAR_SIZE_CONFIG_INVALID');
           if(Number(p.quantity?.minimum)!==1 || Number(p.quantity?.step)!==1) throw new Error('RETANGULAR_QUANTITY_INVALID');
-          console.log(JSON.stringify({label:p.label,price:p.unitPrice,enabled:p.enabled,root}));
+          console.log(JSON.stringify({label:p.label,price:p.unitPrice,enabled:p.enabled,size:p.size,sizeKey:p.sizeKey,root}));
           NODE
 
-      - name: Validar itens e identidade técnica
+      - name: Validar identidade das artes quando existirem
         shell: bash
         run: |
           set -euo pipefail
@@ -98,8 +93,14 @@ jobs:
           node <<'NODE'
           const fs=require('node:fs');
           const themes=JSON.parse(fs.readFileSync('rect-themes.json','utf8'));
+          fs.writeFileSync('art-count.txt',String(Number(themes.artworkTotal||0)));
           fs.writeFileSync('theme.txt',String(themes.folders?.[0]?.name||''));
           NODE
+          COUNT=$(cat art-count.txt)
+          if [ "$COUNT" = "0" ]; then
+            echo 'Pasta do Painel Retangular está conectada e atualmente não contém artes indexáveis; teste de item será executado quando houver arquivos.'
+            exit 0
+          fi
           THEME=$(cat theme.txt)
           curl --fail --silent --show-error --get --max-time 45 "$BASE/api/painel-retangular" --data-urlencode 'mode=items' --data-urlencode "theme=$THEME" --data-urlencode "_ret_verify=$(date +%s)" -o rect-items.json
           node <<'NODE'
@@ -108,6 +109,7 @@ jobs:
           if(d.ok!==true || !Array.isArray(d.items) || !d.items.length) throw new Error('RETANGULAR_ITEMS_EMPTY');
           for(const i of d.items.slice(0,20)){
             if(i.productKey!=='retangular-1x2') throw new Error('RETANGULAR_PRODUCT_KEY_INVALID');
+            if(i.productName!=='Painel Retangular') throw new Error('RETANGULAR_PRODUCT_NAME_INVALID');
             if(i.sizeKey!=='100x200' || i.size!=='1X2') throw new Error('RETANGULAR_SIZE_INVALID');
             if(i.details?.fixed!==true) throw new Error('RETANGULAR_FIXED_INVALID');
           }
@@ -127,7 +129,7 @@ jobs:
           if(body.error!=='CARRINHO_VAZIO_OU_INVALIDO') throw new Error('UNIFIED_ENDPOINT_INVALID');
           NODE
 
-      - name: Validar aba e temas no navegador
+      - name: Validar aba no navegador
         shell: bash
         run: |
           set -euo pipefail
@@ -137,6 +139,9 @@ jobs:
           "$CHROME" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --virtual-time-budget=16000 --dump-dom "$BASE/?produto=retangular-1x2&_ret_verify=$(date +%s)" > dom.html
           grep -q 'id="productionV2RetangularTab"' dom.html
           grep -q 'Painel Retangular' dom.html
-          grep -q 'Painel Retangular 1x2' dom.html
-          if grep -q '0 tema(s)' dom.html; then echo 'Painel Retangular ainda aparece com zero temas.' >&2; exit 1; fi
-          echo 'Aba e catálogo do Painel Retangular foram renderizados no domínio oficial.'
+          COUNT=$(cat art-count.txt)
+          if [ "$COUNT" = "0" ]; then
+            grep -q 'Nenhuma arte cadastrada ainda' dom.html
+            if grep -q '0 tema(s)' dom.html; then echo 'Estado vazio genérico incorreto.' >&2; exit 1; fi
+          fi
+          echo 'Aba do Painel Retangular foi renderizada corretamente no domínio oficial.'
