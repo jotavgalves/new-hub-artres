@@ -10,6 +10,7 @@ on:
       - 'scripts/reindex-drive-catalog.mjs'
       - 'functions/api/drive.js'
       - 'functions/api/painel-romano.js'
+      - 'functions/api/painel-retangular.js'
   workflow_dispatch:
     inputs:
       root_folder_id:
@@ -67,6 +68,7 @@ jobs:
               "193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae"
               "18x1qthD2RXAxRi2u-d7U3wpJLfpINU7-"
               "15f6Ge0jZCHSIWMhmEUOs4bfXy9y5U3wk"
+              "1r4BdVOZasdtlE16K7TKIVkHCfVSHLRML"
             )
           fi
 
