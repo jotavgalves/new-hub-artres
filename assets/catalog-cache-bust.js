@@ -34,10 +34,16 @@
     else loadCheckoutV3();
   }
 
-  function loadProductSelectorPolish(){
-    var script = loadScript('productSelectorPolishScript','/assets/product-selector-polish.js?v=1',document.body || document.head);
+  function loadFixedProductsAuthority(){
+    var script = loadScript('fixedProductsAuthorityScript','/assets/fixed-products-authority.js?v=1',document.body || document.head);
     if (script) script.addEventListener('load',loadCartReconcile,{once:true});
     else loadCartReconcile();
+  }
+
+  function loadProductSelectorPolish(){
+    var script = loadScript('productSelectorPolishScript','/assets/product-selector-polish.js?v=1',document.body || document.head);
+    if (script) script.addEventListener('load',loadFixedProductsAuthority,{once:true});
+    else loadFixedProductsAuthority();
   }
 
   function loadPainelRetangular(){
