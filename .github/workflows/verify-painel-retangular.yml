@@ -9,6 +9,7 @@ on:
       - 'assets/painel-retangular-runtime.js'
       - 'assets/product-selector-polish.js'
       - 'assets/catalog-cache-bust.js'
+      - 'assets/admin-products-v2.js'
       - 'assets/admin-retangular-1x2.js'
       - 'functions/index.js'
       - 'functions/adm/_middleware.js'
@@ -38,14 +39,16 @@ jobs:
           ok=0
           for attempt in $(seq 1 36); do
             curl --fail --silent --show-error --location --max-time 25 "$BASE/?_ret_verify=$(date +%s)" -o home.html || true
-            curl --fail --silent --show-error --location --max-time 25 "$BASE/assets/painel-retangular-runtime.js?v=1&_ret_verify=$(date +%s)" -o rect.js || true
+            curl --fail --silent --show-error --location --max-time 25 "$BASE/assets/painel-retangular-runtime.js?v=2&_ret_verify=$(date +%s)" -o rect.js || true
             curl --fail --silent --show-error --location --max-time 25 "$BASE/assets/product-selector-polish.js?v=1&_ret_verify=$(date +%s)" -o selector.js || true
-            curl --fail --silent --show-error --location --max-time 25 "$BASE/assets/catalog-cache-bust.js?v=12&_ret_verify=$(date +%s)" -o loader.js || true
-            if grep -q 'catalog-cache-bust.js?v=12' home.html 2>/dev/null \
+            curl --fail --silent --show-error --location --max-time 25 "$BASE/assets/catalog-cache-bust.js?v=13&_ret_verify=$(date +%s)" -o loader.js || true
+            if grep -q 'catalog-cache-bust.js?v=13' home.html 2>/dev/null \
               && grep -q "__ARMAZEM_PAINEL_RETANGULAR_RUNTIME__='1'" rect.js 2>/dev/null \
               && grep -q 'productionV2RetangularTab' rect.js 2>/dev/null \
+              && grep -q '1fB01auWnc01DEy2EJfGK62l0MCgQLpXu' rect.js 2>/dev/null \
               && grep -q "__ARMAZEM_PRODUCT_SELECTOR_POLISH__='1'" selector.js 2>/dev/null \
               && grep -q 'productionV2TabPrice' selector.js 2>/dev/null \
+              && grep -q 'painel-retangular-runtime.js?v=2' loader.js 2>/dev/null \
               && grep -q 'product-selector-polish.js?v=1' loader.js 2>/dev/null; then
               ok=1
               echo "Versão do Painel Retangular e seletor de preços publicada na tentativa $attempt."
