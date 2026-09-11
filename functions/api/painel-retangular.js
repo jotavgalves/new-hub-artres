@@ -1,7 +1,7 @@
 import { loadConfig } from './_config.js';
 import { baseIndexParams, dedupeRows, readIndex } from './_catalog_index.js';
 
-const ROOT_FOLDER_ID = '1r4BdVOZasdtlE16K7TKIVkHCfVSHLRML';
+const ROOT_FOLDER_ID = '1fB01auWnc01DEy2EJfGK62l0MCgQLpXu';
 const PRODUCT_KEY = 'retangular-1x2';
 const DEFAULT_LABEL = 'Painel Retangular';
 const DRIVE_API = 'https://www.googleapis.com/drive/v3/files';
