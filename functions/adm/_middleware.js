@@ -1,6 +1,6 @@
 const PEDIDOS_SIDEBAR_SCRIPT = '<script id="adminPedidosSidebarScript" src="/assets/pedidos-sidebar.js?v=3" defer></script>';
 const PAINEL_ROMANO_ADMIN_SCRIPT = '<script id="adminPainelRomanoScript" src="/assets/admin-painel-romano.js?v=1" defer></script>';
-const RETANGULAR_1X2_ADMIN_SCRIPT = '<script id="adminRetangular1x2Script" src="/assets/admin-retangular-1x2.js?v=1" defer></script>';
+const RETANGULAR_1X2_ADMIN_SCRIPT = '<script id="adminRetangular1x2Script" src="/assets/admin-retangular-1x2.js?v=2" defer></script>';
 
 export async function onRequest(context) {
   const response = await context.next();
