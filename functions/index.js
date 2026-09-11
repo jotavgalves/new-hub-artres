@@ -3,7 +3,7 @@ const CUSTOMER_CHECKOUT_SCRIPT = '<script src="/assets/customer-checkout.js?v=6"
 const SITE_TEXTS_SCRIPT = '<script src="/assets/site-texts-runtime.js?v=1" defer></script>';
 const CATALOG_NAV_UX_SCRIPT = '<script src="/assets/catalog-navigation-ux.js?v=3" defer></script>';
 const DYNAMIC_PRODUCT_COMMERCE_SYNC_SCRIPT = '<script src="/assets/dynamic-product-commerce-sync.js?v=1" defer></script>';
-const CART_FIXED_MEASURE_POLISH_SCRIPT = '<script src="/assets/cart-fixed-measure-polish.js?v=1" defer></script>';
+const CART_FIXED_MEASURE_POLISH_SCRIPT = '<script src="/assets/cart-fixed-measure-polish.js?v=2" defer></script>';
 const HERO_LOGO_CENTER_STYLE = '<style id="heroLogoCenterStyle">.brand .logo{margin-left:auto;margin-right:auto}</style>';
 
 export async function onRequest(context) {
