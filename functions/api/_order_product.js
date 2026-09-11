@@ -25,7 +25,7 @@ export function canonicalProductLabel(productKey, fallback = '') {
     '50x50': 'Bolinhas 50x50',
     'painel-150': 'Painel 150x150',
     'painel-romano': 'Painel Romano 1x2',
-    'retangular-1x2': 'Retangular 1x2',
+    'retangular-1x2': 'Painel Retangular 1x2',
     cenario: 'Cenário',
     lateral: 'Lateral',
     sacolinha: 'Sacolinha de Festa',
