@@ -7,6 +7,7 @@ on:
       - '.github/workflows/verify-painel-retangular.yml'
       - '.github/workflows/reindex-drive-catalog.yml'
       - 'assets/painel-retangular-runtime.js'
+      - 'assets/product-selector-polish.js'
       - 'assets/catalog-cache-bust.js'
       - 'assets/admin-retangular-1x2.js'
       - 'functions/index.js'
@@ -38,13 +39,16 @@ jobs:
           for attempt in $(seq 1 36); do
             curl --fail --silent --show-error --location --max-time 25 "$BASE/?_ret_verify=$(date +%s)" -o home.html || true
             curl --fail --silent --show-error --location --max-time 25 "$BASE/assets/painel-retangular-runtime.js?v=1&_ret_verify=$(date +%s)" -o rect.js || true
-            curl --fail --silent --show-error --location --max-time 25 "$BASE/assets/catalog-cache-bust.js?v=11&_ret_verify=$(date +%s)" -o loader.js || true
-            if grep -q 'catalog-cache-bust.js?v=11' home.html 2>/dev/null \
+            curl --fail --silent --show-error --location --max-time 25 "$BASE/assets/product-selector-polish.js?v=1&_ret_verify=$(date +%s)" -o selector.js || true
+            curl --fail --silent --show-error --location --max-time 25 "$BASE/assets/catalog-cache-bust.js?v=12&_ret_verify=$(date +%s)" -o loader.js || true
+            if grep -q 'catalog-cache-bust.js?v=12' home.html 2>/dev/null \
               && grep -q "__ARMAZEM_PAINEL_RETANGULAR_RUNTIME__='1'" rect.js 2>/dev/null \
               && grep -q 'productionV2RetangularTab' rect.js 2>/dev/null \
-              && grep -q 'painel-retangular-runtime.js?v=1' loader.js 2>/dev/null; then
+              && grep -q "__ARMAZEM_PRODUCT_SELECTOR_POLISH__='1'" selector.js 2>/dev/null \
+              && grep -q 'productionV2TabPrice' selector.js 2>/dev/null \
+              && grep -q 'product-selector-polish.js?v=1' loader.js 2>/dev/null; then
               ok=1
-              echo "Versão do Painel Retangular publicada na tentativa $attempt."
+              echo "Versão do Painel Retangular e seletor de preços publicada na tentativa $attempt."
               break
             fi
             echo "Aguardando Pages... tentativa $attempt/36"
@@ -82,6 +86,7 @@ jobs:
           if(p.catalogReady!==true) throw new Error('RETANGULAR_CATALOG_NOT_READY');
           if(p.size!=='1X2'||p.sizeKey!=='100x200') throw new Error('RETANGULAR_SIZE_CONFIG_INVALID');
           if(Number(p.quantity?.minimum)!==1 || Number(p.quantity?.step)!==1) throw new Error('RETANGULAR_QUANTITY_INVALID');
+          if(Number(p.unitPrice)!==78 || p.enabled!==true) throw new Error('RETANGULAR_PRICE_INVALID:'+JSON.stringify({price:p.unitPrice,enabled:p.enabled}));
           console.log(JSON.stringify({label:p.label,price:p.unitPrice,enabled:p.enabled,size:p.size,sizeKey:p.sizeKey,root}));
           NODE
 
@@ -129,7 +134,7 @@ jobs:
           if(body.error!=='CARRINHO_VAZIO_OU_INVALIDO') throw new Error('UNIFIED_ENDPOINT_INVALID');
           NODE
 
-      - name: Validar aba no navegador
+      - name: Validar aba e preços no navegador
         shell: bash
         run: |
           set -euo pipefail
@@ -139,9 +144,11 @@ jobs:
           "$CHROME" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --virtual-time-budget=16000 --dump-dom "$BASE/?produto=retangular-1x2&_ret_verify=$(date +%s)" > dom.html
           grep -q 'id="productionV2RetangularTab"' dom.html
           grep -q 'Painel Retangular' dom.html
+          grep -q 'productionV2TabPrice' dom.html
+          grep -q 'R$ 78,00' dom.html
           COUNT=$(cat art-count.txt)
           if [ "$COUNT" = "0" ]; then
             grep -q 'Nenhuma arte cadastrada ainda' dom.html
             if grep -q '0 tema(s)' dom.html; then echo 'Estado vazio genérico incorreto.' >&2; exit 1; fi
           fi
-          echo 'Aba do Painel Retangular foi renderizada corretamente no domínio oficial.'
+          echo 'Aba do Painel Retangular e preços foram renderizados corretamente no domínio oficial.'
