@@ -34,10 +34,16 @@
     else loadCheckoutV3();
   }
 
-  function loadPainelRetangular(){
-    var script = loadScript('painelRetangularRuntimeScript','/assets/painel-retangular-runtime.js?v=1',document.body || document.head);
+  function loadProductSelectorPolish(){
+    var script = loadScript('productSelectorPolishScript','/assets/product-selector-polish.js?v=1',document.body || document.head);
     if (script) script.addEventListener('load',loadCartReconcile,{once:true});
     else loadCartReconcile();
+  }
+
+  function loadPainelRetangular(){
+    var script = loadScript('painelRetangularRuntimeScript','/assets/painel-retangular-runtime.js?v=1',document.body || document.head);
+    if (script) script.addEventListener('load',loadProductSelectorPolish,{once:true});
+    else loadProductSelectorPolish();
   }
 
   function loadPainelRomano(){
