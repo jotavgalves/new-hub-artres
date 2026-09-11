@@ -3,7 +3,7 @@ import { baseIndexParams, dedupeRows, readIndex } from './_catalog_index.js';
 
 const ROOT_FOLDER_ID = '1r4BdVOZasdtlE16K7TKIVkHCfVSHLRML';
 const PRODUCT_KEY = 'retangular-1x2';
-const DEFAULT_LABEL = 'Painel Retangular 1x2';
+const DEFAULT_LABEL = 'Painel Retangular';
 const DRIVE_API = 'https://www.googleapis.com/drive/v3/files';
 const MAX_DEPTH = 10;
 const MAX_FOLDERS = 800;
