@@ -41,7 +41,7 @@
   }
 
   function loadPainelRetangular(){
-    var script = loadScript('painelRetangularRuntimeScript','/assets/painel-retangular-runtime.js?v=1',document.body || document.head);
+    var script = loadScript('painelRetangularRuntimeScript','/assets/painel-retangular-runtime.js?v=2',document.body || document.head);
     if (script) script.addEventListener('load',loadProductSelectorPolish,{once:true});
     else loadProductSelectorPolish();
   }
