@@ -55,7 +55,8 @@ async function ensureProductionProducts(env, source, storageReady) {
     changed = true;
   } else {
     const oldLabel = clean(currentRectangular.label || '');
-    const normalizedLabel = !oldLabel || oldLabel === 'Retangular 1x2' ? 'Painel Retangular 1x2' : oldLabel;
+    const legacyLabels = new Set(['', 'Retangular 1x2', 'Painel Retangular 1x2']);
+    const normalizedLabel = legacyLabels.has(oldLabel) ? 'Painel Retangular' : oldLabel;
     config.products.retangular1x2 = { ...rectangularDefaults(), ...currentRectangular, label: normalizedLabel, productKey: 'retangular-1x2', catalogReady: true };
     config.products['retangular-1x2'] = clone(config.products.retangular1x2);
     if (currentRectangular.catalogReady !== true || normalizedLabel !== oldLabel) changed = true;
@@ -94,9 +95,9 @@ async function ensureProductionProducts(env, source, storageReady) {
   }
 
   const rectangularDrive = config.drives.find(item => item && item.productKey === 'retangular-1x2');
-  if (!rectangularDrive || rectangularDrive.folderId !== ROOTS['retangular-1x2']) {
+  if (!rectangularDrive || rectangularDrive.folderId !== ROOTS['retangular-1x2'] || rectangularDrive.name !== 'Drive Painel Retangular') {
     config.drives = config.drives.filter(item => !item || item.productKey !== 'retangular-1x2');
-    config.drives.push({ id:'retangular-1x2', name:'Drive Painel Retangular 1x2', folderId:ROOTS['retangular-1x2'], active:true, type:'retangular-1x2', productKey:'retangular-1x2', structure:'theme-or-subtheme-images', filenamePattern:'ID_TEMA_PRODUTO_DIMENSAO' });
+    config.drives.push({ id:'retangular-1x2', name:'Drive Painel Retangular', folderId:ROOTS['retangular-1x2'], active:true, type:'retangular-1x2', productKey:'retangular-1x2', structure:'theme-or-subtheme-images', filenamePattern:'ID_TEMA_PRODUTO_DIMENSAO' });
     changed = true;
   }
 
@@ -120,7 +121,7 @@ function publicCommercialConfig(config) {
   const bolinhas = normalizeProduct(products.bolinhas, { key:'50x50', label:'Bolinhas 50x50', unitPrice:9.9, minimum:6, step:2, initial:6, scope:'cart-product-total' });
   const panel = normalizeProduct(products.panel150 || products['painel-150'], { key:'painel-150', label:'Painel 150 cm', unitPrice:59.9, minimum:1, step:1, initial:1, scope:'item' });
   const roman = normalizeProduct(products.painelRomano || products['painel-romano'], { key:'painel-romano', label:'Painel Romano 1x2', unitPrice:0, minimum:1, step:1, initial:1, scope:'item' });
-  const rectangularBase = normalizeProduct(products.retangular1x2 || products['retangular-1x2'], { key:'retangular-1x2', label:'Painel Retangular 1x2', unitPrice:0, minimum:1, step:1, initial:1, scope:'item' });
+  const rectangularBase = normalizeProduct(products.retangular1x2 || products['retangular-1x2'], { key:'retangular-1x2', label:'Painel Retangular', unitPrice:0, minimum:1, step:1, initial:1, scope:'item' });
   const rectangular = { ...rectangularBase, catalogReady:true, size:'1X2', sizeKey:'100x200' };
   const discount = percentage(config && config.ui && config.ui.discountPercent, config && config.campaign && config.campaign.discountPercent, 0);
   const version = positive(config && config.commercialVersion, config && config.ui && config.ui.cacheVersion, config && config.version, 1);
@@ -142,7 +143,7 @@ function panelRomanDefaults() {
   return { label:'Painel Romano 1x2', productKey:'painel-romano', enabled:false, unitPrice:0, priceLabel:'Preço não definido', minQty:1, step:1, initialQty:1, disableCustomization:true, skipProductsStep:true, fixedSize:'1X2', sizeKey:'100x200' };
 }
 function rectangularDefaults() {
-  return { label:'Painel Retangular 1x2', productKey:'retangular-1x2', enabled:false, unitPrice:0, priceLabel:'Preço não definido', minQty:1, step:1, initialQty:1, disableCustomization:true, skipProductsStep:true, fixedSize:'1X2', sizeKey:'100x200', catalogReady:true };
+  return { label:'Painel Retangular', productKey:'retangular-1x2', enabled:false, unitPrice:0, priceLabel:'Preço não definido', minQty:1, step:1, initialQty:1, disableCustomization:true, skipProductsStep:true, fixedSize:'1X2', sizeKey:'100x200', catalogReady:true };
 }
 
 function normalizeProduct(input, defaults) {
