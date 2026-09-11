@@ -6,7 +6,7 @@ export function canonicalProductKey(value) {
   if (['50x50', '50 x 50', 'bolinhas', 'bolinha', 'bolinhas 50x50', 'painel 50', 'painel 50x50'].includes(text)) return '50x50';
   if (['painel-150', 'painel150', 'painel 150', 'painel 150x150', '150x150', '150 x 150', 'painel redondo', 'painel redondo 1,50', 'painel redondo 1.50'].includes(text)) return 'painel-150';
   if (['painel-romano', 'painel romano', 'painel romano 1x2', 'painel romano 1 x 2', 'romano 1x2', 'romano 1 x 2'].includes(text)) return 'painel-romano';
-  if (['retangular-1x2', 'retangular 1x2', 'retangular 1 x 2', 'painel retangular 1x2', 'painel retangular 1 x 2'].includes(text)) return 'retangular-1x2';
+  if (['retangular-1x2', 'retangular 1x2', 'retangular 1 x 2', 'painel retangular', 'painel retangular 1x2', 'painel retangular 1 x 2'].includes(text)) return 'retangular-1x2';
   if (['cenario', 'cenário'].includes(text)) return 'cenario';
   if (['lateral', 'retangular', 'vertical', 'retrato'].includes(text)) return 'lateral';
   if (['sacolinha', 'sacolinhas', 'sacolinha de festa'].includes(text)) return 'sacolinha';
@@ -25,7 +25,7 @@ export function canonicalProductLabel(productKey, fallback = '') {
     '50x50': 'Bolinhas 50x50',
     'painel-150': 'Painel 150x150',
     'painel-romano': 'Painel Romano 1x2',
-    'retangular-1x2': 'Painel Retangular 1x2',
+    'retangular-1x2': 'Painel Retangular',
     cenario: 'Cenário',
     lateral: 'Lateral',
     sacolinha: 'Sacolinha de Festa',
