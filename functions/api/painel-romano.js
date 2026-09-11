@@ -1,4 +1,5 @@
 import { loadConfig } from './_config.js';
+import { baseIndexParams, dedupeRows, readIndex } from './_catalog_index.js';
 
 const ROOT_FOLDER_ID = '15f6Ge0jZCHSIWMhmEUOs4bfXy9y5U3wk';
 const PRODUCT_KEY = 'painel-romano';
@@ -7,6 +8,7 @@ const DRIVE_API = 'https://www.googleapis.com/drive/v3/files';
 const MAX_DEPTH = 8;
 const MAX_FOLDERS = 400;
 const MAX_ARTWORKS = 4000;
+const INDEX_PAGE_SIZE = 500;
 
 export async function onRequestGet(context) {
   try {
@@ -14,12 +16,22 @@ export async function onRequestGet(context) {
     const mode = clean(url.searchParams.get('mode') || 'items');
     const theme = clean(url.searchParams.get('theme') || '');
     const query = clean(url.searchParams.get('q') || url.searchParams.get('code') || '');
-    const apiKey = driveApiKey(context.env);
-    if (!apiKey) return json({ ok:false, error:'GOOGLE_DRIVE_API_KEY_NAO_CONFIGURADA' }, 503);
 
     const { config } = await loadConfig(context.env);
     const commercial = romanProduct(config);
-    const catalog = await scanRomanDrive(apiKey);
+
+    let source = 'catalog_index';
+    let catalog = await scanIndexedRoman(context.env).catch(error => {
+      console.warn('PAINEL_ROMANO_INDEX_FAILED', String(error && error.message || error));
+      return { artworks:[], themeFolders:[], visitedFolders:0 };
+    });
+
+    if (!catalog.artworks.length) {
+      const apiKey = driveApiKey(context.env);
+      if (!apiKey) return json({ ok:false, error:'PAINEL_ROMANO_SEM_INDICE_E_SEM_GOOGLE_DRIVE_API_KEY' }, 503);
+      catalog = await scanRomanDrive(apiKey);
+      source = 'google-drive-live';
+    }
 
     if (mode === 'themes') {
       const folders = uniqueThemes(catalog).map(t => ({
@@ -33,7 +45,7 @@ export async function onRequestGet(context) {
         productName: commercial.label,
         synthetic: !!t.synthetic
       }));
-      return json({ ok:true, mode, rootFolderId:ROOT_FOLDER_ID, folders, total:folders.length, artworkTotal:catalog.artworks.length, product:commercial });
+      return json({ ok:true, mode, source, rootFolderId:ROOT_FOLDER_ID, folders, total:folders.length, artworkTotal:catalog.artworks.length, product:commercial });
     }
 
     if (mode === 'search') {
@@ -48,12 +60,12 @@ export async function onRequestGet(context) {
         .map(row => asItem(row, commercial))
         .sort(sortItems)
         .slice(0, 100);
-      return json({ ok:true, mode, rootFolderId:ROOT_FOLDER_ID, total:items.length, items, product:commercial });
+      return json({ ok:true, mode, source, rootFolderId:ROOT_FOLDER_ID, total:items.length, items, product:commercial });
     }
 
     if (mode === 'has-theme') {
       const available = catalog.artworks.some(row => themeMatches(row, theme));
-      return json({ ok:true, mode, rootFolderId:ROOT_FOLDER_ID, theme, available, product:commercial });
+      return json({ ok:true, mode, source, rootFolderId:ROOT_FOLDER_ID, theme, available, product:commercial });
     }
 
     if (mode === 'items') {
@@ -64,7 +76,7 @@ export async function onRequestGet(context) {
       return json({
         ok:true,
         mode,
-        source:'google-drive-live',
+        source,
         rootFolderId:ROOT_FOLDER_ID,
         theme,
         product:PRODUCT_KEY,
@@ -84,6 +96,52 @@ export async function onRequestGet(context) {
       detail:String(error && error.message || error || '').slice(0, 240)
     }, 500);
   }
+}
+
+async function scanIndexedRoman(env) {
+  const rows = [];
+  for (let offset = 0; offset < MAX_ARTWORKS; offset += INDEX_PAGE_SIZE) {
+    const params = baseIndexParams(INDEX_PAGE_SIZE);
+    params.set('type', 'eq.artwork');
+    params.set('root_drive_id', 'eq.' + ROOT_FOLDER_ID);
+    params.set('offset', String(offset));
+    const batch = await readIndex(env, params);
+    rows.push(...batch);
+    if (batch.length < INDEX_PAGE_SIZE) break;
+  }
+
+  const artworks = dedupeRows(rows).map(indexRowToArtwork).filter(Boolean);
+  return { artworks, themeFolders:[], visitedFolders:0 };
+}
+
+function indexRowToArtwork(row) {
+  const id = String(row && row.drive_id || '');
+  if (!id) return null;
+  const name = clean(row.name || 'Sem nome');
+  const pathParts = Array.isArray(row.path_parts)
+    ? row.path_parts.map(clean).filter(Boolean)
+    : pathPartsFromPath(row.path, name);
+  const theme = clean(row.theme || pathParts[0] || '');
+  const code = clean(row.code || '') || extractArtworkCode(name);
+  return {
+    id,
+    name,
+    code,
+    theme,
+    themeFolderId:'',
+    parentFolderId:String(row.parent_drive_id || ''),
+    pathParts,
+    path:clean(row.path || pathParts.concat(name).join(' / ')),
+    image:clean(row.thumbnail_url || '') || `https://drive.google.com/thumbnail?id=${encodeURIComponent(id)}&sz=w1200`,
+    driveUrl:clean(row.drive_url || '') || `https://drive.google.com/file/d/${encodeURIComponent(id)}/view`,
+    modifiedTime:String(row.indexed_at || '')
+  };
+}
+
+function pathPartsFromPath(path, fileName) {
+  const parts = String(path || '').split(' / ').map(clean).filter(Boolean);
+  if (parts.length && clean(parts[parts.length - 1]) === clean(fileName)) parts.pop();
+  return parts;
 }
 
 async function scanRomanDrive(apiKey) {
