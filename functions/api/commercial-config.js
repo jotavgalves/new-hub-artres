@@ -27,6 +27,7 @@ async function ensureProductionProducts(env, source, storageReady) {
   config.products = record(config.products);
   const currentPanel = config.products.panel150 || config.products['painel-150'];
   const currentRoman = config.products.painelRomano || config.products['painel-romano'];
+  const currentRectangular = config.products.retangular1x2 || config.products['retangular-1x2'];
   let changed = false;
 
   if (!currentPanel || typeof currentPanel !== 'object') {
@@ -47,6 +48,15 @@ async function ensureProductionProducts(env, source, storageReady) {
     config.products['painel-romano'] = clone(config.products.painelRomano);
   }
 
+  if (!currentRectangular || typeof currentRectangular !== 'object') {
+    config.products.retangular1x2 = rectangularDefaults();
+    config.products['retangular-1x2'] = clone(config.products.retangular1x2);
+    changed = true;
+  } else {
+    config.products.retangular1x2 = { ...rectangularDefaults(), ...currentRectangular, productKey: 'retangular-1x2', catalogReady: false, enabled: false };
+    config.products['retangular-1x2'] = clone(config.products.retangular1x2);
+  }
+
   config.productCatalog = Array.isArray(config.productCatalog) ? config.productCatalog : [];
   if (!config.productCatalog.some(item => item && item.productKey === 'painel-150')) {
     config.productCatalog.push({
@@ -65,6 +75,17 @@ async function ensureProductionProducts(env, source, storageReady) {
       productKey: 'painel-romano',
       active: config.products.painelRomano.enabled !== false,
       editable: true
+    });
+    changed = true;
+  }
+  if (!config.productCatalog.some(item => item && item.productKey === 'retangular-1x2')) {
+    config.productCatalog.push({
+      id: 'retangular-1x2',
+      label: config.products.retangular1x2.label,
+      productKey: 'retangular-1x2',
+      active: false,
+      editable: true,
+      catalogReady: false
     });
     changed = true;
   }
@@ -155,6 +176,16 @@ function publicCommercialConfig(config) {
     initial: 1,
     scope: 'item'
   });
+  const rectangularBase = normalizeProduct(products.retangular1x2 || products['retangular-1x2'], {
+    key: 'retangular-1x2',
+    label: 'Retangular 1x2',
+    unitPrice: 0,
+    minimum: 1,
+    step: 1,
+    initial: 1,
+    scope: 'item'
+  });
+  const rectangular = { ...rectangularBase, enabled: false, catalogReady: false, size: '1X2', sizeKey: '100x200' };
   const discount = percentage(
     config && config.ui && config.ui.discountPercent,
     config && config.campaign && config.campaign.discountPercent,
@@ -175,7 +206,8 @@ function publicCommercialConfig(config) {
     products: {
       '50x50': bolinhas,
       'painel-150': panel,
-      'painel-romano': roman
+      'painel-romano': roman,
+      'retangular-1x2': rectangular
     },
     protectedRoots: ROOTS
   };
@@ -210,6 +242,24 @@ function panelRomanDefaults() {
     skipProductsStep: true,
     fixedSize: '1X2',
     sizeKey: '100x200'
+  };
+}
+
+function rectangularDefaults() {
+  return {
+    label: 'Retangular 1x2',
+    productKey: 'retangular-1x2',
+    enabled: false,
+    unitPrice: 0,
+    priceLabel: 'Preço não definido',
+    minQty: 1,
+    step: 1,
+    initialQty: 1,
+    disableCustomization: true,
+    skipProductsStep: true,
+    fixedSize: '1X2',
+    sizeKey: '100x200',
+    catalogReady: false
   };
 }
 
