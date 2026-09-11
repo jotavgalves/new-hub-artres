@@ -1,0 +1,97 @@
+name: Verificar carrinho 1x2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'functions/index.js'
+      - 'assets/catalog-cache-bust.js'
+      - 'assets/dynamic-product-commerce-sync.js'
+      - 'assets/fixed-products-authority.js'
+      - 'assets/cart-fixed-measure-polish.js'
+      - 'functions/api/commercial-config.js'
+      - '.github/workflows/verify-fixed-products-cart.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-fixed-products-cart-main
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Aguardar versão corrigida no Pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://new-hub-artres.pages.dev'
+          ok=0
+          for attempt in $(seq 1 36); do
+            curl --fail --silent --show-error --location --max-time 25 "$BASE/?_fixed_verify=$(date +%s)" -o home.html || true
+            curl --fail --silent --show-error --location --max-time 25 "$BASE/assets/catalog-cache-bust.js?v=14&_fixed_verify=$(date +%s)" -o loader.js || true
+            curl --fail --silent --show-error --location --max-time 25 "$BASE/assets/fixed-products-authority.js?v=1&_fixed_verify=$(date +%s)" -o authority.js || true
+            if grep -q 'catalog-cache-bust.js?v=14' home.html 2>/dev/null \
+              && grep -q 'fixed-products-authority.js?v=1' loader.js 2>/dev/null \
+              && grep -q '__ARMAZEM_FIXED_PRODUCTS_AUTHORITY__' authority.js 2>/dev/null; then
+              ok=1
+              echo "Versão corrigida publicada na tentativa $attempt."
+              break
+            fi
+            echo "Aguardando Pages... tentativa $attempt/36"
+            sleep 10
+          done
+          test "$ok" = 1
+
+      - name: Validar preço comercial
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://new-hub-artres.pages.dev'
+          curl --fail --silent --show-error --location --max-time 30 "$BASE/api/commercial-config?_fixed_verify=$(date +%s)" -o commercial.json
+          node <<'NODE'
+          const fs=require('node:fs');
+          const d=JSON.parse(fs.readFileSync('commercial.json','utf8'));
+          if(d.ok!==true) throw new Error('COMMERCIAL_NOT_OK');
+          for(const key of ['painel-romano','retangular-1x2']){
+            const p=d.config?.products?.[key];
+            if(!p) throw new Error('PRODUCT_MISSING_'+key);
+            if(Number(p.unitPrice)!==78) throw new Error('PRICE_NOT_78_'+key+'_'+p.unitPrice);
+            if(p.enabled!==true) throw new Error('PRODUCT_DISABLED_'+key);
+          }
+          console.log('Preços 1x2 validados em R$ 78,00.');
+          NODE
+
+      - name: Validar reload do carrinho Romano no navegador
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://new-hub-artres.pages.dev'
+          CHROME=$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)
+          if [ -z "$CHROME" ]; then echo 'Chrome/Chromium não disponível.' >&2; exit 1; fi
+          PEDIDO=$(node - <<'NODE'
+          const payload={cart:[{id:'verify-roman-6039',driveFileId:'verify-roman-6039',code:'6039',theme:'A PRINCESA E O SAPO',product:'painel-romano',productKey:'painel-romano',productName:'Painel Romano 1x2',productLabel:'Painel Romano 1x2',size:'1X2',sizeKey:'100x200',qty:1,details:{size:'1X2',sizeKey:'100x200',width:100,height:200,unit:'cm',fixed:true}}],seller:null};
+          process.stdout.write(Buffer.from(JSON.stringify(payload),'utf8').toString('base64'));
+          NODE
+          )
+          "$CHROME" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --virtual-time-budget=15000 --dump-dom "$BASE/?pedido=$PEDIDO&_fixed_verify=$(date +%s)" > dom.html
+          grep -q 'Painel Romano 1x2' dom.html
+          grep -q 'R$ 78,00' dom.html
+          if grep -q 'R$ 59,90' dom.html; then
+            echo 'Carrinho Romano ainda contém R$ 59,90.' >&2
+            exit 1
+          fi
+          count=$(grep -o 'Medida fixa: 1,00 × 2,00 m' dom.html | wc -l | tr -d ' ')
+          if [ "$count" -ne 1 ]; then
+            echo "Medida fixa deveria aparecer exatamente uma vez; apareceu $count vez(es)." >&2
+            exit 1
+          fi
+          if grep -q 'Medida fixa 1×2 m' dom.html; then
+            echo 'Badge antigo de medida ainda está presente.' >&2
+            exit 1
+          fi
+          echo 'Carrinho Romano mantém R$ 78,00 após carregamento e mostra a medida uma única vez.'
