@@ -1,3 +1,4 @@
+const MEDIA_PROTECTION_SCRIPT = '<script src="/assets/media-protection.js?v=1"></script>';
 const CACHE_BUST_SCRIPT = '<script src="/assets/catalog-cache-bust.js?v=13"></script>';
 const CUSTOMER_CHECKOUT_SCRIPT = '<script src="/assets/customer-checkout.js?v=6" defer></script>';
 const SITE_TEXTS_SCRIPT = '<script src="/assets/site-texts-runtime.js?v=1" defer></script>';
@@ -12,6 +13,7 @@ export async function onRequest(context) {
   if (!contentType.includes('text/html')) return assetResponse;
 
   let html = await assetResponse.text();
+  html = html.replace(/<script\s+src=["']\/assets\/media-protection\.js\?v=[^"']+["']><\/script>/g, '');
   html = html.replace(/<script\s+src=["']\/assets\/catalog-cache-bust\.js\?v=[^"']+["']><\/script>/g, '');
   html = html.replace(/<script\s+src=["']\/assets\/customer-checkout\.js\?v=[^"']+["']\s+defer><\/script>/g, '');
   html = html.replace(/<script\s+src=["']\/assets\/site-texts-runtime\.js\?v=[^"']+["']\s+defer><\/script>/g, '');
@@ -21,7 +23,7 @@ export async function onRequest(context) {
   html = html.replace(/<script\s+src=["']\/assets\/painel-romano-runtime\.js\?v=[^"']+["']\s+defer><\/script>/g, '');
   html = html.replace(/<script\s+src=["']\/assets\/painel-retangular-runtime\.js\?v=[^"']+["']\s+defer><\/script>/g, '');
   html = html.replace('<style id="heroLogoCenterStyle">.brand .logo{margin-left:auto;margin-right:auto}</style>', '');
-  html = html.replace('</head>', `${HERO_LOGO_CENTER_STYLE}${CACHE_BUST_SCRIPT}${CUSTOMER_CHECKOUT_SCRIPT}${SITE_TEXTS_SCRIPT}${CATALOG_NAV_UX_SCRIPT}${DYNAMIC_PRODUCT_COMMERCE_SYNC_SCRIPT}${CART_FIXED_MEASURE_POLISH_SCRIPT}</head>`);
+  html = html.replace('</head>', `${HERO_LOGO_CENTER_STYLE}${MEDIA_PROTECTION_SCRIPT}${CACHE_BUST_SCRIPT}${CUSTOMER_CHECKOUT_SCRIPT}${SITE_TEXTS_SCRIPT}${CATALOG_NAV_UX_SCRIPT}${DYNAMIC_PRODUCT_COMMERCE_SYNC_SCRIPT}${CART_FIXED_MEASURE_POLISH_SCRIPT}</head>`);
 
   const headers = new Headers(assetResponse.headers);
   headers.delete('content-length');
@@ -29,6 +31,9 @@ export async function onRequest(context) {
   headers.set('cache-control', 'no-store, no-cache, must-revalidate, max-age=0');
   headers.set('pragma', 'no-cache');
   headers.set('expires', '0');
+  headers.set('referrer-policy', 'no-referrer');
+  headers.set('x-content-type-options', 'nosniff');
+  headers.set('x-robots-tag', 'noimageindex');
 
   return new Response(html, { status: assetResponse.status, statusText: assetResponse.statusText, headers });
 }
