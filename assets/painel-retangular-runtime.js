@@ -3,7 +3,7 @@
   window.__ARMAZEM_PAINEL_RETANGULAR_RUNTIME__='1';
 
   var KEY='retangular-1x2';
-  var ROOT='1r4BdVOZasdtlE16K7TKIVkHCfVSHLRML';
+  var ROOT='1fB01auWnc01DEy2EJfGK62l0MCgQLpXu';
   var WORKSPACE_STORAGE='armazem:production:workspace';
   var state={label:'Painel Retangular',enabled:false,unitPrice:0,minimum:1,step:1,initial:1,active:false,installed:false,autoOpened:false};
 
