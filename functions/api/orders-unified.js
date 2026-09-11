@@ -7,7 +7,7 @@ const ROOTS = Object.freeze({
   '50x50': '193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae',
   'painel-150': '18x1qthD2RXAxRi2u-d7U3wpJLfpINU7-',
   'painel-romano': '15f6Ge0jZCHSIWMhmEUOs4bfXy9y5U3wk',
-  'retangular-1x2': '1r4BdVOZasdtlE16K7TKIVkHCfVSHLRML'
+  'retangular-1x2': '1fB01auWnc01DEy2EJfGK62l0MCgQLpXu'
 });
 const IDEMPOTENCY_PREFIX = 'ORDER_UNIFIED_IDEMPOTENCY:';
 const BYPASS_RECONCILE = new Set(['painel-romano', 'retangular-1x2']);
@@ -193,8 +193,8 @@ function commercialConfig(config) {
     products:{
       '50x50':product(products.bolinhas, { label:'Bolinhas 50x50', unitPrice:9.9, minimum:6, step:2, initial:6 }),
       'painel-150':product(products.panel150 || products['painel-150'], { label:'Painel 150 cm', unitPrice:59.9, minimum:1, step:1, initial:1 }),
-      'painel-romano':product(products.painelRomano || products['painel-romano'], { label:'Painel Romano 1x2', unitPrice:0, minimum:1, step:1, initial:1 }),
-      'retangular-1x2':product(products.retangular1x2 || products['retangular-1x2'], { label:'Painel Retangular 1x2', unitPrice:0, minimum:1, step:1, initial:1 })
+      'painel-romano':product(products.painelRomano || products['painel-romano'], { label:'Painel Romano 1x2', unitPrice:78, minimum:1, step:1, initial:1 }),
+      'retangular-1x2':product(products.retangular1x2 || products['retangular-1x2'], { label:'Painel Retangular 1x2', unitPrice:78, minimum:1, step:1, initial:1 })
     }
   };
 }
