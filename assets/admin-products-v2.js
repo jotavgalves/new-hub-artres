@@ -4,7 +4,9 @@
 
   var ROOTS={
     '50x50':'193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae',
-    'painel-150':'18x1qthD2RXAxRi2u-d7U3wpJLfpINU7-'
+    'painel-150':'18x1qthD2RXAxRi2u-d7U3wpJLfpINU7-',
+    'painel-romano':'15f6Ge0jZCHSIWMhmEUOs4bfXy9y5U3wk',
+    'retangular-1x2':'1fB01auWnc01DEy2EJfGK62l0MCgQLpXu'
   };
   var state={config:null,loading:false,saving:false};
   function $(id){return document.getElementById(id)}
@@ -50,6 +52,32 @@
     p.querySelectorAll('[data-pv2]').forEach(function(input){input.addEventListener('input',preview);input.addEventListener('change',preview)});
     return true;
   }
+  function syncSpecialProducts(c){
+    c.products=c.products&&typeof c.products==='object'?c.products:{};
+    c.productCatalog=Array.isArray(c.productCatalog)?c.productCatalog:[];
+    c.drives=Array.isArray(c.drives)?c.drives:[];
+
+    if($('romanPrice')){
+      var romanLabel=String($('romanLabel')&&$('romanLabel').value||'Painel Romano 1x2').trim()||'Painel Romano 1x2';
+      var romanPrice=Math.max(0,num($('romanPrice').value,0));
+      var romanEnabled=!!($('romanEnabled')&&$('romanEnabled').checked)&&romanPrice>0;
+      var roman={label:romanLabel,productKey:'painel-romano',enabled:romanEnabled,unitPrice:romanPrice,priceLabel:romanPrice>0?money(romanPrice)+' cada':'Preço não definido',minQty:1,step:1,initialQty:1,disableCustomization:true,skipProductsStep:true,fixedSize:'1X2',sizeKey:'100x200'};
+      c.products.painelRomano=JSON.parse(JSON.stringify(roman));c.products['painel-romano']=JSON.parse(JSON.stringify(roman));
+      c.productCatalog=c.productCatalog.filter(function(x){return !x||x.productKey!=='painel-romano'});c.productCatalog.push({id:'painel-romano',label:romanLabel,productKey:'painel-romano',active:romanEnabled,editable:true});
+      c.drives=c.drives.filter(function(d){return !d||d.productKey!=='painel-romano'});c.drives.push({id:'painel-romano',name:'Drive Painel Romano 1x2',folderId:ROOTS['painel-romano'],active:true,type:'painel-romano',productKey:'painel-romano',structure:'theme-or-subtheme-images',filenamePattern:'ID_TEMA_PRODUTO_DIMENSAO'});
+    }
+
+    if($('retangular1x2Price')){
+      var rectLabel=String($('retangular1x2Label')&&$('retangular1x2Label').value||'Painel Retangular').trim()||'Painel Retangular';
+      var rectPrice=Math.max(0,num($('retangular1x2Price').value,0));
+      var rectEnabled=!!($('retangular1x2Enabled')&&$('retangular1x2Enabled').checked)&&rectPrice>0;
+      var rect={label:rectLabel,productKey:'retangular-1x2',enabled:rectEnabled,unitPrice:rectPrice,priceLabel:rectPrice>0?money(rectPrice)+' cada':'Preço não definido',minQty:1,step:1,initialQty:1,disableCustomization:true,skipProductsStep:true,fixedSize:'1X2',sizeKey:'100x200',catalogReady:true};
+      c.products.retangular1x2=JSON.parse(JSON.stringify(rect));c.products['retangular-1x2']=JSON.parse(JSON.stringify(rect));
+      c.productCatalog=c.productCatalog.filter(function(x){return !x||x.productKey!=='retangular-1x2'});c.productCatalog.push({id:'retangular-1x2',label:rectLabel,productKey:'retangular-1x2',active:rectEnabled,editable:true,catalogReady:true});
+      c.drives=c.drives.filter(function(d){return !d||d.productKey!=='retangular-1x2'});c.drives.push({id:'retangular-1x2',name:'Drive Painel Retangular',folderId:ROOTS['retangular-1x2'],active:true,type:'retangular-1x2',productKey:'retangular-1x2',structure:'theme-or-subtheme-images',filenamePattern:'ID_TEMA_PRODUTO_DIMENSAO'});
+    }
+    return c;
+  }
   function readForm(){
     var c=normalize(JSON.parse(JSON.stringify(state.config||{})));
     function val(key){var el=document.querySelector('[data-pv2="'+key+'"]');return el?el.value:''}
@@ -61,10 +89,11 @@
     c.productCatalog=c.productCatalog.filter(function(x){return x&&x.productKey!=='50x50'&&x.productKey!=='painel-150'}).concat([{id:'bolinhas',label:c.products.bolinhas.label,productKey:'50x50',active:c.products.bolinhas.enabled,editable:true},{id:'painel-150',label:c.products.panel150.label,productKey:'painel-150',active:c.products.panel150.enabled,editable:true}]);
     c.drives=Array.isArray(c.drives)?c.drives:[];
     c.drives=c.drives.filter(function(d){return d&&d.productKey!=='50x50'&&d.productKey!=='painel-150'}).concat([{id:'bolinhas',name:'Drive Bolinhas',folderId:ROOTS['50x50'],active:true,type:'bolinhas',productKey:'50x50',structure:'theme-or-subtheme-images',filenamePattern:'ID_TEMA_PRODUTO_DIMENSAO'},{id:'painel-150',name:'Drive Painel 150 cm',folderId:ROOTS['painel-150'],active:true,type:'painel-150',productKey:'painel-150',structure:'theme-or-subtheme-images',filenamePattern:'ID_TEMA_PRODUTO_DIMENSAO'}]);
+    syncSpecialProducts(c);
     c.commercialVersion=Math.max(1,int(c.commercialVersion,Number(c.ui.cacheVersion||1)))+1;c.ui.cacheVersion=c.commercialVersion;c.commercialUpdatedAt=new Date().toISOString();
     return c;
   }
-  function validate(c){for(var id of ['bolinhas','panel150']){var p=c.products[id];if(!p.label)return 'Informe o nome dos dois produtos.';if(p.enabled&&p.unitPrice<=0)return 'Informe um preço maior que zero para '+p.label+'.';if(p.initialQty<p.minQty||(p.initialQty-p.minQty)%p.step!==0)return 'A quantidade inicial de '+p.label+' deve respeitar mínimo e incremento.'}return ''}
+  function validate(c){for(var id of ['bolinhas','panel150']){var p=c.products[id];if(!p.label)return 'Informe o nome dos dois produtos.';if(p.enabled&&p.unitPrice<=0)return 'Informe um preço maior que zero para '+p.label+'.';if(p.initialQty<p.minQty||(p.initialQty-p.minQty)%p.step!==0)return 'A quantidade inicial de '+p.label+' deve respeitar mínimo e incremento.'}var roman=c.products.painelRomano;if(roman&&roman.enabled&&roman.unitPrice<=0)return 'Informe um preço maior que zero para '+roman.label+'.';var rect=c.products.retangular1x2;if(rect&&rect.enabled&&rect.unitPrice<=0)return 'Informe um preço maior que zero para '+rect.label+'.';return ''}
   function preview(){try{var c=readForm();var err=validate(c);status(err||'Configuração válida. Clique em Salvar produtos.',err?'error':'ok')}catch(e){status(e.message,'error')}}
   async function save(e){e.preventDefault();if(state.saving)return;var c=readForm();var err=validate(c);if(err){status(err,'error');return}state.saving=true;status('Salvando configuração...','');try{var d=await api('/api/admin/config',{method:'POST',body:JSON.stringify({config:c})});state.config=normalize(d.config||c);claim();status('Produtos, preços e quantidades salvos. O site já usa a nova versão.','ok')}catch(error){status(error.message,'error')}finally{state.saving=false}}
   async function load(show){if(state.loading)return;state.loading=true;try{var d=await api('/api/admin/config?productsV2='+Date.now());state.config=normalize(d.config||{});if(active())claim();if(show)status('Configuração recarregada.','ok')}catch(error){if(active()){claim();status(error.message,'error')}}finally{state.loading=false}}
