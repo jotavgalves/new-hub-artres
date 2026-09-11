@@ -4,10 +4,11 @@ const ROOTS = Object.freeze({
   '50x50': '193kW8g7EsmrNwlGE3ugbC3qzOcDEwUae',
   'painel-150': '18x1qthD2RXAxRi2u-d7U3wpJLfpINU7-',
   'painel-romano': '15f6Ge0jZCHSIWMhmEUOs4bfXy9y5U3wk',
-  'retangular-1x2': '1r4BdVOZasdtlE16K7TKIVkHCfVSHLRML'
+  'retangular-1x2': '1fB01auWnc01DEy2EJfGK62l0MCgQLpXu'
 });
 
 const RECTANGULAR_PRICE_MIGRATION = 'retangular-price-78-v1';
+const ROMAN_PRICE_MIGRATION = 'roman-price-78-v1';
 
 export async function onRequestGet(context) {
   try {
@@ -77,13 +78,26 @@ async function ensureProductionProducts(env, source, storageReady) {
     changed = true;
   }
 
+  if (config.migrations[ROMAN_PRICE_MIGRATION] !== true) {
+    const roman = config.products.painelRomano;
+    roman.unitPrice = 78;
+    roman.enabled = true;
+    roman.priceLabel = 'R$ 78,00 cada';
+    config.products['painel-romano'] = clone(roman);
+    config.migrations[ROMAN_PRICE_MIGRATION] = true;
+    changed = true;
+  }
+
   config.productCatalog = Array.isArray(config.productCatalog) ? config.productCatalog : [];
   if (!config.productCatalog.some(item => item && item.productKey === 'painel-150')) {
     config.productCatalog.push({ id:'painel-150', label:config.products.panel150.label, productKey:'painel-150', active:config.products.panel150.enabled !== false, editable:true });
     changed = true;
   }
-  if (!config.productCatalog.some(item => item && item.productKey === 'painel-romano')) {
-    config.productCatalog.push({ id:'painel-romano', label:config.products.painelRomano.label, productKey:'painel-romano', active:config.products.painelRomano.enabled !== false, editable:true });
+  const romanCatalog = config.productCatalog.find(item => item && item.productKey === 'painel-romano');
+  const desiredRomanCatalog = { id:'painel-romano', label:config.products.painelRomano.label, productKey:'painel-romano', active:config.products.painelRomano.enabled !== false, editable:true };
+  if (!romanCatalog || romanCatalog.label !== desiredRomanCatalog.label || romanCatalog.active !== desiredRomanCatalog.active) {
+    config.productCatalog = config.productCatalog.filter(item => !item || item.productKey !== 'painel-romano');
+    config.productCatalog.push(desiredRomanCatalog);
     changed = true;
   }
   const rectangularCatalog = config.productCatalog.find(item => item && item.productKey === 'retangular-1x2');
@@ -135,7 +149,7 @@ function publicCommercialConfig(config) {
   const products = config && config.products && typeof config.products === 'object' ? config.products : {};
   const bolinhas = normalizeProduct(products.bolinhas, { key:'50x50', label:'Bolinhas 50x50', unitPrice:9.9, minimum:6, step:2, initial:6, scope:'cart-product-total' });
   const panel = normalizeProduct(products.panel150 || products['painel-150'], { key:'painel-150', label:'Painel 150 cm', unitPrice:59.9, minimum:1, step:1, initial:1, scope:'item' });
-  const roman = normalizeProduct(products.painelRomano || products['painel-romano'], { key:'painel-romano', label:'Painel Romano 1x2', unitPrice:0, minimum:1, step:1, initial:1, scope:'item' });
+  const roman = normalizeProduct(products.painelRomano || products['painel-romano'], { key:'painel-romano', label:'Painel Romano 1x2', unitPrice:78, minimum:1, step:1, initial:1, scope:'item' });
   const rectangularBase = normalizeProduct(products.retangular1x2 || products['retangular-1x2'], { key:'retangular-1x2', label:'Painel Retangular', unitPrice:78, minimum:1, step:1, initial:1, scope:'item' });
   const rectangular = { ...rectangularBase, catalogReady:true, size:'1X2', sizeKey:'100x200' };
   const discount = percentage(config && config.ui && config.ui.discountPercent, config && config.campaign && config.campaign.discountPercent, 0);
@@ -155,7 +169,7 @@ function panelDefaults() {
   return { label:'Painel 150 cm', productKey:'painel-150', enabled:true, unitPrice:59.9, priceLabel:'R$ 59,90 cada', minQty:1, step:1, initialQty:1, disableCustomization:true, skipProductsStep:true };
 }
 function panelRomanDefaults() {
-  return { label:'Painel Romano 1x2', productKey:'painel-romano', enabled:false, unitPrice:0, priceLabel:'Preço não definido', minQty:1, step:1, initialQty:1, disableCustomization:true, skipProductsStep:true, fixedSize:'1X2', sizeKey:'100x200' };
+  return { label:'Painel Romano 1x2', productKey:'painel-romano', enabled:true, unitPrice:78, priceLabel:'R$ 78,00 cada', minQty:1, step:1, initialQty:1, disableCustomization:true, skipProductsStep:true, fixedSize:'1X2', sizeKey:'100x200' };
 }
 function rectangularDefaults() {
   return { label:'Painel Retangular', productKey:'retangular-1x2', enabled:true, unitPrice:78, priceLabel:'R$ 78,00 cada', minQty:1, step:1, initialQty:1, disableCustomization:true, skipProductsStep:true, fixedSize:'1X2', sizeKey:'100x200', catalogReady:true };
