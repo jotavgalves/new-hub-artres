@@ -1,17 +1,20 @@
 (function(){
   'use strict';
-  if(window.__ARMAZEM_CART_FIXED_MEASURE_POLISH__==='1')return;
-  window.__ARMAZEM_CART_FIXED_MEASURE_POLISH__='1';
+  if(window.__ARMAZEM_CART_FIXED_MEASURE_POLISH__==='2')return;
+  window.__ARMAZEM_CART_FIXED_MEASURE_POLISH__='2';
 
   var PRODUCT_KEYS=['painel-romano','retangular-1x2'];
+  var prices={'painel-romano':78,'retangular-1x2':78};
   var hooked=false;
   var scheduled=false;
+  var refreshing=false;
 
   function clean(v){return String(v==null?'':v).replace(/\s+/g,' ').trim()}
-  function isFixedItem(item){
-    var key=clean(item&&(item.productKey||item.product));
-    return PRODUCT_KEYS.indexOf(key)>=0;
+  function keyOf(value){
+    return clean(value&&typeof value==='object'?(value.productKey||value.product||value.key):value);
   }
+  function isFixedKey(key){return PRODUCT_KEYS.indexOf(clean(key))>=0}
+  function isFixedItem(item){return isFixedKey(keyOf(item))}
 
   function injectStyle(){
     if(document.getElementById('cartFixedMeasurePolishStyle'))return;
@@ -99,10 +102,50 @@
     requestAnimationFrame(function(){scheduled=false;polish(document)});
   }
 
+  function hookPrice(){
+    if(typeof price!=='function')return false;
+    if(price.__fixedMeasureCommerce===true)return true;
+    var previous=price;
+    var wrapped=function(product,qty,item){
+      var key=keyOf(product)||keyOf(item);
+      if(isFixedKey(key)){
+        var unit=Number(prices[key]||0);
+        return Math.max(0,Number(qty||0))*Math.max(0,unit);
+      }
+      return previous.apply(this,arguments);
+    };
+    wrapped.__fixedMeasureCommerce=true;
+    price=wrapped;
+    return true;
+  }
+
+  async function refreshCommercial(){
+    if(refreshing)return;
+    refreshing=true;
+    try{
+      var response=await fetch('/api/commercial-config?_cartFixed='+Date.now(),{
+        cache:'no-store',credentials:'same-origin',headers:{Accept:'application/json','Cache-Control':'no-store'}
+      });
+      var data=await response.json().catch(function(){return{}});
+      var products=data&&data.ok===true&&data.config&&data.config.products?data.config.products:{};
+      PRODUCT_KEYS.forEach(function(key){
+        var p=products[key];
+        var value=Number(p&&p.unitPrice);
+        if(Number.isFinite(value)&&value>0)prices[key]=value;
+      });
+      hookPrice();
+      if(typeof renderCart==='function')renderCart();
+    }catch(_){
+      hookPrice();
+      if(typeof renderCart==='function')renderCart();
+    }finally{refreshing=false}
+  }
+
   function hookRenderCart(){
     if(hooked||typeof renderCart!=='function')return false;
     var previous=renderCart;
     var wrapped=function(){
+      hookPrice();
       var result=previous.apply(this,arguments);
       polish(document);
       return result;
@@ -110,21 +153,26 @@
     wrapped.__fixedMeasurePolish=true;
     renderCart=wrapped;
     hooked=true;
+    hookPrice();
     polish(document);
     return true;
   }
 
   function boot(){
     injectStyle();
+    hookPrice();
     hookRenderCart();
+    refreshCommercial();
     var attempts=0;
     var timer=setInterval(function(){
       attempts++;
+      hookPrice();
       if(!hooked)hookRenderCart();
       polish(document);
-      if(hooked&&attempts>20)clearInterval(timer);
-      else if(attempts>120)clearInterval(timer);
+      if(hooked&&attempts>40)clearInterval(timer);
+      else if(attempts>160)clearInterval(timer);
     },250);
+    setInterval(function(){hookPrice();refreshCommercial()},30000);
     new MutationObserver(schedule).observe(document.body,{childList:true,subtree:true});
   }
 
