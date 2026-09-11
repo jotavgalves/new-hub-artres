@@ -7,6 +7,8 @@ const ROOTS = Object.freeze({
   'retangular-1x2': '1r4BdVOZasdtlE16K7TKIVkHCfVSHLRML'
 });
 
+const RECTANGULAR_PRICE_MIGRATION = 'retangular-price-78-v1';
+
 export async function onRequestGet(context) {
   try {
     const loaded = await loadConfig(context.env);
@@ -26,6 +28,7 @@ export async function onRequestGet(context) {
 async function ensureProductionProducts(env, source, storageReady) {
   const config = clone(source || {});
   config.products = record(config.products);
+  config.migrations = record(config.migrations);
   const currentPanel = config.products.panel150 || config.products['painel-150'];
   const currentRoman = config.products.painelRomano || config.products['painel-romano'];
   const currentRectangular = config.products.retangular1x2 || config.products['retangular-1x2'];
@@ -60,6 +63,18 @@ async function ensureProductionProducts(env, source, storageReady) {
     config.products.retangular1x2 = { ...rectangularDefaults(), ...currentRectangular, label: normalizedLabel, productKey: 'retangular-1x2', catalogReady: true };
     config.products['retangular-1x2'] = clone(config.products.retangular1x2);
     if (currentRectangular.catalogReady !== true || normalizedLabel !== oldLabel) changed = true;
+  }
+
+  if (config.migrations[RECTANGULAR_PRICE_MIGRATION] !== true) {
+    const rectangular = config.products.retangular1x2;
+    if (!(Number(rectangular.unitPrice) > 0)) {
+      rectangular.unitPrice = 78;
+      rectangular.enabled = true;
+      rectangular.priceLabel = 'R$ 78,00 cada';
+      config.products['retangular-1x2'] = clone(rectangular);
+    }
+    config.migrations[RECTANGULAR_PRICE_MIGRATION] = true;
+    changed = true;
   }
 
   config.productCatalog = Array.isArray(config.productCatalog) ? config.productCatalog : [];
@@ -121,7 +136,7 @@ function publicCommercialConfig(config) {
   const bolinhas = normalizeProduct(products.bolinhas, { key:'50x50', label:'Bolinhas 50x50', unitPrice:9.9, minimum:6, step:2, initial:6, scope:'cart-product-total' });
   const panel = normalizeProduct(products.panel150 || products['painel-150'], { key:'painel-150', label:'Painel 150 cm', unitPrice:59.9, minimum:1, step:1, initial:1, scope:'item' });
   const roman = normalizeProduct(products.painelRomano || products['painel-romano'], { key:'painel-romano', label:'Painel Romano 1x2', unitPrice:0, minimum:1, step:1, initial:1, scope:'item' });
-  const rectangularBase = normalizeProduct(products.retangular1x2 || products['retangular-1x2'], { key:'retangular-1x2', label:'Painel Retangular', unitPrice:0, minimum:1, step:1, initial:1, scope:'item' });
+  const rectangularBase = normalizeProduct(products.retangular1x2 || products['retangular-1x2'], { key:'retangular-1x2', label:'Painel Retangular', unitPrice:78, minimum:1, step:1, initial:1, scope:'item' });
   const rectangular = { ...rectangularBase, catalogReady:true, size:'1X2', sizeKey:'100x200' };
   const discount = percentage(config && config.ui && config.ui.discountPercent, config && config.campaign && config.campaign.discountPercent, 0);
   const version = positive(config && config.commercialVersion, config && config.ui && config.ui.cacheVersion, config && config.version, 1);
@@ -143,7 +158,7 @@ function panelRomanDefaults() {
   return { label:'Painel Romano 1x2', productKey:'painel-romano', enabled:false, unitPrice:0, priceLabel:'Preço não definido', minQty:1, step:1, initialQty:1, disableCustomization:true, skipProductsStep:true, fixedSize:'1X2', sizeKey:'100x200' };
 }
 function rectangularDefaults() {
-  return { label:'Painel Retangular', productKey:'retangular-1x2', enabled:false, unitPrice:0, priceLabel:'Preço não definido', minQty:1, step:1, initialQty:1, disableCustomization:true, skipProductsStep:true, fixedSize:'1X2', sizeKey:'100x200', catalogReady:true };
+  return { label:'Painel Retangular', productKey:'retangular-1x2', enabled:true, unitPrice:78, priceLabel:'R$ 78,00 cada', minQty:1, step:1, initialQty:1, disableCustomization:true, skipProductsStep:true, fixedSize:'1X2', sizeKey:'100x200', catalogReady:true };
 }
 
 function normalizeProduct(input, defaults) {
