@@ -61,12 +61,12 @@ jobs:
         run: |
           set -euo pipefail
           BASE='https://new-hub-artres.pages.dev'
-          ROOT='1r4BdVOZasdtlE16K7TKIVkHCfVSHLRML'
+          ROOT='1fB01auWnc01DEy2EJfGK62l0MCgQLpXu'
           curl --fail --silent --show-error --location --max-time 45 "$BASE/api/painel-retangular?mode=themes&_ret_verify=$(date +%s)" -o rect-themes.json
           node <<'NODE'
           const fs=require('node:fs');
           const d=JSON.parse(fs.readFileSync('rect-themes.json','utf8'));
-          if(d.ok!==true || d.rootFolderId!=='1r4BdVOZasdtlE16K7TKIVkHCfVSHLRML') throw new Error('RETANGULAR_API_ROOT_INVALID');
+          if(d.ok!==true || d.rootFolderId!=='1fB01auWnc01DEy2EJfGK62l0MCgQLpXu') throw new Error('RETANGULAR_API_ROOT_INVALID');
           if(!Array.isArray(d.folders)) throw new Error('RETANGULAR_THEMES_INVALID');
           if(d.folders.some(x=>x.productKey!=='retangular-1x2')) throw new Error('RETANGULAR_THEME_PRODUCT_LEAK');
           if(String(d.product?.label||'').toLowerCase()!=='painel retangular') throw new Error('RETANGULAR_API_LABEL_INVALID:'+d.product?.label);
@@ -77,17 +77,20 @@ jobs:
           node <<'NODE'
           const fs=require('node:fs');
           const d=JSON.parse(fs.readFileSync('commercial.json','utf8'));
-          const root='1r4BdVOZasdtlE16K7TKIVkHCfVSHLRML';
+          const root='1fB01auWnc01DEy2EJfGK62l0MCgQLpXu';
           if(d.ok!==true) throw new Error('COMMERCIAL_NOT_OK');
           const p=d.config?.products?.['retangular-1x2'];
+          const roman=d.config?.products?.['painel-romano'];
           if(!p) throw new Error('RETANGULAR_MISSING');
+          if(!roman) throw new Error('ROMAN_MISSING');
           if(d.config?.protectedRoots?.['retangular-1x2']!==root) throw new Error('RETANGULAR_ROOT_MISMATCH');
           if(String(p.label||'').toLowerCase()!=='painel retangular') throw new Error('RETANGULAR_LABEL_INVALID:'+p.label);
           if(p.catalogReady!==true) throw new Error('RETANGULAR_CATALOG_NOT_READY');
           if(p.size!=='1X2'||p.sizeKey!=='100x200') throw new Error('RETANGULAR_SIZE_CONFIG_INVALID');
           if(Number(p.quantity?.minimum)!==1 || Number(p.quantity?.step)!==1) throw new Error('RETANGULAR_QUANTITY_INVALID');
           if(Number(p.unitPrice)!==78 || p.enabled!==true) throw new Error('RETANGULAR_PRICE_INVALID:'+JSON.stringify({price:p.unitPrice,enabled:p.enabled}));
-          console.log(JSON.stringify({label:p.label,price:p.unitPrice,enabled:p.enabled,size:p.size,sizeKey:p.sizeKey,root}));
+          if(Number(roman.unitPrice)!==78 || roman.enabled!==true) throw new Error('ROMAN_PRICE_INVALID:'+JSON.stringify({price:roman.unitPrice,enabled:roman.enabled}));
+          console.log(JSON.stringify({rectangular:{label:p.label,price:p.unitPrice,enabled:p.enabled,size:p.size,sizeKey:p.sizeKey,root},roman:{label:roman.label,price:roman.unitPrice,enabled:roman.enabled}}));
           NODE
 
       - name: Validar identidade das artes quando existirem
