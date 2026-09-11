@@ -3,7 +3,7 @@
   window.__ARMAZEM_ADMIN_RETANGULAR_1X2__='2';
 
   var KEY='retangular-1x2';
-  var ROOT='1r4BdVOZasdtlE16K7TKIVkHCfVSHLRML';
+  var ROOT='1fB01auWnc01DEy2EJfGK62l0MCgQLpXu';
   var DEFAULT_LABEL='Painel Retangular';
   var state={config:null,loading:false,saving:false};
 
