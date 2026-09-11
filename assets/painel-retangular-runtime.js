@@ -5,7 +5,7 @@
   var KEY='retangular-1x2';
   var ROOT='1r4BdVOZasdtlE16K7TKIVkHCfVSHLRML';
   var WORKSPACE_STORAGE='armazem:production:workspace';
-  var state={label:'Painel Retangular 1x2',enabled:false,unitPrice:0,minimum:1,step:1,initial:1,active:false,installed:false,autoOpened:false};
+  var state={label:'Painel Retangular',enabled:false,unitPrice:0,minimum:1,step:1,initial:1,active:false,installed:false,autoOpened:false};
 
   function clean(v){return String(v==null?'':v).replace(/\s+/g,' ').trim()}
   function norm(v){return clean(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[_-]+/g,' ').replace(/\s+/g,' ').trim()}
@@ -39,7 +39,7 @@
       nav.addEventListener('click',function(e){var target=e.target&&e.target.closest&&e.target.closest('[data-workspace],#productionV2RomanTab');if(target)deactivateRect(false)},true);
     }
     btn.dataset.unpriced=state.enabled&&state.unitPrice>0?'0':'1';
-    btn.title=state.enabled&&state.unitPrice>0?state.label:'Painel Retangular 1x2 — defina o preço no painel administrativo para vender';
+    btn.title=state.enabled&&state.unitPrice>0?state.label:'Painel Retangular — medida 1x2. Defina o preço no painel administrativo para vender';
     syncNav();return true;
   }
 
@@ -51,15 +51,20 @@
   }
   function remember(){try{sessionStorage.setItem(WORKSPACE_STORAGE,KEY)}catch(_){}try{var u=new URL(location.href);u.searchParams.set('produto',KEY);history.replaceState(history.state,'',u.pathname+u.search+u.hash)}catch(_){}try{localStorage.removeItem('armazem:lastPlace')}catch(_){}}
   function deactivateRect(clearUrl){state.active=false;var btn=document.getElementById('productionV2RetangularTab');if(btn)btn.classList.remove('active');if(clearUrl){try{var u=new URL(location.href);if(u.searchParams.get('produto')===KEY){u.searchParams.delete('produto');history.replaceState(history.state,'',u.pathname+u.search+u.hash)}}catch(_){}}}
+  function showEmptyCatalog(){
+    if(typeof updateHead==='function')updateHead('Painel Retangular','Medida fixa de 1,00 × 2,00 m. As artes aparecerão aqui assim que forem adicionadas à pasta do produto.','Em preparação');
+    var host=document.getElementById('content');
+    if(host)host.innerHTML='<div class="empty"><div><b>Nenhuma arte cadastrada ainda</b><span>A pasta do Painel Retangular já está conectada. Quando novas artes forem adicionadas, elas serão carregadas automaticamente.</span></div></div>';
+  }
 
   async function activateRect(announce){
     deactivateRomanSignal();state.active=true;remember();syncNav();var chooser=document.getElementById('productionV2Chooser');if(chooser)chooser.remove();
-    if(announce)notify(state.enabled&&state.unitPrice>0?'Agora você está vendo '+state.label+'.':state.label+' aberto. Defina o preço no Admin antes de vender.');
+    if(announce)notify(state.enabled&&state.unitPrice>0?'Agora você está vendo '+state.label+'.':state.label+' aberto. A medida é 1x2 e o preço ainda será definido no Admin.');
     try{
       if(typeof view!=='undefined')view='themes';if(typeof selectedTheme!=='undefined')selectedTheme=null;if(typeof selectedProduct!=='undefined')selectedProduct=null;if(typeof currentFolder!=='undefined')currentFolder=null;if(typeof folderTrail!=='undefined')folderTrail=[];
       var search=document.getElementById('search');if(search)search.value='';if(typeof updateHead==='function')updateHead('Escolha um tema','Escolha um tema disponível para '+state.label+'.','carregando');if(typeof loading==='function')loading('Buscando Painéis Retangulares...');
-      var d=await request({mode:'themes'});if(!state.active)return;if(typeof themes!=='undefined')themes=Array.isArray(d.folders)?d.folders:[];if(typeof showThemes==='function')showThemes();syncNav();
-    }catch(e){if(typeof themes!=='undefined')themes=[];if(typeof showThemes==='function')showThemes();notify('Não foi possível carregar os Painéis Retangulares agora.');syncNav();}
+      var d=await request({mode:'themes'});if(!state.active)return;var nextThemes=Array.isArray(d.folders)?d.folders:[];if(typeof themes!=='undefined')themes=nextThemes;if(nextThemes.length&&typeof showThemes==='function')showThemes();else showEmptyCatalog();syncNav();
+    }catch(e){if(typeof themes!=='undefined')themes=[];if(typeof errorScreen==='function')errorScreen('Não foi possível carregar o catálogo do Painel Retangular.');else notify('Não foi possível carregar os Painéis Retangulares agora.');syncNav();}
   }
 
   function installFunctionHooks(){
