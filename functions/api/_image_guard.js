@@ -9,7 +9,7 @@ export async function sealMediaId(env, rawId) {
   if (cached) return cached;
 
   const key = await encryptionKey(env);
-  const iv = await deterministicIv(key, id);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
   const plain = new TextEncoder().encode(id);
   const encrypted = new Uint8Array(await crypto.subtle.encrypt({ name:'AES-GCM', iv }, key, plain));
   const token = TOKEN_VERSION + '.' + base64url(joinBytes(iv, encrypted));
@@ -79,14 +79,6 @@ async function createKey(env) {
   return crypto.subtle.importKey('raw', digest, { name:'AES-GCM' }, false, ['encrypt','decrypt']);
 }
 
-async function deterministicIv(key, id) {
-  const raw = await crypto.subtle.exportKey ? null : null;
-  // O IV precisa ser estável para que a mesma arte mantenha a mesma URL durante a navegação.
-  // Derivamos 96 bits a partir do identificador usando SHA-256 e um namespace separado.
-  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('armazem-media-iv-v1:' + id)));
-  return digest.slice(0, 12);
-}
-
 function joinBytes(a, b) {
   const out = new Uint8Array(a.length + b.length);
   out.set(a, 0);
@@ -101,7 +93,8 @@ function base64url(bytes) {
 }
 
 function fromBase64url(value) {
-  const padded = String(value || '').replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((String(value || '').length + 3) % 4);
+  const input = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
+  const padded = input + '='.repeat((4 - input.length % 4) % 4);
   const binary = atob(padded);
   const out = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i += 1) out[i] = binary.charCodeAt(i);
