@@ -4,9 +4,10 @@
 
   var KEYS=['painel-romano','retangular-1x2'];
   var state={
-    'painel-romano':{label:'Painel Romano 1x2',unitPrice:0,enabled:false,minimum:1,step:1,initial:1},
-    'retangular-1x2':{label:'Painel Retangular',unitPrice:0,enabled:false,minimum:1,step:1,initial:1}
+    'painel-romano':{label:'Painel Romano 1x2',unitPrice:78,enabled:true,minimum:1,step:1,initial:1},
+    'retangular-1x2':{label:'Painel Retangular',unitPrice:78,enabled:true,minimum:1,step:1,initial:1}
   };
+  window.__ARMAZEM_DYNAMIC_PRODUCT_STATE__=state;
   var loading=false;
 
   function clean(v){return String(v==null?'':v).replace(/\s+/g,' ').trim()}
@@ -138,6 +139,6 @@
     setInterval(refresh,30000);
   }
 
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(boot,250)},{once:true});
-  else setTimeout(boot,250);
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(boot,0)},{once:true});
+  else setTimeout(boot,0);
 })();
