@@ -37,8 +37,8 @@ jobs:
           for attempt in $(seq 1 30); do
             curl --fail --silent --show-error --location --max-time 25 "$BASE/?_roman_verify=$(date +%s)" -o home.html || true
             curl --fail --silent --show-error --location --max-time 25 "$BASE/assets/painel-romano-runtime.js?v=3&_roman_verify=$(date +%s)" -o roman.js || true
-            curl --fail --silent --show-error --location --max-time 25 "$BASE/assets/catalog-cache-bust.js?v=10&_roman_verify=$(date +%s)" -o loader.js || true
-            if grep -q 'catalog-cache-bust.js?v=10' home.html 2>/dev/null \
+            curl --fail --silent --show-error --location --max-time 25 "$BASE/assets/catalog-cache-bust.js?v=11&_roman_verify=$(date +%s)" -o loader.js || true
+            if grep -q 'catalog-cache-bust.js?v=11' home.html 2>/dev/null \
               && grep -q "__ARMAZEM_PAINEL_ROMANO_RUNTIME__='3'" roman.js 2>/dev/null \
               && grep -q 'productionV2RomanTab' roman.js 2>/dev/null \
               && grep -q 'painel-romano-runtime.js?v=3' loader.js 2>/dev/null; then
@@ -72,9 +72,7 @@ jobs:
           if(themes.ok!==true) throw new Error('ROMAN_THEMES_NOT_OK');
           if(themes.rootFolderId!==root) throw new Error('ROMAN_THEMES_ROOT_MISMATCH');
           if(!Array.isArray(themes.folders)) throw new Error('ROMAN_THEMES_INVALID');
-          for(const theme of themes.folders){
-            if(theme.productKey!=='painel-romano') throw new Error('ROMAN_THEME_PRODUCT_LEAK');
-          }
+          for(const theme of themes.folders){ if(theme.productKey!=='painel-romano') throw new Error('ROMAN_THEME_PRODUCT_LEAK'); }
           console.log(JSON.stringify({price:p.unitPrice,enabled:p.enabled,romanThemes:themes.folders.length,root}));
           NODE
 
@@ -83,10 +81,7 @@ jobs:
         run: |
           set -euo pipefail
           BASE='https://new-hub-artres.pages.dev'
-          code=$(curl --silent --show-error --location --max-time 30 -o unified.json -w '%{http_code}' \
-            -X POST "$BASE/api/orders-unified" \
-            -H 'Content-Type: application/json' \
-            --data '{"items":[]}')
+          code=$(curl --silent --show-error --location --max-time 30 -o unified.json -w '%{http_code}' -X POST "$BASE/api/orders-unified" -H 'Content-Type: application/json' --data '{"items":[]}')
           test "$code" = '400'
           node <<'NODE'
           const fs=require('node:fs');
@@ -100,12 +95,8 @@ jobs:
           set -euo pipefail
           BASE='https://new-hub-artres.pages.dev'
           CHROME=$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)
-          if [ -z "$CHROME" ]; then
-            echo 'Chrome/Chromium não disponível no runner.' >&2
-            exit 1
-          fi
-          "$CHROME" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage \
-            --virtual-time-budget=12000 --dump-dom "$BASE/?produto=painel-romano&_roman_verify=$(date +%s)" > dom.html
+          if [ -z "$CHROME" ]; then echo 'Chrome/Chromium não disponível no runner.' >&2; exit 1; fi
+          "$CHROME" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --virtual-time-budget=12000 --dump-dom "$BASE/?produto=painel-romano&_roman_verify=$(date +%s)" > dom.html
           grep -q 'id="productionV2RomanTab"' dom.html
           grep -q 'Painel Romano' dom.html
           grep -q 'Painel Romano 1x2' dom.html
