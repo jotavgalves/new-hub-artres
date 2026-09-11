@@ -1,0 +1,142 @@
+name: Verificar Painel Retangular
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-painel-retangular.yml'
+      - '.github/workflows/reindex-drive-catalog.yml'
+      - 'assets/painel-retangular-runtime.js'
+      - 'assets/catalog-cache-bust.js'
+      - 'assets/admin-retangular-1x2.js'
+      - 'functions/index.js'
+      - 'functions/adm/_middleware.js'
+      - 'functions/api/painel-retangular.js'
+      - 'functions/api/orders-unified.js'
+      - 'functions/api/commercial-config.js'
+      - 'functions/api/_order_product.js'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-painel-retangular-main
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Aguardar versão nova no Pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://new-hub-artres.pages.dev'
+          ok=0
+          for attempt in $(seq 1 36); do
+            curl --fail --silent --show-error --location --max-time 25 "$BASE/?_ret_verify=$(date +%s)" -o home.html || true
+            curl --fail --silent --show-error --location --max-time 25 "$BASE/assets/painel-retangular-runtime.js?v=1&_ret_verify=$(date +%s)" -o rect.js || true
+            curl --fail --silent --show-error --location --max-time 25 "$BASE/assets/catalog-cache-bust.js?v=11&_ret_verify=$(date +%s)" -o loader.js || true
+            if grep -q 'catalog-cache-bust.js?v=11' home.html 2>/dev/null \
+              && grep -q "__ARMAZEM_PAINEL_RETANGULAR_RUNTIME__='1'" rect.js 2>/dev/null \
+              && grep -q 'productionV2RetangularTab' rect.js 2>/dev/null \
+              && grep -q 'painel-retangular-runtime.js?v=1' loader.js 2>/dev/null; then
+              ok=1
+              echo "Versão do Painel Retangular publicada na tentativa $attempt."
+              break
+            fi
+            echo "Aguardando Pages... tentativa $attempt/36"
+            sleep 10
+          done
+          test "$ok" = 1
+
+      - name: Aguardar catálogo indexado e validar API
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://new-hub-artres.pages.dev'
+          ROOT='1r4BdVOZasdtlE16K7TKIVkHCfVSHLRML'
+          ok=0
+          for attempt in $(seq 1 36); do
+            curl --fail --silent --show-error --location --max-time 45 "$BASE/api/painel-retangular?mode=themes&_ret_verify=$(date +%s)" -o rect-themes.json || true
+            if node <<'NODE'
+          const fs=require('node:fs');
+          let d={};try{d=JSON.parse(fs.readFileSync('rect-themes.json','utf8'))}catch(_){process.exit(1)}
+          if(d.ok!==true || d.rootFolderId!=='1r4BdVOZasdtlE16K7TKIVkHCfVSHLRML') process.exit(1);
+          if(!Array.isArray(d.folders) || !(Number(d.artworkTotal)>0)) process.exit(1);
+          if(d.folders.some(x=>x.productKey!=='retangular-1x2')) process.exit(1);
+          console.log(JSON.stringify({themes:d.folders.length,artworks:d.artworkTotal,source:d.source}));
+          NODE
+            then ok=1; break; fi
+            echo "Aguardando índice do Retangular... tentativa $attempt/36"
+            sleep 10
+          done
+          test "$ok" = 1
+
+          curl --fail --silent --show-error --location --max-time 30 "$BASE/api/commercial-config?_ret_verify=$(date +%s)" -o commercial.json
+          node <<'NODE'
+          const fs=require('node:fs');
+          const d=JSON.parse(fs.readFileSync('commercial.json','utf8'));
+          const root='1r4BdVOZasdtlE16K7TKIVkHCfVSHLRML';
+          if(d.ok!==true) throw new Error('COMMERCIAL_NOT_OK');
+          const p=d.config?.products?.['retangular-1x2'];
+          if(!p) throw new Error('RETANGULAR_MISSING');
+          if(d.config?.protectedRoots?.['retangular-1x2']!==root) throw new Error('RETANGULAR_ROOT_MISMATCH');
+          if(String(p.label||'').toLowerCase()!=='painel retangular 1x2') throw new Error('RETANGULAR_LABEL_INVALID:'+p.label);
+          if(p.catalogReady!==true) throw new Error('RETANGULAR_CATALOG_NOT_READY');
+          if(Number(p.quantity?.minimum)!==1 || Number(p.quantity?.step)!==1) throw new Error('RETANGULAR_QUANTITY_INVALID');
+          console.log(JSON.stringify({label:p.label,price:p.unitPrice,enabled:p.enabled,root}));
+          NODE
+
+      - name: Validar itens e identidade técnica
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://new-hub-artres.pages.dev'
+          node <<'NODE'
+          const fs=require('node:fs');
+          const themes=JSON.parse(fs.readFileSync('rect-themes.json','utf8'));
+          fs.writeFileSync('theme.txt',String(themes.folders?.[0]?.name||''));
+          NODE
+          THEME=$(cat theme.txt)
+          curl --fail --silent --show-error --get --max-time 45 "$BASE/api/painel-retangular" --data-urlencode 'mode=items' --data-urlencode "theme=$THEME" --data-urlencode "_ret_verify=$(date +%s)" -o rect-items.json
+          node <<'NODE'
+          const fs=require('node:fs');
+          const d=JSON.parse(fs.readFileSync('rect-items.json','utf8'));
+          if(d.ok!==true || !Array.isArray(d.items) || !d.items.length) throw new Error('RETANGULAR_ITEMS_EMPTY');
+          for(const i of d.items.slice(0,20)){
+            if(i.productKey!=='retangular-1x2') throw new Error('RETANGULAR_PRODUCT_KEY_INVALID');
+            if(i.sizeKey!=='100x200' || i.size!=='1X2') throw new Error('RETANGULAR_SIZE_INVALID');
+            if(i.details?.fixed!==true) throw new Error('RETANGULAR_FIXED_INVALID');
+          }
+          console.log(JSON.stringify({theme:d.theme,total:d.total,sampleCode:d.items[0].code}));
+          NODE
+
+      - name: Validar endpoint de pedidos sem criar pedido
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://new-hub-artres.pages.dev'
+          code=$(curl --silent --show-error --location --max-time 30 -o unified.json -w '%{http_code}' -X POST "$BASE/api/orders-unified" -H 'Content-Type: application/json' --data '{"items":[]}')
+          test "$code" = '400'
+          node <<'NODE'
+          const fs=require('node:fs');
+          const body=JSON.parse(fs.readFileSync('unified.json','utf8'));
+          if(body.error!=='CARRINHO_VAZIO_OU_INVALIDO') throw new Error('UNIFIED_ENDPOINT_INVALID');
+          NODE
+
+      - name: Validar aba e temas no navegador
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://new-hub-artres.pages.dev'
+          CHROME=$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)
+          if [ -z "$CHROME" ]; then echo 'Chrome/Chromium não disponível no runner.' >&2; exit 1; fi
+          "$CHROME" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --virtual-time-budget=16000 --dump-dom "$BASE/?produto=retangular-1x2&_ret_verify=$(date +%s)" > dom.html
+          grep -q 'id="productionV2RetangularTab"' dom.html
+          grep -q 'Painel Retangular' dom.html
+          grep -q 'Painel Retangular 1x2' dom.html
+          if grep -q '0 tema(s)' dom.html; then echo 'Painel Retangular ainda aparece com zero temas.' >&2; exit 1; fi
+          echo 'Aba e catálogo do Painel Retangular foram renderizados no domínio oficial.'
