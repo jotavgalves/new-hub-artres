@@ -34,10 +34,16 @@
     else loadCheckoutV3();
   }
 
-  function loadPainelRomano(){
-    var script = loadScript('painelRomanoRuntimeScript','/assets/painel-romano-runtime.js?v=3',document.body || document.head);
+  function loadPainelRetangular(){
+    var script = loadScript('painelRetangularRuntimeScript','/assets/painel-retangular-runtime.js?v=1',document.body || document.head);
     if (script) script.addEventListener('load',loadCartReconcile,{once:true});
     else loadCartReconcile();
+  }
+
+  function loadPainelRomano(){
+    var script = loadScript('painelRomanoRuntimeScript','/assets/painel-romano-runtime.js?v=3',document.body || document.head);
+    if (script) script.addEventListener('load',loadPainelRetangular,{once:true});
+    else loadPainelRetangular();
   }
 
   function loadProductionV2(){
@@ -50,7 +56,7 @@
     },{once:true});
   }
 
-  var CACHE_SCHEMA = 'catalog-index-v3-products';
+  var CACHE_SCHEMA = 'catalog-index-v4-products';
   var META_KEY = 'catalog-meta-version';
   var rawVersion = localStorage.getItem(META_KEY) || 'boot';
   var version = CACHE_SCHEMA + '-' + rawVersion;
@@ -131,7 +137,7 @@
   window.fetch = function(input, init){
     try {
       var url = typeof input === 'string' ? new URL(input, location.origin) : new URL(input.url, location.origin);
-      if (url.pathname === '/api/drive' || url.pathname === '/api/catalog-v2' || url.pathname === '/api/painel-romano') {
+      if (url.pathname === '/api/drive' || url.pathname === '/api/catalog-v2' || url.pathname === '/api/painel-romano' || url.pathname === '/api/painel-retangular') {
         url.searchParams.set('cv', version);
         init = Object.assign({}, init || {}, {
           cache: 'no-store',
