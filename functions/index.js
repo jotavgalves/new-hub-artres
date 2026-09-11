@@ -3,6 +3,7 @@ const CUSTOMER_CHECKOUT_SCRIPT = '<script src="/assets/customer-checkout.js?v=6"
 const SITE_TEXTS_SCRIPT = '<script src="/assets/site-texts-runtime.js?v=1" defer></script>';
 const CATALOG_NAV_UX_SCRIPT = '<script src="/assets/catalog-navigation-ux.js?v=3" defer></script>';
 const DYNAMIC_PRODUCT_COMMERCE_SYNC_SCRIPT = '<script src="/assets/dynamic-product-commerce-sync.js?v=1" defer></script>';
+const CART_FIXED_MEASURE_POLISH_SCRIPT = '<script src="/assets/cart-fixed-measure-polish.js?v=1" defer></script>';
 const HERO_LOGO_CENTER_STYLE = '<style id="heroLogoCenterStyle">.brand .logo{margin-left:auto;margin-right:auto}</style>';
 
 export async function onRequest(context) {
@@ -16,10 +17,11 @@ export async function onRequest(context) {
   html = html.replace(/<script\s+src=["']\/assets\/site-texts-runtime\.js\?v=[^"']+["']\s+defer><\/script>/g, '');
   html = html.replace(/<script\s+src=["']\/assets\/catalog-navigation-ux\.js\?v=[^"']+["']\s+defer><\/script>/g, '');
   html = html.replace(/<script\s+src=["']\/assets\/dynamic-product-commerce-sync\.js\?v=[^"']+["']\s+defer><\/script>/g, '');
+  html = html.replace(/<script\s+src=["']\/assets\/cart-fixed-measure-polish\.js\?v=[^"']+["']\s+defer><\/script>/g, '');
   html = html.replace(/<script\s+src=["']\/assets\/painel-romano-runtime\.js\?v=[^"']+["']\s+defer><\/script>/g, '');
   html = html.replace(/<script\s+src=["']\/assets\/painel-retangular-runtime\.js\?v=[^"']+["']\s+defer><\/script>/g, '');
   html = html.replace('<style id="heroLogoCenterStyle">.brand .logo{margin-left:auto;margin-right:auto}</style>', '');
-  html = html.replace('</head>', `${HERO_LOGO_CENTER_STYLE}${CACHE_BUST_SCRIPT}${CUSTOMER_CHECKOUT_SCRIPT}${SITE_TEXTS_SCRIPT}${CATALOG_NAV_UX_SCRIPT}${DYNAMIC_PRODUCT_COMMERCE_SYNC_SCRIPT}</head>`);
+  html = html.replace('</head>', `${HERO_LOGO_CENTER_STYLE}${CACHE_BUST_SCRIPT}${CUSTOMER_CHECKOUT_SCRIPT}${SITE_TEXTS_SCRIPT}${CATALOG_NAV_UX_SCRIPT}${DYNAMIC_PRODUCT_COMMERCE_SYNC_SCRIPT}${CART_FIXED_MEASURE_POLISH_SCRIPT}</head>`);
 
   const headers = new Headers(assetResponse.headers);
   headers.delete('content-length');
