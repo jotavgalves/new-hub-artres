@@ -4,18 +4,18 @@
 
   var KEY='retangular-1x2';
   var ROOT='1r4BdVOZasdtlE16K7TKIVkHCfVSHLRML';
-  var DEFAULT_LABEL='Painel Retangular 1x2';
+  var DEFAULT_LABEL='Painel Retangular';
   var state={config:null,loading:false,saving:false};
 
   function $(id){return document.getElementById(id)}
   function clean(v){return String(v==null?'':v).replace(/\s+/g,' ').trim()}
-  function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]})}
+  function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[m]})}
   function num(v,fallback){var n=Number(String(v==null?'':v).replace(',','.'));return Number.isFinite(n)?n:fallback}
   function money(v){return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
   function clone(v){return JSON.parse(JSON.stringify(v&&typeof v==='object'?v:{}))}
   function active(){var view=$('productsView');return document.body.dataset.userRole!=='vendedora'&&(document.body.dataset.adminTab==='productsView'||!!(view&&!view.classList.contains('hidden')))}
   function api(url,opts){opts=opts||{};return fetch(url,{credentials:'include',cache:'no-store',headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts}).then(async function(r){var text=await r.text();var data={};try{data=text?JSON.parse(text):{}}catch(e){throw new Error('Resposta inválida do servidor.')}if(!r.ok||data.ok===false)throw new Error(data.detail||data.error||'Erro na solicitação.');return data})}
-  function rawProduct(config){var products=config&&config.products&&typeof config.products==='object'?config.products:{};var p=products.retangular1x2||products[KEY]||{};var price=Math.max(0,num(p.unitPrice,0));var label=clean(p.label||DEFAULT_LABEL);if(label==='Retangular 1x2')label=DEFAULT_LABEL;return{label:label||DEFAULT_LABEL,unitPrice:price,enabled:p.enabled===true||(p.enabled!==false&&price>0)}}
+  function rawProduct(config){var products=config&&config.products&&typeof config.products==='object'?config.products:{};var p=products.retangular1x2||products[KEY]||{};var price=Math.max(0,num(p.unitPrice,0));var label=clean(p.label||DEFAULT_LABEL);if(label==='Retangular 1x2'||label==='Painel Retangular 1x2')label=DEFAULT_LABEL;return{label:label||DEFAULT_LABEL,unitPrice:price,enabled:p.enabled===true||(p.enabled!==false&&price>0)}}
   function status(msg,tone){var el=$('retangular1x2AdminStatus');if(!el)return;el.textContent=msg||'';el.dataset.tone=tone||''}
 
   function render(){
@@ -44,7 +44,7 @@
       var product={label:label,productKey:KEY,enabled:enabled,unitPrice:price,priceLabel:price>0?money(price)+' cada':'Preço não definido',minQty:1,step:1,initialQty:1,disableCustomization:true,skipProductsStep:true,fixedSize:'1X2',sizeKey:'100x200',catalogReady:true};
       c.products.retangular1x2=clone(product);c.products[KEY]=clone(product);
       c.productCatalog=Array.isArray(c.productCatalog)?c.productCatalog:[];c.productCatalog=c.productCatalog.filter(function(x){return!x||x.productKey!==KEY});c.productCatalog.push({id:KEY,label:label,productKey:KEY,active:enabled,editable:true,catalogReady:true});
-      c.drives=Array.isArray(c.drives)?c.drives:[];c.drives=c.drives.filter(function(d){return!d||d.productKey!==KEY});c.drives.push({id:KEY,name:'Drive Painel Retangular 1x2',folderId:ROOT,active:true,type:KEY,productKey:KEY,structure:'theme-or-subtheme-images',filenamePattern:'ID_TEMA_PRODUTO_DIMENSAO'});
+      c.drives=Array.isArray(c.drives)?c.drives:[];c.drives=c.drives.filter(function(d){return!d||d.productKey!==KEY});c.drives.push({id:KEY,name:'Drive Painel Retangular',folderId:ROOT,active:true,type:KEY,productKey:KEY,structure:'theme-or-subtheme-images',filenamePattern:'ID_TEMA_PRODUTO_DIMENSAO'});
       c.ui=c.ui&&typeof c.ui==='object'?c.ui:{};var version=Math.max(1,parseInt(c.commercialVersion||c.ui.cacheVersion||1,10)||1)+1;c.commercialVersion=version;c.ui.cacheVersion=version;c.commercialUpdatedAt=new Date().toISOString();
       var saved=await api('/api/admin/config',{method:'POST',body:JSON.stringify({config:c})});state.config=clone(saved.config||c);status(price>0&&enabled?'Painel Retangular salvo e disponível para pedidos.':'Painel Retangular salvo. O catálogo está conectado; falta apenas definir/liberar o preço para vender.','ok');if($('retangular1x2PricePreview'))$('retangular1x2PricePreview').textContent=money(price);
     }catch(error){status(error.message,'error')}finally{state.saving=false}
