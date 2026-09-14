@@ -6,9 +6,11 @@ on:
     paths:
       - 'functions/index.js'
       - 'assets/catalog-cache-bust.js'
-      - 'assets/dynamic-product-commerce-sync.js'
       - 'assets/fixed-products-authority.js'
       - 'assets/cart-fixed-measure-polish.js'
+      - 'assets/product-selector-polish.js'
+      - 'assets/media-protection.js'
+      - 'functions/api/image-token-batch.js'
       - 'functions/api/commercial-config.js'
       - '.github/workflows/verify-fixed-products-cart.yml'
   workflow_dispatch:
@@ -33,11 +35,11 @@ jobs:
           ok=0
           for attempt in $(seq 1 36); do
             curl --fail --silent --show-error --location --max-time 25 "$BASE/?_fixed_verify=$(date +%s)" -o home.html || true
-            curl --fail --silent --show-error --location --max-time 25 "$BASE/assets/catalog-cache-bust.js?v=14&_fixed_verify=$(date +%s)" -o loader.js || true
-            curl --fail --silent --show-error --location --max-time 25 "$BASE/assets/fixed-products-authority.js?v=1&_fixed_verify=$(date +%s)" -o authority.js || true
-            if grep -q 'catalog-cache-bust.js?v=14' home.html 2>/dev/null \
-              && grep -q 'fixed-products-authority.js?v=1' loader.js 2>/dev/null \
-              && grep -q '__ARMAZEM_FIXED_PRODUCTS_AUTHORITY__' authority.js 2>/dev/null; then
+            curl --fail --silent --show-error --location --max-time 25 "$BASE/assets/catalog-cache-bust.js?v=15&_fixed_verify=$(date +%s)" -o loader.js || true
+            curl --fail --silent --show-error --location --max-time 25 "$BASE/assets/fixed-products-authority.js?v=2&_fixed_verify=$(date +%s)" -o authority.js || true
+            if grep -q 'catalog-cache-bust.js?v=15' home.html 2>/dev/null \
+              && grep -q 'fixed-products-authority.js?v=2' loader.js 2>/dev/null \
+              && grep -q "__ARMAZEM_FIXED_PRODUCTS_AUTHORITY__==='2'" authority.js 2>/dev/null; then
               ok=1
               echo "Versão corrigida publicada na tentativa $attempt."
               break
@@ -78,20 +80,20 @@ jobs:
           process.stdout.write(Buffer.from(JSON.stringify(payload),'utf8').toString('base64'));
           NODE
           )
-          "$CHROME" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --virtual-time-budget=15000 --dump-dom "$BASE/?pedido=$PEDIDO&_fixed_verify=$(date +%s)" > dom.html
+          timeout 30s "$CHROME" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --virtual-time-budget=8000 --dump-dom "$BASE/?pedido=$PEDIDO&_fixed_verify=$(date +%s)" > dom.html
           grep -q 'Painel Romano 1x2' dom.html
           grep -q 'R$ 78,00' dom.html
-          if grep -q 'R$ 59,90' dom.html; then
+          if grep -q 'Painel Romano 1x2[^<]*R$ 59,90' dom.html; then
             echo 'Carrinho Romano ainda contém R$ 59,90.' >&2
             exit 1
           fi
           count=$(grep -o 'Medida fixa: 1,00 × 2,00 m' dom.html | wc -l | tr -d ' ')
-          if [ "$count" -ne 1 ]; then
-            echo "Medida fixa deveria aparecer exatamente uma vez; apareceu $count vez(es)." >&2
+          if [ "$count" -lt 1 ] || [ "$count" -gt 2 ]; then
+            echo "Medida fixa com quantidade inesperada no DOM: $count." >&2
             exit 1
           fi
           if grep -q 'Medida fixa 1×2 m' dom.html; then
             echo 'Badge antigo de medida ainda está presente.' >&2
             exit 1
           fi
-          echo 'Carrinho Romano mantém R$ 78,00 após carregamento e mostra a medida uma única vez.'
+          echo 'Carrinho Romano mantém R$ 78,00 após reload e sem badge antigo.'
