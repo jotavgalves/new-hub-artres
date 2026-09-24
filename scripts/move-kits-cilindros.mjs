@@ -341,49 +341,74 @@ async function scanTree(driveClient,rootId){
 }
 
 async function automaticRollback(){
-  const restored=[];const conflicts=[];const errors=[];
-  const movedOps=manifest.operations.filter(x=>['MOVED','ALREADY_AT_DESTINATION'].includes(x.status)).reverse();
+  const restored=[];const alreadyOriginal=[];const conflicts=[];const errors=[];const deletedThemes=[];
 
-  for(const op of movedOps){
+  let tagged=[];
+  try{
+    tagged=await drive.listByAppProperty('kcRunId',RUN_ID);
+  }catch(error){
+    errors.push({stage:'DISCOVER_TAGGED_ITEMS',message:String(error?.message||error)});
+  }
+
+  const componentItems=tagged.filter(x=>x.appProperties?.kcKind==='component');
+  const themeItems=tagged.filter(x=>x.appProperties?.kcKind==='theme');
+
+  for(const item of componentItems){
+    const props=item.appProperties||{};
+    const originalParentId=String(props.kcOriginalParentId||'').trim();
+    const destinationParentId=String(props.kcDestinationParentId||'').trim();
+
+    if(!originalParentId||!destinationParentId){
+      conflicts.push({componentId:item.id,name:item.name,reason:'METADADOS_INCOMPLETOS'});
+      continue;
+    }
+
     try{
-      const current=await drive.getFile(op.componentId,'id,name,parents,appProperties');
-      if(current.parents?.includes(op.originalParentId)){
-        op.status='ROLLED_BACK';
-        op.rolledBackAt=new Date().toISOString();
-        restored.push(op.componentId);
-        await clearRollbackMetadata(op.componentId).catch(()=>{});
+      const current=await drive.getFile(item.id,'id,name,parents,appProperties');
+      if(current.parents?.includes(originalParentId)){
+        alreadyOriginal.push(item.id);
+        await clearRollbackMetadata(item.id).catch(()=>{});
+        const op=manifest.operations.find(x=>x.componentId===item.id);
+        if(op){op.status='ROLLED_BACK';op.rolledBackAt=new Date().toISOString();}
         continue;
       }
-      if(!current.parents?.includes(op.destinationParentId)){
-        const item={componentId:op.componentId,name:op.componentName,currentParents:current.parents||[],reason:'CONFLITO_MANUAL'};
-        conflicts.push(item);manifest.conflicts.push(item);continue;
+      if(!current.parents?.includes(destinationParentId)){
+        const conflict={componentId:item.id,name:item.name,currentParents:current.parents||[],reason:'CONFLITO_MANUAL'};
+        conflicts.push(conflict);manifest.conflicts.push(conflict);continue;
       }
-      await drive.moveFile(op.componentId,op.destinationParentId,op.originalParentId);
-      op.status='ROLLED_BACK';
-      op.rolledBackAt=new Date().toISOString();
-      restored.push(op.componentId);
-      await clearRollbackMetadata(op.componentId).catch(()=>{});
-    }catch(e){
-      errors.push({componentId:op.componentId,message:String(e?.message||e)});
+
+      await drive.moveFile(item.id,destinationParentId,originalParentId);
+      restored.push(item.id);
+      await clearRollbackMetadata(item.id).catch(()=>{});
+      const op=manifest.operations.find(x=>x.componentId===item.id);
+      if(op){op.status='ROLLED_BACK';op.rolledBackAt=new Date().toISOString();}
+    }catch(error){
+      errors.push({componentId:item.id,message:String(error?.message||error)});
     }
   }
 
-  const deletedThemes=[];
-  for(const theme of [...manifest.themes].reverse()){
-    if(!theme.createdByRun) continue;
+  for(const theme of themeItems){
     try{
-      const children=await drive.listChildren(theme.destinationThemeId);
+      const children=await drive.listChildren(theme.id);
       if(children.length===0){
-        await drive.deleteFile(theme.destinationThemeId);
-        deletedThemes.push(theme.destinationThemeId);
+        await drive.deleteFile(theme.id);
+        deletedThemes.push(theme.id);
       }
-    }catch(e){
-      errors.push({themeId:theme.destinationThemeId,message:String(e?.message||e)});
+    }catch(error){
+      errors.push({themeId:theme.id,message:String(error?.message||error)});
     }
   }
 
   await saveLocal().catch(()=>{});
-  return {restored,conflicts,errors,deletedThemes,finishedAt:new Date().toISOString()};
+  return {
+    discoveredTaggedItems:tagged.length,
+    restored,
+    alreadyOriginal,
+    conflicts,
+    errors,
+    deletedThemes,
+    finishedAt:new Date().toISOString()
+  };
 }
 
 async function saveLocal(){
