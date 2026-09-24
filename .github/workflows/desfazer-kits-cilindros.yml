@@ -1,4 +1,4 @@
-name: DESFAZER Kits e Cilindros
+name: DESFAZER Kits e Cilindros v2
 
 on:
   workflow_dispatch:
