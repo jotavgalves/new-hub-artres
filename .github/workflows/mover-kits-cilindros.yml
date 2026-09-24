@@ -1,0 +1,129 @@
+name: MOVER Kits e Cilindros
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmacao:
+        description: 'Digite exatamente: MOVER KITS E CILINDROS'
+        required: true
+        type: string
+      source_root_id:
+        description: 'Pasta raiz de origem'
+        required: true
+        default: '11cU5yMWafopC0JfMHotRxThpkgbQl-RW'
+        type: string
+      destination_root_id:
+        description: 'Pasta KITS E CILINDROS (TEMP)'
+        required: true
+        default: '1eZbQ5wv3-nyzbUirt6k5OoBnlK63Szpt'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kits-cilindros-real-move
+  cancel-in-progress: false
+
+jobs:
+  move:
+    name: Movimentação transacional com rollback
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: site-v2-staging
+
+    steps:
+      - name: Validate explicit confirmation
+        shell: bash
+        env:
+          CONFIRM: ${{ inputs.confirmacao }}
+        run: |
+          set -euo pipefail
+          if [ "$CONFIRM" != "MOVER KITS E CILINDROS" ]; then
+            echo "::error::Confirmação inválida. Nada será alterado."
+            exit 1
+          fi
+
+      - name: Checkout latest main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate authenticated Drive secret
+        shell: bash
+        env:
+          GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+          if [ -z "$GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON" ]; then
+            echo "::error::GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON não está disponível no environment site-v2-staging."
+            exit 1
+          fi
+
+      - name: Check scripts syntax
+        run: |
+          node --check scripts/kits-cilindros-drive-auth.mjs
+          node --check scripts/move-kits-cilindros.mjs
+          node --check scripts/rollback-kits-cilindros.mjs
+
+      - name: Move kits and cilindros
+        id: move
+        env:
+          GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON }}
+          KC_CONFIRM: ${{ inputs.confirmacao }}
+          KC_SOURCE_ROOT_ID: ${{ inputs.source_root_id }}
+          KC_SOURCE_ROOT_NAME: 'PAINÉIS DE FESTA'
+          KC_DEST_ROOT_ID: ${{ inputs.destination_root_id }}
+          KC_DEST_ROOT_NAME: 'KITS E CILINDROS (TEMP)'
+          KC_OUT_DIR: 'kits-cilindros-move-result'
+        run: node scripts/move-kits-cilindros.mjs
+
+      - name: Write run summary
+        if: always()
+        shell: bash
+        run: |
+          node - <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          const fs=require('fs');
+          const path=require('path');
+          const dir='kits-cilindros-move-result';
+          console.log('# MOVER Kits e Cilindros');
+          console.log('');
+          if(!fs.existsSync(dir)){
+            console.log('A execução terminou antes de gerar o manifesto.');
+            process.exit(0);
+          }
+          const files=fs.readdirSync(dir).filter(x=>/^rollback-KC-.*\.json$/.test(x));
+          if(!files.length){
+            console.log('Nenhum manifesto local encontrado.');
+            process.exit(0);
+          }
+          const p=JSON.parse(fs.readFileSync(path.join(dir,files[0]),'utf8'));
+          console.log(`**RUN_ID:** \`${p.runId}\``);
+          console.log('');
+          console.log(`**Estado:** ${p.state}`);
+          console.log('');
+          console.log('| Item | Quantidade |');
+          console.log('|---|---:|');
+          console.log(`| Movimentos planejados | ${p.operations?.length||0} |`);
+          console.log(`| Movidos | ${p.operations?.filter(x=>x.status==='MOVED').length||0} |`);
+          console.log(`| Restaurados automaticamente | ${p.operations?.filter(x=>x.status==='ROLLED_BACK').length||0} |`);
+          console.log(`| Pastas-tema | ${p.themes?.length||0} |`);
+          console.log(`| Conflitos | ${p.conflicts?.length||0} |`);
+          console.log('');
+          console.log('Guarde o RUN_ID. Ele é a chave para o workflow **DESFAZER Kits e Cilindros**.');
+          NODE
+
+      - name: Upload rollback manifest and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kits-cilindros-move-${{ github.run_id }}
+          path: kits-cilindros-move-result/
+          if-no-files-found: warn
+          retention-days: 90
