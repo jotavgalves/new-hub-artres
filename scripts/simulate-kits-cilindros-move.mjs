@@ -91,9 +91,9 @@ for(const component of topLevelComponents){
     themeSourcePath:theme.path,
     destinationRootId:DEST_ROOT_ID,
     destinationRootName:DEST_ROOT_NAME,
-    destinationThemeName:theme.name,
-    destinationThemePath:`${DEST_ROOT_NAME} / ${theme.name}`,
-    destinationComponentPath:`${DEST_ROOT_NAME} / ${theme.name} / ${component.name}`
+    destinationThemeName:destinationThemeName(theme.name),
+    destinationThemePath:`${DEST_ROOT_NAME} / ${destinationThemeName(theme.name)}`,
+    destinationComponentPath:`${DEST_ROOT_NAME} / ${destinationThemeName(theme.name)} / ${component.name}`
   });
 }
 
@@ -104,8 +104,9 @@ for(const p of rawPlans){
   if(!themesByNormalizedName.has(key)) themesByNormalizedName.set(key,new Map());
   themesByNormalizedName.get(key).set(p.themeId,p.themeSourcePath);
 }
+const mergeAllowedThemeKeys=new Set(['UNICORNIO']);
 const collisionKeys=new Set([...themesByNormalizedName.entries()]
-  .filter(([,ids])=>ids.size>1)
+  .filter(([key,ids])=>ids.size>1 && !mergeAllowedThemeKeys.has(key))
   .map(([key])=>key));
 
 const plans=rawPlans.map(p=>({
@@ -118,17 +119,31 @@ const plans=rawPlans.map(p=>({
 
 const uniqueThemes=new Map();
 for(const p of plans){
-  if(!uniqueThemes.has(p.themeId)){
-    uniqueThemes.set(p.themeId,{
+  const normalizedDest=normalize(p.destinationThemeName);
+  const mergeKey=mergeAllowedThemeKeys.has(normalizedDest)
+    ? `MERGE:${normalizedDest}`
+    : p.themeId;
+
+  if(!uniqueThemes.has(mergeKey)){
+    uniqueThemes.set(mergeKey,{
       themeId:p.themeId,
-      themeName:p.themeName,
+      themeIds:[p.themeId],
+      themeName:p.destinationThemeName,
       themeSourcePath:p.themeSourcePath,
+      themeSourcePaths:[p.themeSourcePath],
       destinationThemePath:p.destinationThemePath,
-      collision:collisionKeys.has(normalize(p.themeName)),
+      collision:collisionKeys.has(normalizedDest),
+      mergedSources:mergeAllowedThemeKeys.has(normalizedDest),
       components:0
     });
+  }else{
+    const t=uniqueThemes.get(mergeKey);
+    if(!t.themeIds.includes(p.themeId)) t.themeIds.push(p.themeId);
+    if(!t.themeSourcePaths.includes(p.themeSourcePath)) t.themeSourcePaths.push(p.themeSourcePath);
+    t.themeSourcePath=t.themeSourcePaths.join(' + ');
+    t.themeId=t.themeIds.join(' + ');
   }
-  uniqueThemes.get(p.themeId).components++;
+  uniqueThemes.get(mergeKey).components++;
 }
 
 const summary={
@@ -295,6 +310,9 @@ function normalize(value){
   return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[_-]+/g,' ').replace(/\s+/g,' ').trim();
 }
 function clean(value){return String(value||'').replace(/\s+/g,' ').trim();}
+function destinationThemeName(name){
+  return normalize(name)==='UNICORNIO' ? 'UNICÓRNIO' : clean(name);
+}
 
 function levenshtein(a,b){
   if(a===b)return 0;
