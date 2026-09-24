@@ -1,4 +1,4 @@
-name: MOVER Kits e Cilindros
+name: MOVER Kits e Cilindros v2
 
 on:
   workflow_dispatch:
@@ -116,7 +116,7 @@ jobs:
           console.log(`| Pastas-tema | ${p.themes?.length||0} |`);
           console.log(`| Conflitos | ${p.conflicts?.length||0} |`);
           console.log('');
-          console.log('Guarde o RUN_ID. Ele é a chave para o workflow **DESFAZER Kits e Cilindros**.');
+          console.log('Guarde o RUN_ID. Ele é a chave para o workflow **DESFAZER Kits e Cilindros v2**. O rollback fica marcado nas próprias pastas do Drive.');
           NODE
 
       - name: Upload rollback manifest and logs
