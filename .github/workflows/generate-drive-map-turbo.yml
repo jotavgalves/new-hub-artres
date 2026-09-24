@@ -1,4 +1,4 @@
-name: Generate Drive Map Turbo
+name: Generate Drive Map Turbo v2
 
 on:
   workflow_dispatch:
@@ -37,8 +37,17 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - name: Checkout
+      - name: Checkout latest main
         uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Show runtime revision
+        shell: bash
+        run: |
+          echo "Workflow revision: Drive Map Turbo v2"
+          echo "Checked out commit: $(git rev-parse HEAD)"
+          git log -1 --oneline
 
       - name: Setup Node
         uses: actions/setup-node@v4
