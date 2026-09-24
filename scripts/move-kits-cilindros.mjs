@@ -17,9 +17,7 @@ const DEST_ROOT_ID=process.env.KC_DEST_ROOT_ID||'1eZbQ5wv3-nyzbUirt6k5OoBnlK63Sz
 const DEST_ROOT_NAME=process.env.KC_DEST_ROOT_NAME||'KITS E CILINDROS (TEMP)';
 const CONFIRM=String(process.env.KC_CONFIRM||'').trim();
 const REQUIRED_CONFIRM='MOVER KITS E CILINDROS';
-const CONTROL_FOLDER='__CONTROLE_NAO_APAGAR';
 const SCAN_CONCURRENCY=10;
-const CHECKPOINT_EVERY=10;
 const OUT_DIR=path.resolve(process.env.KC_OUT_DIR||'kits-cilindros-move-result');
 const RUN_ID=process.env.KC_RUN_ID||`KC-${new Date().toISOString().replace(/[-:.TZ]/g,'').slice(0,14)}`;
 
@@ -37,16 +35,17 @@ console.log('RUN_ID:',RUN_ID);
 console.log('service_account:',drive.serviceAccountEmail);
 console.log('origem:',SOURCE_ROOT_ID);
 console.log('destino:',DEST_ROOT_ID);
+console.log('rollback: metadados appProperties + artifact local');
 
 let manifest={
-  schemaVersion:1,
+  schemaVersion:2,
   runId:RUN_ID,
   createdAt:new Date().toISOString(),
   updatedAt:new Date().toISOString(),
   state:'PREPARING',
+  rollbackMode:'DRIVE_APP_PROPERTIES',
   source:{id:SOURCE_ROOT_ID,name:SOURCE_ROOT_NAME},
   destination:{id:DEST_ROOT_ID,name:DEST_ROOT_NAME},
-  control:{folderName:CONTROL_FOLDER,folderId:null,manifestFileId:null,manifestFileName:`rollback-${RUN_ID}.json`},
   serviceAccountEmail:drive.serviceAccountEmail,
   themes:[],
   operations:[],
@@ -54,10 +53,6 @@ let manifest={
   conflicts:[],
   stats:{}
 };
-
-let controlFolder=null;
-let remoteManifestFile=null;
-let createdThemeFolders=[];
 
 try{
   const [sourceRoot,destRoot]=await Promise.all([
@@ -106,7 +101,6 @@ try{
       });
       continue;
     }
-
     candidates.push({
       component,
       theme,
@@ -122,17 +116,16 @@ try{
   }
   const collisions=[...byDestName.entries()].filter(([key,ids])=>ids.size>1&&key!=='UNICORNIO');
   if(collisions.length){
-    throw new Error('PREFLIGHT: existem temas diferentes que resultariam no mesmo nome no destino: '+collisions.map(([k])=>k).join(', '));
+    throw new Error('PREFLIGHT: temas diferentes resultariam no mesmo nome no destino: '+collisions.map(([k])=>k).join(', '));
   }
 
-  // Permissões explícitas são verificadas antes de alterar o Drive.
   const permissionProblems=[];
   for(const c of candidates){
     if(c.component.capabilities?.canEdit===false){
       permissionProblems.push(`sem canEdit: ${c.component.path}`);
     }
     if(c.theme.capabilities?.canRemoveChildren===false){
-      permissionProblems.push(`sem canRemoveChildren no tema: ${c.theme.path}`);
+      permissionProblems.push(`sem canRemoveChildren: ${c.theme.path}`);
     }
   }
   if(permissionProblems.length){
@@ -141,28 +134,15 @@ try{
 
   const destChildren=await drive.listChildren(DEST_ROOT_ID,{foldersOnly:true});
   const destByNormalized=new Map();
-  for(const f of destChildren){
-    const key=normalizeName(f.name);
+  for(const item of destChildren){
+    const key=normalizeName(item.name);
+    if(key==='CONTROLE NAO APAGAR') continue;
     if(!destByNormalized.has(key)) destByNormalized.set(key,[]);
-    destByNormalized.get(key).push(f);
+    destByNormalized.get(key).push(item);
   }
-
   for(const [key,items] of destByNormalized){
-    if(items.length>1 && key!==normalizeName(CONTROL_FOLDER)){
-      throw new Error(`PREFLIGHT: existem ${items.length} pastas no destino com o mesmo nome normalizado: ${key}`);
-    }
+    if(items.length>1) throw new Error(`PREFLIGHT: existem ${items.length} pastas destino com o mesmo nome normalizado: ${key}`);
   }
-
-  // A pasta de controle é criada antes de qualquer componente ser movido.
-  const controls=destByNormalized.get(normalizeName(CONTROL_FOLDER))||[];
-  if(controls.length>1) throw new Error('PREFLIGHT: mais de uma pasta __CONTROLE_NAO_APAGAR no destino.');
-  if(controls.length===1){
-    controlFolder=controls[0];
-  }else{
-    controlFolder=await drive.createFolder(CONTROL_FOLDER,DEST_ROOT_ID);
-    console.log('pasta de controle criada:',controlFolder.id);
-  }
-  manifest.control.folderId=controlFolder.id;
 
   const groups=new Map();
   for(const c of candidates){
@@ -178,15 +158,33 @@ try{
     g.components.push(c);
   }
 
-  // Cria/reutiliza containers dos temas, sem mover componentes ainda.
+  manifest.stats={
+    scannedFolders:nodes.length,
+    matchedComponents:componentIds.size,
+    plannedMoves:candidates.length,
+    destinationThemes:groups.size,
+    themesCreated:0,
+    themesReused:0,
+    skippedNoTheme:manifest.skipped.length,
+    coveredByParentComponent:covered.length
+  };
+  manifest.coveredByParentComponent=covered;
+  await saveLocal();
+
+  console.log('Preparando pastas-tema no destino...');
   for(const g of groups.values()){
     let destFolder=null;
     const existing=destByNormalized.get(g.key)||[];
     if(existing.length===1){
       destFolder=existing[0];
+      manifest.stats.themesReused++;
     }else if(existing.length===0){
-      destFolder=await drive.createFolder(g.destinationName,DEST_ROOT_ID);
-      createdThemeFolders.push(destFolder.id);
+      destFolder=await drive.createFolder(g.destinationName,DEST_ROOT_ID,{
+        kcRunId:RUN_ID,
+        kcKind:'theme',
+        kcState:'CREATED'
+      });
+      manifest.stats.themesCreated++;
     }else{
       throw new Error(`PREFLIGHT: destino ambíguo para ${g.destinationName}`);
     }
@@ -196,7 +194,7 @@ try{
       destinationThemeName:g.destinationName,
       sourceThemeIds:[...g.sources.keys()],
       sourceThemePaths:[...g.sources.values()],
-      createdByRun:createdThemeFolders.includes(destFolder.id),
+      createdByRun:existing.length===0,
       components:g.components.length
     });
 
@@ -218,51 +216,48 @@ try{
         error:null
       });
     }
+    await saveLocal();
   }
 
-  manifest.stats={
-    scannedFolders:nodes.length,
-    matchedComponents:componentIds.size,
-    plannedMoves:manifest.operations.length,
-    destinationThemes:manifest.themes.length,
-    themesCreated:createdThemeFolders.length,
-    themesReused:manifest.themes.length-createdThemeFolders.length,
-    skippedNoTheme:manifest.skipped.length,
-    coveredByParentComponent:covered.length
-  };
-  manifest.coveredByParentComponent=covered;
-  manifest.state='READY';
+  manifest.state='MOVING';
   await saveLocal();
 
-  // Salva o plano completo no Drive ANTES do primeiro move.
-  remoteManifestFile=await drive.uploadJsonFile(manifest.control.manifestFileName,controlFolder.id,manifest);
-  manifest.control.manifestFileId=remoteManifestFile.id;
-  manifest.state='MOVING';
-  await checkpoint(true);
-
-  console.log('manifesto de rollback:',remoteManifestFile.id);
   console.log('movimentos planejados:',manifest.operations.length);
+  console.log('RUN_ID para desfazer:',RUN_ID);
 
   let moved=0;
   for(const op of manifest.operations){
-    const current=await drive.getFile(op.componentId,'id,name,parents,capabilities');
+    const current=await drive.getFile(op.componentId,'id,name,parents,capabilities,appProperties');
     if(current.parents?.includes(op.destinationParentId)){
       op.status='ALREADY_AT_DESTINATION';
       op.movedAt=new Date().toISOString();
+      await ensureRollbackMetadata(op,'MOVED');
       continue;
     }
     if(!current.parents?.includes(op.originalParentId)){
       throw new Error(`CONFLITO antes de mover ${op.sourcePath}: pai atual inesperado [${(current.parents||[]).join(',')}]`);
     }
 
+    await ensureRollbackMetadata(op,'PREPARED');
     await drive.moveFile(op.componentId,op.originalParentId,op.destinationParentId);
     op.status='MOVED';
     op.movedAt=new Date().toISOString();
     moved++;
-    console.log(`[${op.index}/${manifest.operations.length}] OK ${op.sourcePath} -> ${op.destinationPath}`);
 
+    try{
+      await drive.patchAppProperties(op.componentId,{
+        kcRunId:RUN_ID,
+        kcKind:'component',
+        kcOriginalParentId:op.originalParentId,
+        kcDestinationParentId:op.destinationParentId,
+        kcState:'MOVED'
+      });
+    }catch(error){
+      console.warn('AVISO: pasta movida, mas estado MOVED não pôde ser gravado; PREPARED continua suficiente para rollback:',op.componentName);
+    }
+
+    console.log(`[${op.index}/${manifest.operations.length}] OK ${op.sourcePath} -> ${op.destinationPath}`);
     await saveLocal();
-    if(moved%CHECKPOINT_EVERY===0) await checkpoint(false);
   }
 
   manifest.state='COMPLETED';
@@ -270,7 +265,7 @@ try{
   manifest.stats.moved=manifest.operations.filter(x=>['MOVED','ALREADY_AT_DESTINATION'].includes(x.status)).length;
   manifest.stats.requests=drive.requests;
   manifest.stats.elapsedSeconds=Math.round((Date.now()-startedAt)/10)/100;
-  await checkpoint(true);
+  await saveLocal();
 
   console.log('');
   console.log('== CONCLUÍDO ==');
@@ -280,14 +275,34 @@ try{
   console.error('[ERRO]',error?.stack||error);
   manifest.state='MOVE_FAILED_ROLLBACK_RUNNING';
   manifest.failure={at:new Date().toISOString(),message:String(error?.message||error)};
-  await checkpointBestEffort();
+  await saveLocal().catch(()=>{});
 
   const rollback=await automaticRollback();
   manifest.autoRollback=rollback;
-  manifest.state=rollback.conflicts.length?'AUTO_ROLLBACK_WITH_CONFLICTS':'AUTO_ROLLED_BACK';
+  manifest.state=(rollback.conflicts.length||rollback.errors.length)?'AUTO_ROLLBACK_WITH_CONFLICTS':'AUTO_ROLLED_BACK';
   manifest.updatedAt=new Date().toISOString();
-  await checkpointBestEffort();
+  await saveLocal().catch(()=>{});
   process.exitCode=1;
+}
+
+async function ensureRollbackMetadata(op,state){
+  await drive.patchAppProperties(op.componentId,{
+    kcRunId:RUN_ID,
+    kcKind:'component',
+    kcOriginalParentId:op.originalParentId,
+    kcDestinationParentId:op.destinationParentId,
+    kcState:state
+  });
+}
+
+async function clearRollbackMetadata(fileId){
+  await drive.patchAppProperties(fileId,{
+    kcRunId:null,
+    kcKind:null,
+    kcOriginalParentId:null,
+    kcDestinationParentId:null,
+    kcState:null
+  });
 }
 
 async function scanTree(driveClient,rootId){
@@ -307,13 +322,13 @@ async function scanTree(driveClient,rootId){
         children:await driveClient.listChildren(parent.id,{foldersOnly:true})
       })));
       for(const {parent,children} of result){
-        for(const f of children){
-          if(seen.has(f.id)) continue;
-          seen.add(f.id);
+        for(const item of children){
+          if(seen.has(item.id)) continue;
+          seen.add(item.id);
           const node={
-            ...f,
+            ...item,
             parentId:parent.id,
-            path:parent.path?`${parent.path} / ${cleanName(f.name)}`:cleanName(f.name),
+            path:parent.path?`${parent.path} / ${cleanName(item.name)}`:cleanName(item.name),
             depth:parent.depth+1
           };
           nodes.push(node);nodeById.set(node.id,node);next.push(node);
@@ -331,11 +346,12 @@ async function automaticRollback(){
 
   for(const op of movedOps){
     try{
-      const current=await drive.getFile(op.componentId,'id,name,parents');
+      const current=await drive.getFile(op.componentId,'id,name,parents,appProperties');
       if(current.parents?.includes(op.originalParentId)){
         op.status='ROLLED_BACK';
         op.rolledBackAt=new Date().toISOString();
         restored.push(op.componentId);
+        await clearRollbackMetadata(op.componentId).catch(()=>{});
         continue;
       }
       if(!current.parents?.includes(op.destinationParentId)){
@@ -346,6 +362,7 @@ async function automaticRollback(){
       op.status='ROLLED_BACK';
       op.rolledBackAt=new Date().toISOString();
       restored.push(op.componentId);
+      await clearRollbackMetadata(op.componentId).catch(()=>{});
     }catch(e){
       errors.push({componentId:op.componentId,message:String(e?.message||e)});
     }
@@ -360,9 +377,12 @@ async function automaticRollback(){
         await drive.deleteFile(theme.destinationThemeId);
         deletedThemes.push(theme.destinationThemeId);
       }
-    }catch(e){errors.push({themeId:theme.destinationThemeId,message:String(e?.message||e)});}
+    }catch(e){
+      errors.push({themeId:theme.destinationThemeId,message:String(e?.message||e)});
+    }
   }
-  await saveLocal();
+
+  await saveLocal().catch(()=>{});
   return {restored,conflicts,errors,deletedThemes,finishedAt:new Date().toISOString()};
 }
 
@@ -373,33 +393,18 @@ async function saveLocal(){
   await fs.writeFile(path.join(OUT_DIR,'RESUMO.txt'),summaryText(),'utf8');
 }
 
-async function checkpoint(force){
-  await saveLocal();
-  if(remoteManifestFile?.id){
-    await drive.updateJsonFile(remoteManifestFile.id,manifest);
-    if(force) console.log('checkpoint remoto salvo:',manifest.state);
-  }
-}
-
-async function checkpointBestEffort(){
-  try{await checkpoint(true);}catch(e){
-    console.error('[AVISO] falha ao salvar checkpoint remoto:',e?.message||e);
-    try{await saveLocal();}catch{}
-  }
-}
-
 function summaryText(){
   return [
     'KITS E CILINDROS — MOVIMENTAÇÃO',
     `RUN_ID: ${RUN_ID}`,
     `Estado: ${manifest.state}`,
+    `Rollback: metadados internos das próprias pastas + artifact GitHub`,
     `Origem: ${SOURCE_ROOT_NAME} (${SOURCE_ROOT_ID})`,
     `Destino: ${DEST_ROOT_NAME} (${DEST_ROOT_ID})`,
     `Movimentos planejados: ${manifest.operations.length}`,
     `Movidos: ${manifest.operations.filter(x=>x.status==='MOVED').length}`,
     `Restaurados: ${manifest.operations.filter(x=>x.status==='ROLLED_BACK').length}`,
-    `Conflitos: ${manifest.conflicts.length}`,
-    `Manifesto Drive: ${manifest.control.manifestFileId||'ainda não criado'}`
+    `Conflitos: ${manifest.conflicts.length}`
   ].join('\n')+'\n';
 }
 
