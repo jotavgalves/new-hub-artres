@@ -5,6 +5,7 @@ import process from 'node:process';
 
 const DRIVE_API = 'https://www.googleapis.com/drive/v3/files';
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
+const SCRIPT_VERSION = '2.1.0';
 
 const API_KEY = firstEnv('GOOGLE_API_KEY', 'GOOGLE_DRIVE_API_KEY', 'DRIVE_API_KEY');
 const ROOT_ID = process.env.DRIVE_MAP_ROOT_ID || '11cU5yMWafopC0JfMHotRxThpkgbQl-RW';
@@ -37,6 +38,7 @@ let level = 0;
 let requestCount = 0;
 
 console.log('== Drive Map Turbo ==');
+console.log('script_version:', SCRIPT_VERSION);
 console.log('root:', ROOT_ID);
 console.log('group_size:', GROUP_SIZE);
 console.log('concurrency:', CONCURRENCY);
