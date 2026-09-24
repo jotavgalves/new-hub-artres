@@ -1,0 +1,100 @@
+name: Simular Kits e Cilindros
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_root_id:
+        description: "Pasta raiz de origem"
+        required: true
+        default: "11cU5yMWafopC0JfMHotRxThpkgbQl-RW"
+        type: string
+      destination_root_id:
+        description: "Pasta destino KITS E CILINDROS (TEMP)"
+        required: true
+        default: "1eZbQ5wv3-nyzbUirt6k5OoBnlK63Szpt"
+        type: string
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/simular-kits-cilindros.yml'
+      - 'scripts/simulate-kits-cilindros-move.mjs'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: simular-kits-cilindros
+  cancel-in-progress: true
+
+jobs:
+  simulate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout latest main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Validate Google API key
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$GOOGLE_API_KEY" ]; then
+            echo "::error::O secret GOOGLE_API_KEY não está configurado."
+            exit 1
+          fi
+
+      - name: Simular organização
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          KC_SOURCE_ROOT_ID: ${{ inputs.source_root_id || '11cU5yMWafopC0JfMHotRxThpkgbQl-RW' }}
+          KC_SOURCE_ROOT_NAME: "PAINÉIS DE FESTA"
+          KC_DEST_ROOT_ID: ${{ inputs.destination_root_id || '1eZbQ5wv3-nyzbUirt6k5OoBnlK63Szpt' }}
+          KC_DEST_ROOT_NAME: "KITS E CILINDROS (TEMP)"
+          KC_GROUP_SIZE: "40"
+          KC_CONCURRENCY: "8"
+          KC_OUT_DIR: "kits-cilindros-simulation"
+        run: node scripts/simulate-kits-cilindros-move.mjs
+
+      - name: Write summary
+        shell: bash
+        run: |
+          node - <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          const fs = require('fs');
+          const p = JSON.parse(fs.readFileSync('kits-cilindros-simulation/plano-movimentacao.json','utf8'));
+          const s = p.summary;
+          console.log('# Simulação — Kits e Cilindros');
+          console.log('');
+          console.log('> **Nenhuma pasta foi alterada.** Este workflow é somente leitura.');
+          console.log('');
+          console.log('| Item | Quantidade |');
+          console.log('|---|---:|');
+          console.log(`| Pastas lidas | ${s.scannedFolders} |`);
+          console.log(`| Componentes identificados | ${s.matchedComponentFolders} |`);
+          console.log(`| Movimentos simulados | ${s.topLevelComponentMoves} |`);
+          console.log(`| Pastas-tema | ${s.themeContainers} |`);
+          console.log(`| Colisões de nome | ${s.collisionThemes} |`);
+          console.log(`| Sem tema | ${s.skippedNoTheme} |`);
+          console.log(`| Cobertos por componente-pai | ${s.coveredByParentComponent} |`);
+          console.log(`| Pastas restritas | ${s.restrictedParents} |`);
+          console.log(`| Tempo | ${s.elapsedSeconds}s |`);
+          console.log('');
+          console.log('Baixe o artifact **simulacao-kits-cilindros** e abra **SIMULACAO.html**.');
+          NODE
+
+      - name: Upload simulation report
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulacao-kits-cilindros
+          path: kits-cilindros-simulation/
+          if-no-files-found: error
+          retention-days: 14
