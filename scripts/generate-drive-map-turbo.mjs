@@ -31,6 +31,7 @@ const root = {
 
 const nodes = [];
 const seen = new Set([ROOT_ID]);
+const restrictedParentIds = new Set();
 let frontier = [root];
 let level = 0;
 let requestCount = 0;
@@ -42,13 +43,13 @@ console.log('concurrency:', CONCURRENCY);
 
 while (frontier.length) {
   const parentById = new Map(frontier.map(item => [item.id, item]));
-  const groups = chunk(frontier.map(item => item.id), GROUP_SIZE);
+  const groups = chunk(frontier, GROUP_SIZE);
   console.log(`nível ${level}: ${frontier.length} pasta(s), ${groups.length} grupo(s)`);
 
   const next = [];
   for (let offset = 0; offset < groups.length; offset += CONCURRENCY) {
     const wave = groups.slice(offset, offset + CONCURRENCY);
-    const results = await Promise.all(wave.map(ids => listFoldersForParents(ids)));
+    const results = await Promise.all(wave.map(group => listFoldersForParentsSafe(group)));
     for (const files of results) {
       for (const file of files) {
         const parentId = (file.parents || []).find(id => parentById.has(id));
@@ -92,8 +93,13 @@ const payload = {
     requests: requestCount,
     elapsedSeconds,
     groupSize: GROUP_SIZE,
-    concurrency: CONCURRENCY
+    concurrency: CONCURRENCY,
+    restrictedParents: restrictedParentIds.size
   },
+  restrictedParents: [...restrictedParentIds].map(id => {
+    const item = nodes.find(node => node.id === id) || (root.id === id ? root : null);
+    return item ? { id: item.id, name: item.name, path: item.path, url: item.url } : { id };
+  }),
   nodes
 };
 
@@ -109,11 +115,44 @@ console.log('pastas:', nodes.length);
 console.log('profundidade:', maxDepth);
 console.log('requisições:', requestCount);
 console.log('tempo:', elapsedSeconds + 's');
+console.log('pastas restritas ignoradas:', restrictedParentIds.size);
 console.log('saída:', OUT_DIR);
 
-async function listFoldersForParents(parentIds) {
+async function listFoldersForParentsSafe(parentNodes) {
+  try {
+    return await listFoldersForParents(parentNodes);
+  } catch (error) {
+    if (!isPermissionError(error)) throw error;
+
+    if (parentNodes.length === 1) {
+      const parent = parentNodes[0];
+      restrictedParentIds.add(parent.id);
+      console.warn(`  !! sem permissão para listar: ${parent.path || parent.name} [${parent.id}]`);
+      return [];
+    }
+
+    // Um único pai protegido faz o Google rejeitar a consulta inteira.
+    // Divide o lote até isolar somente os pais problemáticos.
+    const middle = Math.ceil(parentNodes.length / 2);
+    const [left, right] = await Promise.all([
+      listFoldersForParentsSafe(parentNodes.slice(0, middle)),
+      listFoldersForParentsSafe(parentNodes.slice(middle))
+    ]);
+    return [...left, ...right];
+  }
+}
+
+async function listFoldersForParents(parentNodes) {
   const all = [];
   let pageToken = '';
+  const parentIds = parentNodes.map(item => item.id);
+
+  // Pastas compartilhadas por link podem exigir resourceKey. O Drive
+  // permite enviar várias chaves no mesmo cabeçalho, uma por pasta.
+  const resourceKeys = parentNodes
+    .filter(item => item.resourceKey)
+    .map(item => `${item.id}/${item.resourceKey}`)
+    .join(',');
 
   do {
     const qParents = parentIds
@@ -132,10 +171,17 @@ async function listFoldersForParents(parentIds) {
 
     if (pageToken) params.set('pageToken', pageToken);
 
+    const headers = { Accept: 'application/json' };
+    if (resourceKeys) headers['X-Goog-Drive-Resource-Keys'] = resourceKeys;
+
     requestCount += 1;
-    const response = await fetchWithRetry(`${DRIVE_API}?${params}`);
+    const response = await fetchWithRetry(`${DRIVE_API}?${params}`, { headers });
     if (!response.ok) {
-      throw new Error(`Drive API ${response.status}: ${await response.text()}`);
+      const body = await response.text();
+      const error = new Error(`Drive API ${response.status}: ${body}`);
+      error.status = response.status;
+      error.body = body;
+      throw error;
     }
 
     const data = await response.json();
@@ -146,11 +192,17 @@ async function listFoldersForParents(parentIds) {
   return all;
 }
 
-async function fetchWithRetry(url, attempts = 6) {
+function isPermissionError(error) {
+  const text = String(error?.body || error?.message || error || '');
+  return Number(error?.status) === 403 ||
+    /insufficientFilePermissions|does not have sufficient permissions|Drive API 403/i.test(text);
+}
+
+async function fetchWithRetry(url, options = {}, attempts = 6) {
   let lastError;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      const response = await fetch(url, { headers: { Accept: 'application/json' } });
+      const response = await fetch(url, options);
       if (![429, 500, 502, 503, 504].includes(response.status)) return response;
       lastError = new Error(`HTTP ${response.status}: ${await response.text()}`);
     } catch (error) {
@@ -186,6 +238,7 @@ function buildSummary(data) {
     `Profundidade máxima: ${data.stats.maxDepth}`,
     `Requisições ao Drive: ${data.stats.requests}`,
     `Tempo: ${data.stats.elapsedSeconds}s`,
+    `Pastas restritas ignoradas: ${data.stats.restrictedParents || 0}`,
     `Gerado em: ${data.generatedAt}`,
     '',
     'Abra MAPA.html para pesquisar e navegar.'
@@ -217,7 +270,7 @@ details{margin-left:16px}summary{cursor:pointer;padding:5px 0}a{color:inherit;te
 <span class="pill">${data.stats.folders} pastas</span>
 <span class="pill">profundidade ${data.stats.maxDepth}</span>
 <span class="pill">${data.stats.requests} requisições</span>
-<span class="pill">${data.stats.elapsedSeconds}s</span>
+<span class="pill">${data.stats.elapsedSeconds}s</span>\n<span class="pill">${data.stats.restrictedParents || 0} restritas</span>
 </div>
 <div class="toolbar">
 <input id="q" placeholder="Buscar pasta ou caminho..." autocomplete="off">
