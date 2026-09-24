@@ -1,0 +1,93 @@
+name: Generate Drive Map Turbo
+
+on:
+  workflow_dispatch:
+    inputs:
+      root_folder_id:
+        description: "ID da pasta raiz do Google Drive"
+        required: true
+        default: "11cU5yMWafopC0JfMHotRxThpkgbQl-RW"
+        type: string
+      root_name:
+        description: "Nome exibido no mapa"
+        required: true
+        default: "PAINÉIS DE FESTA"
+        type: string
+      group_size:
+        description: "Quantidade de pastas-pai por consulta"
+        required: true
+        default: "40"
+        type: string
+      concurrency:
+        description: "Consultas simultâneas"
+        required: true
+        default: "8"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: drive-map-turbo
+  cancel-in-progress: true
+
+jobs:
+  map:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Validate Google API key
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$GOOGLE_API_KEY" ]; then
+            echo "::error::O secret GOOGLE_API_KEY não está configurado neste repositório."
+            exit 1
+          fi
+
+      - name: Generate Drive map
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          DRIVE_MAP_ROOT_ID: ${{ inputs.root_folder_id }}
+          DRIVE_MAP_ROOT_NAME: ${{ inputs.root_name }}
+          DRIVE_MAP_GROUP_SIZE: ${{ inputs.group_size }}
+          DRIVE_MAP_CONCURRENCY: ${{ inputs.concurrency }}
+          DRIVE_MAP_OUT_DIR: drive-map-output
+        run: node scripts/generate-drive-map-turbo.mjs
+
+      - name: Write summary
+        shell: bash
+        run: |
+          node - <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          const fs = require('fs');
+          const p = JSON.parse(fs.readFileSync('drive-map-output/mapa-drive.json', 'utf8'));
+          console.log('# Drive Map Turbo');
+          console.log('');
+          console.log('| Item | Valor |');
+          console.log('|---|---:|');
+          console.log(`| Pastas | ${p.stats.folders} |`);
+          console.log(`| Profundidade máxima | ${p.stats.maxDepth} |`);
+          console.log(`| Requisições | ${p.stats.requests} |`);
+          console.log(`| Tempo | ${p.stats.elapsedSeconds}s |`);
+          console.log('');
+          console.log('Baixe o artifact **drive-map-turbo** para abrir o arquivo `MAPA.html`.');
+          NODE
+
+      - name: Upload Drive map
+        uses: actions/upload-artifact@v4
+        with:
+          name: drive-map-turbo
+          path: drive-map-output/
+          if-no-files-found: error
+          retention-days: 14
