@@ -2,10 +2,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
-import { createAuthenticatedDrive, normalizeName } from './kits-cilindros-drive-auth.mjs';
+import { createAuthenticatedDrive } from './kits-cilindros-drive-auth.mjs';
 
-const DEST_ROOT_ID=process.env.KC_DEST_ROOT_ID||'1eZbQ5wv3-nyzbUirt6k5OoBnlK63Szpt';
-const CONTROL_FOLDER='__CONTROLE_NAO_APAGAR';
 const RUN_ID=String(process.env.KC_RUN_ID||'').trim();
 const CONFIRM=String(process.env.KC_CONFIRM||'').trim();
 const REQUIRED_CONFIRM='DESFAZER KITS E CILINDROS';
@@ -15,6 +13,10 @@ if(!RUN_ID){
   console.error('Informe KC_RUN_ID.');
   process.exit(2);
 }
+if(!/^KC-[0-9]{14}$/.test(RUN_ID)){
+  console.error('RUN_ID inválido. Formato esperado: KC-YYYYMMDDHHMMSS');
+  process.exit(2);
+}
 if(CONFIRM!==REQUIRED_CONFIRM){
   console.error(`Confirmação inválida. Digite exatamente: ${REQUIRED_CONFIRM}`);
   process.exit(2);
@@ -22,31 +24,27 @@ if(CONFIRM!==REQUIRED_CONFIRM){
 
 await fs.mkdir(OUT_DIR,{recursive:true});
 const drive=await createAuthenticatedDrive();
+
 console.log('== DESFAZER Kits e Cilindros ==');
 console.log('RUN_ID:',RUN_ID);
 console.log('service_account:',drive.serviceAccountEmail);
+console.log('fonte do rollback: appProperties das próprias pastas');
 
-const destChildren=await drive.listChildren(DEST_ROOT_ID,{foldersOnly:true});
-const controls=destChildren.filter(f=>normalizeName(f.name)===normalizeName(CONTROL_FOLDER));
-if(controls.length!==1){
-  throw new Error(`Esperava exatamente 1 pasta ${CONTROL_FOLDER}; encontrei ${controls.length}.`);
-}
-const control=controls[0];
+const tagged=await drive.listByAppProperty('kcRunId',RUN_ID);
+const components=tagged.filter(x=>x.appProperties?.kcKind==='component');
+const themes=tagged.filter(x=>x.appProperties?.kcKind==='theme');
 
-const manifestName=`rollback-${RUN_ID}.json`;
-const manifests=await drive.listChildren(control.id,{name:manifestName});
-if(manifests.length!==1){
-  throw new Error(`Esperava exatamente 1 manifesto ${manifestName}; encontrei ${manifests.length}.`);
-}
-const manifestFile=manifests[0];
-const manifest=await drive.downloadJsonFile(manifestFile.id);
-
-if(manifest.runId!==RUN_ID) throw new Error('RUN_ID do manifesto não confere.');
-if(manifest.destination?.id!==DEST_ROOT_ID) throw new Error('Destino do manifesto não confere com o destino solicitado.');
-
-manifest.rollback={
-  requestedAt:new Date().toISOString(),
+const report={
+  schemaVersion:2,
+  runId:RUN_ID,
+  startedAt:new Date().toISOString(),
+  state:'ROLLBACK_RUNNING',
   serviceAccountEmail:drive.serviceAccountEmail,
+  discovered:{
+    taggedItems:tagged.length,
+    components:components.length,
+    themes:themes.length
+  },
   restored:[],
   alreadyRestored:[],
   conflicts:[],
@@ -54,116 +52,137 @@ manifest.rollback={
   deletedThemeFolders:[],
   retainedThemeFolders:[]
 };
-manifest.state='ROLLBACK_RUNNING';
-await saveAndCheckpoint();
 
-const ops=[...(manifest.operations||[])].reverse();
-for(const op of ops){
+if(!components.length && !themes.length){
+  throw new Error('Nenhum item com este RUN_ID foi encontrado. Verifique se o RUN_ID está correto ou se o rollback já foi concluído.');
+}
+
+for(const item of components){
+  const props=item.appProperties||{};
+  const originalParentId=String(props.kcOriginalParentId||'').trim();
+  const destinationParentId=String(props.kcDestinationParentId||'').trim();
+
+  if(!originalParentId||!destinationParentId){
+    report.conflicts.push({
+      componentId:item.id,
+      componentName:item.name,
+      reason:'METADADOS_DE_ROLLBACK_INCOMPLETOS',
+      appProperties:props
+    });
+    continue;
+  }
+
   try{
-    const current=await drive.getFile(op.componentId,'id,name,parents,trashed');
+    const current=await drive.getFile(item.id,'id,name,parents,trashed,appProperties');
     if(current.trashed){
-      manifest.rollback.conflicts.push({
-        componentId:op.componentId,
-        componentName:op.componentName,
+      report.conflicts.push({
+        componentId:item.id,
+        componentName:item.name,
         reason:'ITEM_NA_LIXEIRA'
       });
       continue;
     }
 
-    if(current.parents?.includes(op.originalParentId)){
-      op.status='ROLLED_BACK';
-      op.rolledBackAt=op.rolledBackAt||new Date().toISOString();
-      manifest.rollback.alreadyRestored.push(op.componentId);
+    if(current.parents?.includes(originalParentId)){
+      report.alreadyRestored.push(item.id);
+      await clearRollbackMetadata(item.id).catch(()=>{});
       continue;
     }
 
-    if(!current.parents?.includes(op.destinationParentId)){
-      manifest.rollback.conflicts.push({
-        componentId:op.componentId,
-        componentName:op.componentName,
+    if(!current.parents?.includes(destinationParentId)){
+      report.conflicts.push({
+        componentId:item.id,
+        componentName:item.name,
         currentParents:current.parents||[],
-        expectedDestinationParentId:op.destinationParentId,
-        originalParentId:op.originalParentId,
+        expectedDestinationParentId:destinationParentId,
+        originalParentId,
         reason:'CONFLITO_MANUAL'
       });
       continue;
     }
 
-    await drive.moveFile(op.componentId,op.destinationParentId,op.originalParentId);
-    op.status='ROLLED_BACK';
-    op.rolledBackAt=new Date().toISOString();
-    manifest.rollback.restored.push(op.componentId);
-    console.log('RESTAURADO:',op.componentName,'->',op.originalParentPath);
+    await drive.moveFile(item.id,destinationParentId,originalParentId);
+    report.restored.push(item.id);
+    await clearRollbackMetadata(item.id).catch(()=>{});
+    console.log('RESTAURADO:',item.name,'->',originalParentId);
   }catch(error){
-    manifest.rollback.errors.push({
-      componentId:op.componentId,
-      componentName:op.componentName,
+    report.errors.push({
+      componentId:item.id,
+      componentName:item.name,
       message:String(error?.message||error)
     });
   }
-  await saveLocal();
+  await save();
 }
 
-for(const theme of [...(manifest.themes||[])].reverse()){
-  if(!theme.createdByRun) continue;
+for(const theme of themes){
   try{
-    const children=await drive.listChildren(theme.destinationThemeId);
+    const children=await drive.listChildren(theme.id);
     if(children.length===0){
-      await drive.deleteFile(theme.destinationThemeId);
-      manifest.rollback.deletedThemeFolders.push(theme.destinationThemeId);
-      console.log('PASTA-TEMA REMOVIDA:',theme.destinationThemeName);
+      await drive.deleteFile(theme.id);
+      report.deletedThemeFolders.push(theme.id);
+      console.log('PASTA-TEMA REMOVIDA:',theme.name);
     }else{
-      manifest.rollback.retainedThemeFolders.push({
-        id:theme.destinationThemeId,
-        name:theme.destinationThemeName,
+      report.retainedThemeFolders.push({
+        id:theme.id,
+        name:theme.name,
         children:children.length,
         reason:'NAO_ESTA_VAZIA'
       });
     }
   }catch(error){
-    manifest.rollback.errors.push({
-      themeId:theme.destinationThemeId,
-      themeName:theme.destinationThemeName,
+    report.errors.push({
+      themeId:theme.id,
+      themeName:theme.name,
       message:String(error?.message||error)
     });
   }
+  await save();
 }
 
-manifest.rollback.finishedAt=new Date().toISOString();
-manifest.rollback.requests=drive.requests;
-manifest.state=(manifest.rollback.conflicts.length||manifest.rollback.errors.length)
+report.finishedAt=new Date().toISOString();
+report.requests=drive.requests;
+report.state=(report.conflicts.length||report.errors.length)
   ?'ROLLBACK_WITH_CONFLICTS'
   :'ROLLED_BACK';
-manifest.updatedAt=new Date().toISOString();
-await saveAndCheckpoint();
+await save();
 
 console.log('');
 console.log('== RESULTADO ==');
-console.log('estado:',manifest.state);
-console.log('restaurados:',manifest.rollback.restored.length);
-console.log('já restaurados:',manifest.rollback.alreadyRestored.length);
-console.log('conflitos:',manifest.rollback.conflicts.length);
-console.log('erros:',manifest.rollback.errors.length);
-console.log('pastas-tema removidas:',manifest.rollback.deletedThemeFolders.length);
+console.log('estado:',report.state);
+console.log('componentes encontrados:',components.length);
+console.log('restaurados agora:',report.restored.length);
+console.log('já estavam restaurados:',report.alreadyRestored.length);
+console.log('conflitos:',report.conflicts.length);
+console.log('erros:',report.errors.length);
+console.log('pastas-tema removidas:',report.deletedThemeFolders.length);
 
-if(manifest.state!=='ROLLED_BACK') process.exitCode=1;
+if(report.state!=='ROLLED_BACK') process.exitCode=1;
 
-async function saveLocal(){
-  await fs.writeFile(path.join(OUT_DIR,manifestName),JSON.stringify(manifest,null,2),'utf8');
+async function clearRollbackMetadata(fileId){
+  await drive.patchAppProperties(fileId,{
+    kcRunId:null,
+    kcKind:null,
+    kcOriginalParentId:null,
+    kcDestinationParentId:null,
+    kcState:null
+  });
+}
+
+async function save(){
+  report.updatedAt=new Date().toISOString();
+  await fs.writeFile(path.join(OUT_DIR,`rollback-${RUN_ID}.json`),JSON.stringify(report,null,2),'utf8');
   await fs.writeFile(path.join(OUT_DIR,'RESUMO.txt'),[
     'DESFAZER — KITS E CILINDROS',
     `RUN_ID: ${RUN_ID}`,
-    `Estado: ${manifest.state}`,
-    `Restaurados: ${manifest.rollback?.restored?.length||0}`,
-    `Já restaurados: ${manifest.rollback?.alreadyRestored?.length||0}`,
-    `Conflitos: ${manifest.rollback?.conflicts?.length||0}`,
-    `Erros: ${manifest.rollback?.errors?.length||0}`,
-    `Pastas-tema removidas: ${manifest.rollback?.deletedThemeFolders?.length||0}`
+    `Estado: ${report.state}`,
+    `Itens marcados encontrados: ${report.discovered.taggedItems}`,
+    `Componentes: ${report.discovered.components}`,
+    `Pastas-tema: ${report.discovered.themes}`,
+    `Restaurados agora: ${report.restored.length}`,
+    `Já restaurados: ${report.alreadyRestored.length}`,
+    `Conflitos: ${report.conflicts.length}`,
+    `Erros: ${report.errors.length}`,
+    `Pastas-tema removidas: ${report.deletedThemeFolders.length}`
   ].join('\n')+'\n','utf8');
-}
-
-async function saveAndCheckpoint(){
-  manifest.updatedAt=new Date().toISOString();
-  await saveLocal();
-  await drive.updateJsonFile(manifestFile.id,manifest);
 }
