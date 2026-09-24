@@ -1,0 +1,132 @@
+name: DESFAZER Kits e Cilindros
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'RUN_ID gerado pelo movimento, ex.: KC-20260924-183500'
+        required: true
+        type: string
+      confirmacao:
+        description: 'Digite exatamente: DESFAZER KITS E CILINDROS'
+        required: true
+        type: string
+      destination_root_id:
+        description: 'Pasta KITS E CILINDROS (TEMP)'
+        required: true
+        default: '1eZbQ5wv3-nyzbUirt6k5OoBnlK63Szpt'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kits-cilindros-real-move
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    name: Restaurar pastas ao local original
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: site-v2-staging
+
+    steps:
+      - name: Validate explicit confirmation
+        shell: bash
+        env:
+          CONFIRM: ${{ inputs.confirmacao }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          set -euo pipefail
+          if [ "$CONFIRM" != "DESFAZER KITS E CILINDROS" ]; then
+            echo "::error::Confirmação inválida. Nada será alterado."
+            exit 1
+          fi
+          if [[ ! "$RUN_ID" =~ ^KC-[0-9]{14}$ ]]; then
+            echo "::error::RUN_ID inválido."
+            exit 1
+          fi
+
+      - name: Checkout latest main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate authenticated Drive secret
+        shell: bash
+        env:
+          GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+          if [ -z "$GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON" ]; then
+            echo "::error::GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON não está disponível."
+            exit 1
+          fi
+
+      - name: Check scripts syntax
+        run: |
+          node --check scripts/kits-cilindros-drive-auth.mjs
+          node --check scripts/rollback-kits-cilindros.mjs
+
+      - name: Restore original structure
+        id: rollback
+        env:
+          GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON }}
+          KC_RUN_ID: ${{ inputs.run_id }}
+          KC_CONFIRM: ${{ inputs.confirmacao }}
+          KC_DEST_ROOT_ID: ${{ inputs.destination_root_id }}
+          KC_OUT_DIR: 'kits-cilindros-rollback-result'
+        run: node scripts/rollback-kits-cilindros.mjs
+
+      - name: Write rollback summary
+        if: always()
+        shell: bash
+        env:
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          node - <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          const fs=require('fs');
+          const path=require('path');
+          const dir='kits-cilindros-rollback-result';
+          const runId=process.env.RUN_ID;
+          console.log('# DESFAZER Kits e Cilindros');
+          console.log('');
+          if(!fs.existsSync(dir)){
+            console.log('A execução terminou antes de gerar relatório.');
+            process.exit(0);
+          }
+          const f=path.join(dir,`rollback-${runId}.json`);
+          if(!fs.existsSync(f)){
+            console.log('Manifesto local não encontrado.');
+            process.exit(0);
+          }
+          const p=JSON.parse(fs.readFileSync(f,'utf8'));
+          const r=p.rollback||{};
+          console.log(`**RUN_ID:** \`${p.runId}\``);
+          console.log('');
+          console.log(`**Estado:** ${p.state}`);
+          console.log('');
+          console.log('| Item | Quantidade |');
+          console.log('|---|---:|');
+          console.log(`| Restaurados agora | ${r.restored?.length||0} |`);
+          console.log(`| Já estavam restaurados | ${r.alreadyRestored?.length||0} |`);
+          console.log(`| Conflitos manuais | ${r.conflicts?.length||0} |`);
+          console.log(`| Erros | ${r.errors?.length||0} |`);
+          console.log(`| Pastas-tema removidas | ${r.deletedThemeFolders?.length||0} |`);
+          NODE
+
+      - name: Upload rollback report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kits-cilindros-rollback-${{ github.run_id }}
+          path: kits-cilindros-rollback-result/
+          if-no-files-found: warn
+          retention-days: 90
