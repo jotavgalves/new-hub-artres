@@ -310,6 +310,12 @@ function levenshtein(a,b){
   return prev[b.length];
 }
 
+function isPermissionError(error){
+  const text=String(error?.body||error?.message||error||'');
+  return Number(error?.status)===403 ||
+    /insufficientFilePermissions|does not have sufficient permissions|Drive API 403/i.test(text);
+}
+
 async function fetchWithRetry(url,options={},attempts=6){
   let last;
   for(let i=0;i<attempts;i++){
