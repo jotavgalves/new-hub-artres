@@ -71,14 +71,16 @@ jobs:
           console.log('');
           console.log('| Item | Quantidade |');
           console.log('|---|---:|');
+          console.log(`| Pastas diretas no destino | ${r.destination.directFolders} |`);
           console.log(`| Temas no destino | ${r.destination.themeFolders} |`);
           console.log(`| Componentes no destino | ${r.destination.componentFolders} |`);
           console.log(`| Componentes marcados pelo RUN_ID | ${r.tags.taggedComponents} |`);
           console.log(`| Temas marcados pelo RUN_ID | ${r.tags.taggedThemes} |`);
-          console.log(`| Componentes nested ainda na origem | ${r.source.nestedComponentsStillInSource.length} |`);
-          console.log(`| Top-level mantidos na origem | ${r.source.topLevelComponentsStillInSource.length} |`);
-          console.log(`| Itens sem tag no destino | ${r.destination.untaggedInDestination.length} |`);
-          console.log(`| Metadados de rollback inválidos | ${r.tags.badMetadata.length} |`);
+          console.log(`| Componentes sem tag no destino | ${r.destination.untaggedInDestination.length} |`);
+          console.log(`| Componentes marcados ausentes | ${r.destination.taggedMissingFromDestination.length} |`);
+          console.log(`| Metadados inválidos de componente | ${r.tags.badComponentMetadata.length} |`);
+          console.log(`| Metadados inválidos de tema | ${r.tags.badThemeMetadata.length} |`);
+          console.log(`| Exceções mantidas na origem | ${r.skippedStatus.filter(x=>x.stillAtSource).length} |`);
           NODE
 
       - name: Upload verification
