@@ -1,0 +1,91 @@
+name: Verificar Kits e Cilindros
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/verify-kits-cilindros.mjs'
+      - '.github/workflows/verificar-kits-cilindros.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verificar-kits-cilindros
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: site-v2-staging
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate Drive secret
+        shell: bash
+        env:
+          GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+          if [ -z "$GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON" ]; then
+            echo "::error::GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON não está disponível."
+            exit 1
+          fi
+
+      - name: Verify move
+        env:
+          GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON }}
+          KC_SOURCE_ROOT_ID: '11cU5yMWafopC0JfMHotRxThpkgbQl-RW'
+          KC_DEST_ROOT_ID: '1eZbQ5wv3-nyzbUirt6k5OoBnlK63Szpt'
+          KC_RUN_ID: 'KC-20260924191337'
+          KC_VERIFY_OUT_DIR: 'kits-cilindros-verification'
+        run: node scripts/verify-kits-cilindros.mjs
+
+      - name: Write summary
+        if: always()
+        shell: bash
+        run: |
+          node - <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          const fs=require('fs');
+          const p='kits-cilindros-verification/verificacao.json';
+          console.log('# Verificação — Kits e Cilindros');
+          console.log('');
+          if(!fs.existsSync(p)){
+            console.log('Relatório não gerado.');
+            process.exit(0);
+          }
+          const r=JSON.parse(fs.readFileSync(p,'utf8'));
+          console.log(`**Resultado:** ${r.ok?'OK':'ATENÇÃO'}`);
+          console.log('');
+          console.log('| Item | Quantidade |');
+          console.log('|---|---:|');
+          console.log(`| Temas no destino | ${r.destination.themeFolders} |`);
+          console.log(`| Componentes no destino | ${r.destination.componentFolders} |`);
+          console.log(`| Componentes marcados pelo RUN_ID | ${r.tags.taggedComponents} |`);
+          console.log(`| Temas marcados pelo RUN_ID | ${r.tags.taggedThemes} |`);
+          console.log(`| Componentes nested ainda na origem | ${r.source.nestedComponentsStillInSource.length} |`);
+          console.log(`| Top-level mantidos na origem | ${r.source.topLevelComponentsStillInSource.length} |`);
+          console.log(`| Itens sem tag no destino | ${r.destination.untaggedInDestination.length} |`);
+          console.log(`| Metadados de rollback inválidos | ${r.tags.badMetadata.length} |`);
+          NODE
+
+      - name: Upload verification
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verificacao-kits-cilindros
+          path: kits-cilindros-verification/
+          if-no-files-found: warn
+          retention-days: 30
