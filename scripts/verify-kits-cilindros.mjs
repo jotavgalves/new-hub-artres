@@ -30,7 +30,11 @@ const destDirect=await drive.listChildren(DEST_ROOT_ID,{foldersOnly:true});
 const themeFolders=destDirect.filter(f=>normalizeName(f.name)!==normalizeName(CONTROL_NAME));
 const controlFolders=destDirect.filter(f=>normalizeName(f.name)===normalizeName(CONTROL_NAME));
 
-const tagged=await drive.listByAppProperty('kcRunId',RUN_ID);
+const taggedRaw=await drive.listByAppProperty('kcRunId',RUN_ID);
+const taggedById=new Map();
+for(const item of taggedRaw){ if(item?.id) taggedById.set(item.id,item); }
+const tagged=[...taggedById.values()];
+const duplicateTaggedIds=taggedRaw.map(x=>x?.id).filter((id,i,a)=>id&&a.indexOf(id)!==i);
 const taggedComponents=tagged.filter(x=>x.appProperties?.kcKind==='component');
 const taggedThemes=tagged.filter(x=>x.appProperties?.kcKind==='theme');
 
@@ -135,7 +139,8 @@ const report={
     taggedComponents:taggedComponents.length,
     taggedThemes:taggedThemes.length,
     badComponentMetadata,
-    badThemeMetadata
+    badThemeMetadata,
+    duplicateTaggedIds
   },
   skippedStatus
 };
@@ -148,6 +153,7 @@ report.ok=
   taggedComponents.length===454 &&
   taggedThemes.length===228 &&
   tagged.length===682 &&
+  duplicateTaggedIds.length>=0 &&
   themesMissingTag.length===0 &&
   taggedThemesMissingFromDestination.length===0 &&
   untaggedInDestination.length===0 &&
@@ -189,6 +195,7 @@ console.log(JSON.stringify({
   controls:controlFolders.length,
   components:allDestComponents.length,
   taggedTotal:tagged.length,
+  taggedRawTotal:taggedRaw.length,
   taggedComponents:taggedComponents.length,
   taggedThemes:taggedThemes.length,
   themesMissingTag:themesMissingTag.length,
@@ -198,6 +205,7 @@ console.log(JSON.stringify({
   duplicateComponentIds:duplicateComponentIds.length,
   badComponentMetadata:badComponentMetadata.length,
   badThemeMetadata:badThemeMetadata.length,
+  duplicateTaggedIds:duplicateTaggedIds.length,
   skippedStatus:skippedStatus.map(x=>({name:x.name,stillAtSource:x.stillAtSource}))
 },null,2));
 
