@@ -54,7 +54,7 @@ export class DriveMutationClient{
     return data;
   }
 
-  async getFile(id,fields='id,name,mimeType,parents,trashed,webViewLink,capabilities'){
+  async getFile(id,fields='id,name,mimeType,parents,trashed,webViewLink,capabilities,appProperties'){
     const params=new URLSearchParams({supportsAllDrives:'true',fields});
     return await this.json(`${DRIVE_API}/${encodeURIComponent(id)}?${params}`);
   }
@@ -67,7 +67,7 @@ export class DriveMutationClient{
       if(name!==null) clauses.push(`name = '${escapeQ(name)}'`);
       const params=new URLSearchParams({
         q:clauses.join(' and '),
-        fields:'nextPageToken,files(id,name,mimeType,parents,trashed,webViewLink,capabilities)',
+        fields:'nextPageToken,files(id,name,mimeType,parents,trashed,webViewLink,capabilities,appProperties)',
         pageSize:'1000',
         orderBy:'folder,name_natural',
         supportsAllDrives:'true',
@@ -81,13 +81,44 @@ export class DriveMutationClient{
     return files;
   }
 
-  async createFolder(name,parentId){
-    const params=new URLSearchParams({supportsAllDrives:'true',fields:'id,name,parents,webViewLink'});
+  async createFolder(name,parentId,appProperties=null){
+    const params=new URLSearchParams({supportsAllDrives:'true',fields:'id,name,parents,webViewLink,appProperties'});
+    const metadata={name,mimeType:FOLDER,parents:[parentId]};
+    if(appProperties && typeof appProperties==='object') metadata.appProperties=appProperties;
     return await this.json(`${DRIVE_API}?${params}`,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({name,mimeType:FOLDER,parents:[parentId]})
+      body:JSON.stringify(metadata)
     });
+  }
+
+  async patchAppProperties(fileId,properties){
+    const params=new URLSearchParams({supportsAllDrives:'true',fields:'id,name,parents,appProperties'});
+    return await this.json(`${DRIVE_API}/${encodeURIComponent(fileId)}?${params}`,{
+      method:'PATCH',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({appProperties:properties})
+    });
+  }
+
+  async listByAppProperty(key,value){
+    const files=[];let pageToken='';
+    const safeKey=escapeQ(key),safeValue=escapeQ(value);
+    do{
+      const params=new URLSearchParams({
+        q:`appProperties has { key='${safeKey}' and value='${safeValue}' } and trashed = false`,
+        fields:'nextPageToken,files(id,name,mimeType,parents,trashed,webViewLink,capabilities,appProperties)',
+        pageSize:'1000',
+        orderBy:'folder,name_natural',
+        supportsAllDrives:'true',
+        includeItemsFromAllDrives:'true'
+      });
+      if(pageToken) params.set('pageToken',pageToken);
+      const data=await this.json(`${DRIVE_API}?${params}`);
+      files.push(...(Array.isArray(data.files)?data.files:[]));
+      pageToken=String(data.nextPageToken||'');
+    }while(pageToken);
+    return files;
   }
 
   async moveFile(fileId,fromParentId,toParentId){
